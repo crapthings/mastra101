@@ -1,0 +1,194 @@
+{
+  "title": "运行记录与评估",
+  "lead": "沿着输入、模型步骤与工具结果定位偏差，用同一组场景检查改动是否有效。",
+  "sections": [
+    {
+      "title": "先保留一次任务的完整来龙去脉",
+      "body": "最终回答错了，先不要立即加长 instructions。保存本次问题、应用侧条件、工具请求、工具结果、结束原因和交付内容，才容易找到偏差出现在哪一步。\n同一份用户材料在不同运行配置下，可能经历不同步骤。复盘时要同时记录相关配置和模型，不把不同条件下的结果当成同一次实验。"
+    },
+    {
+      "title": "用正常、未知与失败三条路径检查",
+      "body": "13-review.js 将 onStepFinish 的记录保存在当前任务里，最后输出步骤、结束原因、文本和用量。它只收集证据，不自动给自己判定通过。\n分别运行三个教学场景，先核对模型是否原样传入 R001，再检查工具状态与回答是否对应。不要只测试成功路径。\n下面前三行对应本节的三个运行参数；“缺少输入”回到处理器示例验证，“待审批”回到工具审批示例验证。它们一起组成活动助手的检查清单。",
+      "codeBlocks": [
+        {
+          "label": "src/13-review.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { createReservationTool } from './reservation.js'\n\n// 每次只检查一种教学场景，以保留清楚的输入与结果对应关系。\nconst mode = process.argv[2] || '正常'\n// 将步骤记录留在本次任务中，便于核对参数、业务状态与最终回答。\nconst steps = []\n\n// 使用与工具循环相同的任务要求，避免比较时同时更换多个条件。\nconst agent = new Agent({\n  id: 'activity-review',\n  name: '活动查询复盘助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文回答。先查 lookupReservation，原样使用用户编号。保留返回状态和教学数据来源，不重复查询，不声称执行了预约操作。',\n  tools: { lookupReservation: createReservationTool(mode) }\n})\n\n// 收集本次调用的证据，输出记录而不自动宣称测试通过。\nconst result = await agent.generate('请查询预约编号 R001。', {\n  maxSteps: 3,\n  abortSignal: AbortSignal.timeout(60_000),\n  onStepFinish: ({ toolCalls, toolResults, finishReason }) => {\n    steps.push({ toolCalls, toolResults, finishReason })\n  }\n})\n\nconsole.dir({\n  scenario: mode,\n  steps,\n  final: { text: result.text, finishReason: result.finishReason },\n  usage: result.usage\n}, { depth: null })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/13-review.js 正常"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/13-review.js 未查到"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/13-review.js 失败"
+        }
+      ],
+      "table": {
+        "headers": [
+          "场景",
+          "最少需要核对的结果"
+        ],
+        "rows": [
+          [
+            "正常",
+            "实际查到教学记录，回答保留状态与来源"
+          ],
+          [
+            "未查到",
+            "说明当前数据未匹配，不断言用户没有预约"
+          ],
+          [
+            "失败",
+            "说明状态未确认，不编造查询成功"
+          ],
+          [
+            "缺少输入",
+            "返回需要补充的信息，不猜编号"
+          ],
+          [
+            "待审批",
+            "execute 尚未运行，确认后再核对执行结果"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "定位到一层，再修改那一层",
+      "body": "没有调用工具时，检查输入、挂载与工具说明；参数不正确时，检查指令、Schema 与实际请求；工具返回正确而回答失真时，检查整理规则和最终输出。\n如果上下文没有提供必要材料，改语气没有帮助；如果结果结构不稳定，就检查结构约定与错误处理。每次围绕一个具体偏差修改，再用相同场景比较。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "过程记录解释发生了什么，完成标准判断是否合格。记录齐全、结构合法、任务完成需要分别核对。"
+        }
+      ]
+    },
+    {
+      "title": "从终端记录走向持续观察",
+      "body": "这些脚本用终端输出让步骤可见。项目需要持续排查时，再配置追踪与记录去向，并用评分器或其他评估方法自动检查可重复的标准。不要把 console 输出当成已经完成了追踪配置。\n注册到 Mastra 实例之后，可以按项目配置使用 Studio 检查消息与调用。跨会话历史需要 Memory，固定业务步骤需要 Workflow；它们是为明确问题增加的能力，不是每个 Agent 的必选项。",
+      "links": [
+        {
+          "label": "Agent 的配置、调用与扩展",
+          "href": "https://mastra.ai/docs/agents/overview"
+        },
+        {
+          "label": "可观测性",
+          "href": "https://mastra.ai/docs/observability/overview"
+        },
+        {
+          "label": "评估",
+          "href": "https://mastra.ai/docs/evals/overview"
+        }
+      ]
+    },
+    {
+      "title": "一个可用的 Agent，交接什么",
+      "body": "活动助手现在有了明确职责、可用工具、输入与结果约定、展示过程和执行边界。下一步使用结果的程序，应能分清哪些已经完成、哪些需要补充、哪些还在等待确认。\n判断它是否可用，不看挂了多少组件，而看同一任务的正常、未知和失败路径是否都能被解释与处理。后续再深入记忆、工作流或协作时，继续沿用这套检查方式。"
+    }
+  ],
+  "note": "工具记录正确，最终回答却把“未查到”写成“已预约”。你会先改哪一层？改完后，除了这次失败样本，还应保留哪些场景来判断是否引入了新问题？",
+  "noteTitle": "本节检查",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先保留一次任务的完整来龙去脉",
+          "body": "最终回答错了，先不要立即加长 instructions。保存本次问题、应用侧条件、工具请求、工具结果、结束原因和交付内容，才容易找到偏差出现在哪一步。\n同一份用户材料在不同运行配置下，可能经历不同步骤。复盘时要同时记录相关配置和模型，不把不同条件下的结果当成同一次实验。"
+        },
+        {
+          "title": "用正常、未知与失败三条路径检查",
+          "body": "13-review.ts 将 onStepFinish 的记录保存在当前任务里，最后输出步骤、结束原因、文本和用量。它只收集证据，不自动给自己判定通过。\n分别运行三个教学场景，先核对模型是否原样传入 R001，再检查工具状态与回答是否对应。不要只测试成功路径。\n下面前三行对应本节的三个运行参数；“缺少输入”回到处理器示例验证，“待审批”回到工具审批示例验证。它们一起组成活动助手的检查清单。",
+          "codeBlocks": [
+            {
+              "label": "src/13-review.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { createReservationTool } from './reservation.ts'\n\n// 每次只检查一种教学场景，以保留清楚的输入与结果对应关系。\nconst mode = process.argv[2] || '正常'\n// 将步骤记录留在本次任务中，便于核对参数、业务状态与最终回答。\nconst steps = []\n\n// 使用与工具循环相同的任务要求，避免比较时同时更换多个条件。\nconst agent = new Agent({\n  id: 'activity-review',\n  name: '活动查询复盘助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文回答。先查 lookupReservation，原样使用用户编号。保留返回状态和教学数据来源，不重复查询，不声称执行了预约操作。',\n  tools: { lookupReservation: createReservationTool(mode) }\n})\n\n// 收集本次调用的证据，输出记录而不自动宣称测试通过。\nconst result = await agent.generate('请查询预约编号 R001。', {\n  maxSteps: 3,\n  abortSignal: AbortSignal.timeout(60_000),\n  onStepFinish: ({ toolCalls, toolResults, finishReason }) => {\n    steps.push({ toolCalls, toolResults, finishReason })\n  }\n})\n\nconsole.dir({\n  scenario: mode,\n  steps,\n  final: { text: result.text, finishReason: result.finishReason },\n  usage: result.usage\n}, { depth: null })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/13-review.ts 正常"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/13-review.ts 未查到"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/13-review.ts 失败"
+            }
+          ],
+          "table": {
+            "headers": [
+              "场景",
+              "最少需要核对的结果"
+            ],
+            "rows": [
+              [
+                "正常",
+                "实际查到教学记录，回答保留状态与来源"
+              ],
+              [
+                "未查到",
+                "说明当前数据未匹配，不断言用户没有预约"
+              ],
+              [
+                "失败",
+                "说明状态未确认，不编造查询成功"
+              ],
+              [
+                "缺少输入",
+                "返回需要补充的信息，不猜编号"
+              ],
+              [
+                "待审批",
+                "execute 尚未运行，确认后再核对执行结果"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "定位到一层，再修改那一层",
+          "body": "没有调用工具时，检查输入、挂载与工具说明；参数不正确时，检查指令、Schema 与实际请求；工具返回正确而回答失真时，检查整理规则和最终输出。\n如果上下文没有提供必要材料，改语气没有帮助；如果结果结构不稳定，就检查结构约定与错误处理。每次围绕一个具体偏差修改，再用相同场景比较。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "过程记录解释发生了什么，完成标准判断是否合格。记录齐全、结构合法、任务完成需要分别核对。"
+            }
+          ]
+        },
+        {
+          "title": "从终端记录走向持续观察",
+          "body": "这些脚本用终端输出让步骤可见。项目需要持续排查时，再配置追踪与记录去向，并用评分器或其他评估方法自动检查可重复的标准。不要把 console 输出当成已经完成了追踪配置。\n注册到 Mastra 实例之后，可以按项目配置使用 Studio 检查消息与调用。跨会话历史需要 Memory，固定业务步骤需要 Workflow；它们是为明确问题增加的能力，不是每个 Agent 的必选项。",
+          "links": [
+            {
+              "label": "Agent 的配置、调用与扩展",
+              "href": "https://mastra.ai/docs/agents/overview"
+            },
+            {
+              "label": "可观测性",
+              "href": "https://mastra.ai/docs/observability/overview"
+            },
+            {
+              "label": "评估",
+              "href": "https://mastra.ai/docs/evals/overview"
+            }
+          ]
+        },
+        {
+          "title": "一个可用的 Agent，交接什么",
+          "body": "活动助手现在有了明确职责、可用工具、输入与结果约定、展示过程和执行边界。下一步使用结果的程序，应能分清哪些已经完成、哪些需要补充、哪些还在等待确认。\n判断它是否可用，不看挂了多少组件，而看同一任务的正常、未知和失败路径是否都能被解释与处理。后续再深入记忆、工作流或协作时，继续沿用这套检查方式。"
+        }
+      ]
+    }
+  }
+}

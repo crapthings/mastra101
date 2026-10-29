@@ -1,0 +1,150 @@
+{
+  "title": "流式输出（Streaming）",
+  "lead": "让界面看见任务进展，同时分清文本片段、工具事件与最终结果。",
+  "sections": [
+    {
+      "title": "先看到文字，不代表任务结束",
+      "body": "用户提交查询后，不一定要等全部内容生成才显示进度。**stream()** 允许应用逐步接收输出，但分批到达的是运行过程，不是一串已经验收的最终答案。\n例如“正在查询预约”只是文字；工具结果事件才说明查询返回了什么。即使文字已经出现，后面仍可能发生失败、拦截或等待确认。"
+    },
+    {
+      "title": "只读文字，还是观察全部事件",
+      "body": "**textStream** 适合只展示逐步到达的文本；**fullStream** 包含不同类型的事件，适合同时观察工具请求、工具结果与异常。按应用需要选择一种主要消费方式，避免自己把同一份内容重复显示。\n本例使用 fullStream。text-delta 的文本片段交给终端显示，tool-call 与 tool-result 保留为过程证据，error 与 tripwire 分别提示异常或处理器拦截。",
+      "table": {
+        "headers": [
+          "收到的内容",
+          "能够说明什么"
+        ],
+        "rows": [
+          [
+            "text-delta",
+            "有一段文本到达，不保证是完整句子"
+          ],
+          [
+            "tool-call",
+            "模型提出了工具请求"
+          ],
+          [
+            "tool-result",
+            "工具返回了结果，还需检查业务状态"
+          ],
+          [
+            "error / tripwire",
+            "执行出现异常或内容被拦截"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "边读取，边区分事件类型",
+      "body": "运行 07-stream.js，观察文字和工具事件的先后。不要要求每次恰好分成相同片段；片段边界取决于生成与传输过程。\n读取结束后，再等待 output.text 和 output.finishReason 等最终信息。try/catch 还覆盖流读取过程中抛出的错误，不能只捕获创建流时的异常。",
+      "codeBlocks": [
+        {
+          "label": "src/07-stream.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { createReservationTool } from './reservation.js'\n\n// 流式输出查询过程，但仍然依据完整工具结果回答。\nconst agent = new Agent({\n  id: 'activity-stream',\n  name: '活动查询助手',\n  instructions: '用中文回答。先查 lookupReservation，说明教学数据来源。查询失败就如实说明，不重复相同查询。',\n  model: 'vercel/openai/gpt-6.1-sol',\n  tools: { lookupReservation: createReservationTool(process.argv[2] || '正常') }\n})\n\ntry {\n  const output = await agent.stream('查询预约编号 R001。', {\n    maxSteps: 3,\n    abortSignal: AbortSignal.timeout(60_000)\n  })\n  let interrupted = false\n  for await (const chunk of output.fullStream) {\n    if (chunk.type === 'text-delta') process.stdout.write(chunk.payload.text)\n    if (chunk.type === 'tool-call' || chunk.type === 'tool-result') {\n      console.log('\\n工具事件：')\n      console.dir(chunk, { depth: null })\n    }\n    if (chunk.type === 'error' || chunk.type === 'tripwire') {\n      interrupted = true\n      console.log('\\n本次运行出现异常或被处理器拦截：')\n      console.dir(chunk, { depth: null })\n    }\n  }\n  console.log('\\n结束原因：', await output.finishReason)\n  console.log('已观察到异常或拦截：', interrupted)\n  console.log('最终文本：', await output.text)\n} catch (error) {\n  console.error('流未能完整读取：', error instanceof Error ? error.message : error)\n  process.exitCode = 1\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/07-stream.js 正常"
+        }
+      ]
+    },
+    {
+      "title": "把显示进度与提交结果分开",
+      "body": "可以先在界面显示“处理中”和暂存文字，等运行状态与业务结果明确后，再更新任务状态。网络中断时，已显示的半句话不能直接作为完整通知发送。\n若使用结构化输出，也不应把一段 text-delta 当成最终 JSON。读取完整的结构化结果并完成检查之后，再让程序进入依赖它的分支。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "流结束、模型停止和业务完成是不同判断。检查最终状态，也检查工具结果是否完成了用户要求。"
+        }
+      ],
+      "links": [
+        {
+          "label": "流式结果与事件",
+          "href": "https://mastra.ai/reference/streaming/agents/MastraModelOutput"
+        }
+      ]
+    },
+    {
+      "title": "过程可见之后，还需要检查内容",
+      "body": "流式事件让应用看见运行过程，但能展示进度，不代表输入和结果已经符合要求。缺少预约编号时，可以提前要求补充；输出也可能需要检查。\n下一节认识处理器，看看这些程序规则应该放在运行过程的哪些位置。"
+    }
+  ],
+  "note": "界面已收到“正在查询”和一部分文本，随后连接中断。哪些内容只能作为进度展示？还需要取得什么，才能把结果交给后续程序使用？",
+  "noteTitle": "本节检查",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先看到文字，不代表任务结束",
+          "body": "用户提交查询后，不一定要等全部内容生成才显示进度。**stream()** 允许应用逐步接收输出，但分批到达的是运行过程，不是一串已经验收的最终答案。\n例如“正在查询预约”只是文字；工具结果事件才说明查询返回了什么。即使文字已经出现，后面仍可能发生失败、拦截或等待确认。"
+        },
+        {
+          "title": "只读文字，还是观察全部事件",
+          "body": "**textStream** 适合只展示逐步到达的文本；**fullStream** 包含不同类型的事件，适合同时观察工具请求、工具结果与异常。按应用需要选择一种主要消费方式，避免自己把同一份内容重复显示。\n本例使用 fullStream。text-delta 的文本片段交给终端显示，tool-call 与 tool-result 保留为过程证据，error 与 tripwire 分别提示异常或处理器拦截。",
+          "table": {
+            "headers": [
+              "收到的内容",
+              "能够说明什么"
+            ],
+            "rows": [
+              [
+                "text-delta",
+                "有一段文本到达，不保证是完整句子"
+              ],
+              [
+                "tool-call",
+                "模型提出了工具请求"
+              ],
+              [
+                "tool-result",
+                "工具返回了结果，还需检查业务状态"
+              ],
+              [
+                "error / tripwire",
+                "执行出现异常或内容被拦截"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "边读取，边区分事件类型",
+          "body": "运行 07-stream.ts，观察文字和工具事件的先后。不要要求每次恰好分成相同片段；片段边界取决于生成与传输过程。\n读取结束后，再等待 output.text 和 output.finishReason 等最终信息。try/catch 还覆盖流读取过程中抛出的错误，不能只捕获创建流时的异常。",
+          "codeBlocks": [
+            {
+              "label": "src/07-stream.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { createReservationTool } from './reservation.ts'\n\n// 流式输出查询过程，但仍然依据完整工具结果回答。\nconst agent = new Agent({\n  id: 'activity-stream',\n  name: '活动查询助手',\n  instructions: '用中文回答。先查 lookupReservation，说明教学数据来源。查询失败就如实说明，不重复相同查询。',\n  model: 'vercel/openai/gpt-6.1-sol',\n  tools: { lookupReservation: createReservationTool(process.argv[2] || '正常') }\n})\n\ntry {\n  const output = await agent.stream('查询预约编号 R001。', {\n    maxSteps: 3,\n    abortSignal: AbortSignal.timeout(60_000)\n  })\n  let interrupted = false\n  for await (const chunk of output.fullStream) {\n    if (chunk.type === 'text-delta') process.stdout.write(chunk.payload.text)\n    if (chunk.type === 'tool-call' || chunk.type === 'tool-result') {\n      console.log('\\n工具事件：')\n      console.dir(chunk, { depth: null })\n    }\n    if (chunk.type === 'error' || chunk.type === 'tripwire') {\n      interrupted = true\n      console.log('\\n本次运行出现异常或被处理器拦截：')\n      console.dir(chunk, { depth: null })\n    }\n  }\n  console.log('\\n结束原因：', await output.finishReason)\n  console.log('已观察到异常或拦截：', interrupted)\n  console.log('最终文本：', await output.text)\n} catch (error) {\n  console.error('流未能完整读取：', error instanceof Error ? error.message : error)\n  process.exitCode = 1\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/07-stream.ts 正常"
+            }
+          ]
+        },
+        {
+          "title": "把显示进度与提交结果分开",
+          "body": "可以先在界面显示“处理中”和暂存文字，等运行状态与业务结果明确后，再更新任务状态。网络中断时，已显示的半句话不能直接作为完整通知发送。\n若使用结构化输出，也不应把一段 text-delta 当成最终 JSON。读取完整的结构化结果并完成检查之后，再让程序进入依赖它的分支。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "流结束、模型停止和业务完成是不同判断。检查最终状态，也检查工具结果是否完成了用户要求。"
+            }
+          ],
+          "links": [
+            {
+              "label": "流式结果与事件",
+              "href": "https://mastra.ai/reference/streaming/agents/MastraModelOutput"
+            }
+          ]
+        },
+        {
+          "title": "过程可见之后，还需要检查内容",
+          "body": "流式事件让应用看见运行过程，但能展示进度，不代表输入和结果已经符合要求。缺少预约编号时，可以提前要求补充；输出也可能需要检查。\n下一节认识处理器，看看这些程序规则应该放在运行过程的哪些位置。"
+        }
+      ]
+    }
+  }
+}

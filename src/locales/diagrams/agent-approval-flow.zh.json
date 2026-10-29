@@ -1,0 +1,16 @@
+{
+  "title": "先确认，再执行，最后核对结果",
+  "caption": "暂停时 execute 尚未运行。批准和拒绝恢复的是同一待确认调用；批准后仍要检查实际执行结果，不能直接将任务标为成功。",
+  "request": "模型提出工具请求",
+  "requestDetail": "展示工具名称与待执行参数",
+  "pending": "保存暂停状态",
+  "pendingDetail": "runId、toolCallId 与恢复所需快照",
+  "approve": "用户批准",
+  "approveDetail": "允许执行该工具调用",
+  "decline": "用户拒绝",
+  "declineDetail": "不执行该动作，返回拒绝原因",
+  "execute": "执行并核对结果",
+  "executeDetail": "批准不是执行成功的证明",
+  "explain": "继续说明或结束",
+  "explainDetail": "不声称草稿已经保存"
+}

@@ -1,0 +1,17 @@
+{
+  "title": "Your first agent",
+  "lead": "Create a travel assistant that drafts an itinerary from your requirements.",
+  "sections": [
+    {
+      "title": "Prepare a Node.js project",
+      "body": "In a separate Node.js project, install the core package with pnpm add @mastra/core. For this example, install tsx and TypeScript with pnpm add -D tsx typescript.\nSet OPENAI_API_KEY in your server environment and run pnpm exec tsx agent.ts. Keep the key out of browser code."
+    },
+    {
+      "title": "Read the configuration",
+      "body": "id identifies the agent, and name is its display name. instructions set the task and response requirements; model selects the model.\ngenerate() runs the task, and result.text contains its final text. You also need access to the selected model and sufficient account credit."
+    }
+  ],
+  "noteTitle": "Change one line",
+  "note": "Add “Prioritize short walks for the older traveler” to instructions and run the same request again. Check whether the daily plan becomes less demanding. The wording may vary even when you leave the instructions unchanged.",
+  "code": "import { Agent } from '@mastra/core/agent'\n\n// Draft an itinerary from travel requirements.\nconst agent = new Agent({\n  id: 'travel-guide',\n  name: 'Travel Guide',\n  instructions: 'Plan relaxed trips. Ask for missing details and do not invent opening hours.',\n  model: 'openai/gpt-5.2'\n})\n\n// Run one task and read its final text.\nconst result = await agent.generate('Plan a relaxed two-day trip to Hangzhou with an older family member.')\nconsole.log(result.text)"
+}

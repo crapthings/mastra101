@@ -1,0 +1,158 @@
+{
+  "title": "结构化输出（Structured Output）",
+  "lead": "把工具查到的信息整理成明确字段，让下一步程序知道结果、依据与缺口。",
+  "sections": [
+    {
+      "title": "后续程序需要明确的状态",
+      "body": "前面已经能查询预约，并控制调用循环何时停止，但界面还要决定显示预约信息、提示核对编号，还是说明服务不可用。仅在回答中搜索“成功”或“失败”，容易把语义读错。\n先定义要交付哪些字段，再要求 Agent 按约定整理。状态至少保留“已预约”“未查到”和“查询失败”，不能为了简化界面把后两者合成“没有预约”。"
+    },
+    {
+      "title": "工具结果与最终结果，各有一份约定",
+      "body": "工具的 **outputSchema** 描述执行函数返回什么；调用 Agent 时的 **structuredOutput** 则描述最终要交付的对象。二者处于不同位置，即使字段相似，也不会自动互相替代。\nMastra 通过 structuredOutput.schema 接收结构约定，成功生成的对象从 **result.object** 读取。这里继续用 Zod，给后续程序保留编号、状态、摘要、来源和缺失项。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "结构约定让结果可被读取；状态与来源是否忠实于工具反馈，还要另外核对。"
+        }
+      ]
+    },
+    {
+      "title": "在查询之后整理对象",
+      "body": "运行示例中的 06-structured.js。查询工具来自 reservation.js，它沿用工具调用一节的三种本地教学结果；参数“正常”“未查到”“失败”只改变模拟数据，不改变提问。\n代码先让模型查询，再整理对象。errorStrategy 设为 strict，无法生成或校验所需结构时进入错误处理，不填一个看似成功的默认对象。",
+      "codeBlocks": [
+        {
+          "label": "src/06-structured.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { z } from 'zod'\nimport { createReservationTool } from './reservation.js'\n\n// 约定最终交接对象的字段，明确保留未查到和查询失败两种状态。\nconst answerSchema = z.object({\n  bookingId: z.string(),\n  status: z.enum(['已预约', '未查到', '查询失败']),\n  summary: z.string(),\n  source: z.string(),\n  missing: z.array(z.string())\n})\n\n// 让助手先读取教学查询结果，再整理为可供程序处理的对象。\nconst agent = new Agent({\n  id: 'activity-structured',\n  name: '活动结果整理助手',\n  instructions: '用中文回答。先调用 lookupReservation，原样保留编号、状态和来源。未明确的信息放入 missing；不要把未查到或查询失败改成没有预约。只查一次。',\n  model: 'vercel/openai/gpt-6.1-sol',\n  tools: { lookupReservation: createReservationTool(process.argv[2] || '正常') }\n})\n\ntry {\n  const result = await agent.generate('查询预约编号 R001，并整理结果。', {\n    maxSteps: 3,\n    abortSignal: AbortSignal.timeout(60_000),\n    structuredOutput: { schema: answerSchema, errorStrategy: 'strict' },\n    onStepFinish: ({ toolResults }) => console.dir({ toolResults }, { depth: null })\n  })\n  const answer = answerSchema.parse(result.object)\n  console.log('结构符合约定，继续对照工具结果核对内容：')\n  console.dir(answer, { depth: null })\n} catch (error) {\n  console.error('没有得到可用的结构化结果：', error instanceof Error ? error.message : error)\n  process.exitCode = 1\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/06-structured.js 正常"
+        }
+      ]
+    },
+    {
+      "title": "能解析之后，还要核对内容",
+      "body": "Zod 能检查字段类型与枚举，却不能证明模型确实调用了工具，也不能证明“已预约”来自那次查询。对照 onStepFinish 输出的工具记录，检查编号、状态、来源是否一致。\n再用“未查到”和“失败”各运行一次。若原记录是查询失败，对象却写已预约，即使结构校验通过，任务仍未通过。",
+      "table": {
+        "headers": [
+          "检查层次",
+          "本例怎样核对"
+        ],
+        "rows": [
+          [
+            "执行依据",
+            "是否实际调用了查询工具，编号是否为 R001"
+          ],
+          [
+            "结果结构",
+            "字段齐全，状态属于约定枚举"
+          ],
+          [
+            "内容一致",
+            "状态与来源符合本次工具返回"
+          ],
+          [
+            "后续处理",
+            "未确认的信息仍保留在 missing，不进入成功分支"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "选择适合当前模型的结构化方式",
+      "body": "工具调用与结构化输出能否在同一模型请求中使用，取决于所选模型及接入方式。Mastra 还提供 jsonPromptInjection 等配置，或使用另一模型整理主 Agent 的回答；后者会增加模型调用。\n先沿用本章固定配置，出现错误时检查实际服务返回与结构化设置。不要把“换一种格式”当成事实错误的修复，也不要把未经标明的兜底值当作真实查询结果。",
+      "links": [
+        {
+          "label": "结构化输出及错误处理",
+          "href": "https://mastra.ai/docs/agents/structured-output"
+        }
+      ]
+    },
+    {
+      "title": "完整对象之外，也可以逐步显示",
+      "body": "generate() 返回后，程序再读取完整结果，适合一次性交付对象。但用户等待较久时，界面可能还想显示正在查询、已有文本等进度。\n下一节使用 stream()，把过程展示与最终结果的确认分开。"
+    }
+  ],
+  "note": "工具返回“查询失败”，result.object 却写“已预约”，而 Zod 校验通过。哪一层仍然失败？后续程序应该依据什么决定是否进入成功分支？",
+  "noteTitle": "本节检查",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "后续程序需要明确的状态",
+          "body": "前面已经能查询预约，并控制调用循环何时停止，但界面还要决定显示预约信息、提示核对编号，还是说明服务不可用。仅在回答中搜索“成功”或“失败”，容易把语义读错。\n先定义要交付哪些字段，再要求 Agent 按约定整理。状态至少保留“已预约”“未查到”和“查询失败”，不能为了简化界面把后两者合成“没有预约”。"
+        },
+        {
+          "title": "工具结果与最终结果，各有一份约定",
+          "body": "工具的 **outputSchema** 描述执行函数返回什么；调用 Agent 时的 **structuredOutput** 则描述最终要交付的对象。二者处于不同位置，即使字段相似，也不会自动互相替代。\nMastra 通过 structuredOutput.schema 接收结构约定，成功生成的对象从 **result.object** 读取。这里继续用 Zod，给后续程序保留编号、状态、摘要、来源和缺失项。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "结构约定让结果可被读取；状态与来源是否忠实于工具反馈，还要另外核对。"
+            }
+          ]
+        },
+        {
+          "title": "在查询之后整理对象",
+          "body": "运行示例中的 06-structured.ts。查询工具来自 reservation.ts，它沿用工具调用一节的三种本地教学结果；参数“正常”“未查到”“失败”只改变模拟数据，不改变提问。\n代码先让模型查询，再整理对象。errorStrategy 设为 strict，无法生成或校验所需结构时进入错误处理，不填一个看似成功的默认对象。",
+          "codeBlocks": [
+            {
+              "label": "src/06-structured.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { z } from 'zod'\nimport { createReservationTool } from './reservation.ts'\n\n// 约定最终交接对象的字段，明确保留未查到和查询失败两种状态。\nconst answerSchema = z.object({\n  bookingId: z.string(),\n  status: z.enum(['已预约', '未查到', '查询失败']),\n  summary: z.string(),\n  source: z.string(),\n  missing: z.array(z.string())\n})\n\n// 让助手先读取教学查询结果，再整理为可供程序处理的对象。\nconst agent = new Agent({\n  id: 'activity-structured',\n  name: '活动结果整理助手',\n  instructions: '用中文回答。先调用 lookupReservation，原样保留编号、状态和来源。未明确的信息放入 missing；不要把未查到或查询失败改成没有预约。只查一次。',\n  model: 'vercel/openai/gpt-6.1-sol',\n  tools: { lookupReservation: createReservationTool(process.argv[2] || '正常') }\n})\n\ntry {\n  const result = await agent.generate('查询预约编号 R001，并整理结果。', {\n    maxSteps: 3,\n    abortSignal: AbortSignal.timeout(60_000),\n    structuredOutput: { schema: answerSchema, errorStrategy: 'strict' },\n    onStepFinish: ({ toolResults }) => console.dir({ toolResults }, { depth: null })\n  })\n  const answer = answerSchema.parse(result.object)\n  console.log('结构符合约定，继续对照工具结果核对内容：')\n  console.dir(answer, { depth: null })\n} catch (error) {\n  console.error('没有得到可用的结构化结果：', error instanceof Error ? error.message : error)\n  process.exitCode = 1\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/06-structured.ts 正常"
+            }
+          ]
+        },
+        {
+          "title": "能解析之后，还要核对内容",
+          "body": "Zod 能检查字段类型与枚举，却不能证明模型确实调用了工具，也不能证明“已预约”来自那次查询。对照 onStepFinish 输出的工具记录，检查编号、状态、来源是否一致。\n再用“未查到”和“失败”各运行一次。若原记录是查询失败，对象却写已预约，即使结构校验通过，任务仍未通过。",
+          "table": {
+            "headers": [
+              "检查层次",
+              "本例怎样核对"
+            ],
+            "rows": [
+              [
+                "执行依据",
+                "是否实际调用了查询工具，编号是否为 R001"
+              ],
+              [
+                "结果结构",
+                "字段齐全，状态属于约定枚举"
+              ],
+              [
+                "内容一致",
+                "状态与来源符合本次工具返回"
+              ],
+              [
+                "后续处理",
+                "未确认的信息仍保留在 missing，不进入成功分支"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "选择适合当前模型的结构化方式",
+          "body": "工具调用与结构化输出能否在同一模型请求中使用，取决于所选模型及接入方式。Mastra 还提供 jsonPromptInjection 等配置，或使用另一模型整理主 Agent 的回答；后者会增加模型调用。\n先沿用本章固定配置，出现错误时检查实际服务返回与结构化设置。不要把“换一种格式”当成事实错误的修复，也不要把未经标明的兜底值当作真实查询结果。",
+          "links": [
+            {
+              "label": "结构化输出及错误处理",
+              "href": "https://mastra.ai/docs/agents/structured-output"
+            }
+          ]
+        },
+        {
+          "title": "完整对象之外，也可以逐步显示",
+          "body": "generate() 返回后，程序再读取完整结果，适合一次性交付对象。但用户等待较久时，界面可能还想显示正在查询、已有文本等进度。\n下一节使用 stream()，把过程展示与最终结果的确认分开。"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "title": "Tool calling",
+  "lead": "A customer asks where their order is. How does the model get current delivery information?",
+  "sections": [
+    {
+      "title": "Tell the model which tools are available",
+      "body": "To look up an order, your application can provide a getOrder tool that takes an orderId.\nThe model receives the tool’s name, description, and parameter schema. It can then request a call; your application manages the database code and credentials."
+    },
+    {
+      "title": "Model requests, program executes",
+      "body": "A user asks: “Where is order A123?”\nThe model requests getOrder({ orderId: \"A123\" }).\nNode.js validates arguments and authorization, then queries the order.\nThe application associates the result with the original call and sends it back.\nThe model turns the result into an answer."
+    },
+    {
+      "title": "Results become context",
+      "body": "A tool call does not automatically complete the final answer. Its result enters a subsequent model request, allowing the model to explain the data or request another action.\nMessage formats, call identifiers, and parallel-call support depend on the model API."
+    },
+    {
+      "title": "Moving on to agents",
+      "body": "An application must manage the call loop, dispatch tools, return results, and decide when to stop. A task may call tools several times or answer without using any.\nNext, explore how Mastra organizes these steps and which business decisions remain your responsibility."
+    }
+  ],
+  "noteTitle": "Validate before executing",
+  "note": "Generated arguments are not automatically trustworthy. Validation, authorization, and controls for side effects belong in the code that executes the tool."
+}

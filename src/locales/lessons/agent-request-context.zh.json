@@ -1,0 +1,168 @@
+{
+  "title": "请求上下文（RequestContext）",
+  "lead": "把本次材料与应用侧配置分开传入，避免把请求上下文误当成聊天历史。",
+  "sections": [
+    {
+      "title": "一份材料，可以有不同的展示要求",
+      "body": "活动安排相同，简短提醒与详细核对清单的表达要求却不同。应用可以为这一次调用提供“简短”或“详细”的展示偏好，而不必修改全局 Agent 配置。\n**RequestContext** 是 Mastra 在一次请求中传递应用数据的容器。它能供动态配置、工具等读取，但不会因为写入了某个值，就自动把它变成模型消息。"
+    },
+    {
+      "title": "三种上下文，不要混在一起",
+      "body": "用户材料通过 generate() 的消息参数提供；应用配置通过 requestContext 传入；历史对话则需要显式传入，或由配置好的记忆功能取回。\n本节只使用展示偏好。用户身份、权限等值应由应用核实后提供，不能因为用户在消息中写了“我是管理员”，就直接设置为可信的应用状态。",
+      "table": {
+        "headers": [
+          "放在哪里",
+          "本例内容",
+          "是否自动等于对话历史"
+        ],
+        "rows": [
+          [
+            "消息",
+            "活动时间与待确认地点",
+            "否，需要明确提供相关前文"
+          ],
+          [
+            "RequestContext",
+            "本次采用简短或详细表达",
+            "否，是本次运行的数据"
+          ],
+          [
+            "Memory",
+            "经配置保存与取回的历史、偏好",
+            "按会话标识与记忆配置决定"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "只把需要的值写进动态指令",
+      "body": "示例通过 requestContext.set() 写入展示偏好，Agent 的 instructions 函数读取它，再生成本次指令。requestContextSchema 校验应用数据是否符合约定。\n分别运行“简短”和“详细”，固定材料与模型，比较表达是否变化，事实与缺口是否仍然一致。额外字段不会自动变成模型可见信息，密钥也不应拼进指令。\n同样的方式也能用于动态选择 model 或 tools。先由应用决定允许的选项，再返回对应配置；把用户文字直接当成模型名或工具权限，不是可靠的请求配置。",
+      "codeBlocks": [
+        {
+          "label": "src/03-context.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { RequestContext } from '@mastra/core/request-context'\nimport { z } from 'zod'\n\n// 按应用传入的展示偏好生成本次指令，不把上下文对象全部发送给模型。\nconst agent = new Agent({\n  id: 'activity-context',\n  name: '活动资料助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  requestContextSchema: z.object({ detail: z.enum(['简短', '详细']) }),\n  instructions: ({ requestContext }) => {\n    const detail = requestContext.get('detail')\n    return `用中文核对材料，保留缺失信息。本次采用${detail}的表达；不要补写预约结果。`\n  }\n})\n\n// 每次任务创建独立的请求上下文，由应用确定这些值。\nconst requestContext = new RequestContext()\nrequestContext.set('detail', process.argv[2] || '简短')\n\n// 本次材料与任务仍由用户消息提供，不混入应用配置字段。\nconst result = await agent.generate('活动周六下午两点开始，地点待定。请整理已知与待确认信息。', {\n  requestContext,\n  maxSteps: 1,\n  abortSignal: AbortSignal.timeout(60_000)\n})\n\nconsole.log(result.text || '本次没有最终文本。')"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/03-context.js 简短"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/03-context.js 详细"
+        }
+      ]
+    },
+    {
+      "title": "跨轮对话需要另外保留前文",
+      "body": "同一份 Agent 配置可以发起多次任务，但它不会仅凭 id 自动保留每次 generate() 的历史。用户只问“那里几点开始”，应用仍要提供“那里”对应的活动信息。\n短对话可以显式传入相关用户与助手消息；需要跨会话保留时，再配置 Memory 及其存储，并按 resource、thread 定位信息。RequestContext 的值不能替代这些机制。\n每次请求创建独立的上下文对象，避免多个用户并发修改同一个容器而串用状态。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "RequestContext 负责传递本次应用数据；模型能看到什么，取决于这些数据怎样被用于消息、指令或工具结果。"
+        }
+      ],
+      "links": [
+        {
+          "label": "RequestContext 与动态配置",
+          "href": "https://mastra.ai/docs/server/request-context"
+        },
+        {
+          "label": "记忆与会话",
+          "href": "https://mastra.ai/docs/memory/overview"
+        }
+      ]
+    },
+    {
+      "title": "请求条件不能代替查询结果",
+      "body": "RequestContext 可以传递本次展示偏好，但这些条件不是预约记录，也不会自动补齐模型不知道的事实。\n接下来为 Agent 提供查询工具，让它根据实际返回的数据回答预约问题。"
+    }
+  ],
+  "note": "应用把 detail 设为“详细”，用户消息却只有“那里几点开始”。这能让 Agent 知道“那里”是什么吗？分别指出缺少的任务材料与已经提供的运行配置。",
+  "noteTitle": "本节检查",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "一份材料，可以有不同的展示要求",
+          "body": "活动安排相同，简短提醒与详细核对清单的表达要求却不同。应用可以为这一次调用提供“简短”或“详细”的展示偏好，而不必修改全局 Agent 配置。\n**RequestContext** 是 Mastra 在一次请求中传递应用数据的容器。它能供动态配置、工具等读取，但不会因为写入了某个值，就自动把它变成模型消息。"
+        },
+        {
+          "title": "三种上下文，不要混在一起",
+          "body": "用户材料通过 generate() 的消息参数提供；应用配置通过 requestContext 传入；历史对话则需要显式传入，或由配置好的记忆功能取回。\n本节只使用展示偏好。用户身份、权限等值应由应用核实后提供，不能因为用户在消息中写了“我是管理员”，就直接设置为可信的应用状态。",
+          "table": {
+            "headers": [
+              "放在哪里",
+              "本例内容",
+              "是否自动等于对话历史"
+            ],
+            "rows": [
+              [
+                "消息",
+                "活动时间与待确认地点",
+                "否，需要明确提供相关前文"
+              ],
+              [
+                "RequestContext",
+                "本次采用简短或详细表达",
+                "否，是本次运行的数据"
+              ],
+              [
+                "Memory",
+                "经配置保存与取回的历史、偏好",
+                "按会话标识与记忆配置决定"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "只把需要的值写进动态指令",
+          "body": "示例通过 requestContext.set() 写入展示偏好，Agent 的 instructions 函数读取它，再生成本次指令。requestContextSchema 校验应用数据是否符合约定。\n分别运行“简短”和“详细”，固定材料与模型，比较表达是否变化，事实与缺口是否仍然一致。额外字段不会自动变成模型可见信息，密钥也不应拼进指令。\n同样的方式也能用于动态选择 model 或 tools。先由应用决定允许的选项，再返回对应配置；把用户文字直接当成模型名或工具权限，不是可靠的请求配置。",
+          "codeBlocks": [
+            {
+              "label": "src/03-context.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { RequestContext } from '@mastra/core/request-context'\nimport { z } from 'zod'\n\n// 按应用传入的展示偏好生成本次指令，不把上下文对象全部发送给模型。\nconst agent = new Agent({\n  id: 'activity-context',\n  name: '活动资料助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  requestContextSchema: z.object({ detail: z.enum(['简短', '详细']) }),\n  instructions: ({ requestContext }) => {\n    const detail = requestContext.get('detail')\n    return `用中文核对材料，保留缺失信息。本次采用${detail}的表达；不要补写预约结果。`\n  }\n})\n\n// 每次任务创建独立的请求上下文，由应用确定这些值。\nconst requestContext = new RequestContext()\nrequestContext.set('detail', process.argv[2] || '简短')\n\n// 本次材料与任务仍由用户消息提供，不混入应用配置字段。\nconst result = await agent.generate('活动周六下午两点开始，地点待定。请整理已知与待确认信息。', {\n  requestContext,\n  maxSteps: 1,\n  abortSignal: AbortSignal.timeout(60_000)\n})\n\nconsole.log(result.text || '本次没有最终文本。')"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/03-context.ts 简短"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/03-context.ts 详细"
+            }
+          ]
+        },
+        {
+          "title": "跨轮对话需要另外保留前文",
+          "body": "同一份 Agent 配置可以发起多次任务，但它不会仅凭 id 自动保留每次 generate() 的历史。用户只问“那里几点开始”，应用仍要提供“那里”对应的活动信息。\n短对话可以显式传入相关用户与助手消息；需要跨会话保留时，再配置 Memory 及其存储，并按 resource、thread 定位信息。RequestContext 的值不能替代这些机制。\n每次请求创建独立的上下文对象，避免多个用户并发修改同一个容器而串用状态。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "RequestContext 负责传递本次应用数据；模型能看到什么，取决于这些数据怎样被用于消息、指令或工具结果。"
+            }
+          ],
+          "links": [
+            {
+              "label": "RequestContext 与动态配置",
+              "href": "https://mastra.ai/docs/server/request-context"
+            },
+            {
+              "label": "记忆与会话",
+              "href": "https://mastra.ai/docs/memory/overview"
+            }
+          ]
+        },
+        {
+          "title": "请求条件不能代替查询结果",
+          "body": "RequestContext 可以传递本次展示偏好，但这些条件不是预约记录，也不会自动补齐模型不知道的事实。\n接下来为 Agent 提供查询工具，让它根据实际返回的数据回答预约问题。"
+        }
+      ]
+    }
+  }
+}

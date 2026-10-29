@@ -1,0 +1,24 @@
+{
+  "title": "Context and conversations",
+  "lead": "“Make day two easier.” Is that enough without the earlier itinerary?",
+  "sections": [
+    {
+      "title": "Follow-ups need context",
+      "body": "A friend who has just read your itinerary knows what “day two” contains. A model also needs that information.\nContext is information available for the current generation, including instructions, questions, history, documents, and tool results."
+    },
+    {
+      "title": "Keep track of the conversation",
+      "body": "The simplest approach is to keep a message list: save the user’s requirements, the itinerary, and any follow-up questions, then send the relevant messages with the next request.\nSome services can link requests through conversation or response IDs. Whichever approach you use, check what information the model receives on each turn."
+    },
+    {
+      "title": "Context has capacity limits",
+      "body": "As the conversation grows, you cannot keep adding messages indefinitely. Models have a context window, usually measured in tokens.\nA token is not the same as a character, word, or byte. Tokenization varies by model, as do the limits on input and generated output."
+    },
+    {
+      "title": "Keep the relevant constraints",
+      "body": "“Short walks with an older family member” should keep influencing the plan. Detailed discussion of abandoned attractions may no longer matter. Applications can select messages, summarize, or retrieve history.\nSummaries may lose detail and trimming may remove constraints. The Memory chapter will explore storing and selecting information."
+    }
+  ],
+  "noteTitle": "Try it",
+  "note": "Send only “Make day two easier,” then repeat it with the original itinerary. Check whether the answer accurately revises the earlier plan."
+}

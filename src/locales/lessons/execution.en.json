@@ -1,0 +1,20 @@
+{
+  "title": "Following the execution",
+  "lead": "Follow one request from the user’s question to the final answer.",
+  "sections": [
+    {
+      "title": "Without tools",
+      "body": "Call generate() → prepare instructions and messages → request the model → return the result.\nThe previous lesson configured no tools. Its agent cannot fetch live data through tools and does not execute code appearing in its answer."
+    },
+    {
+      "title": "With tools",
+      "body": "The model returns a tool name and arguments → the program validates and executes the tool → the result goes back to the model → generation continues.\nOne task can involve multiple model calls and tool executions. The application supplies tools; the model can only request exposed capabilities."
+    },
+    {
+      "title": "Ask three questions",
+      "body": "Did this information come from the user, the model, or a tool result?\nDid this step generate text or execute code?\nWhy did the task stop here, and where did a failure occur?"
+    }
+  ],
+  "noteTitle": "Trace it yourself",
+  "note": "For the order example, mark each step as model generation or application code execution. Then consider what should happen if the order lookup times out."
+}

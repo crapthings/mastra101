@@ -1,0 +1,19 @@
+{
+  "title": "先确定重做哪一层",
+  "caption": "上面两条回路分别重新请求模型、携带处理器反馈重新生成；它们都有独立上限。外部操作是否重做，则先核实业务状态。这三类处理不能合并成一个 maxSteps 数字。",
+  "request": "模型请求",
+  "requestDetail": "调用模型服务",
+  "requestError": "可重试的请求错误",
+  "requestErrorDetail": "例如暂时性服务异常",
+  "requestRetry": "maxRetries：按上限重试请求",
+  "step": "本步生成",
+  "stepDetail": "模型返回待检查内容",
+  "rejected": "处理器检查不通过",
+  "rejectedDetail": "本例要求保留“待确认”",
+  "feedback": "maxProcessorRetries：带反馈重试",
+  "write": "外部写入结果未知",
+  "writeDetail": "例如请求超时",
+  "verify": "先核实业务状态",
+  "verifyDetail": "再决定继续、重试或交还用户",
+  "business": "恢复业务操作，不能只重新调用模型"
+}

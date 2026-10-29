@@ -1,0 +1,14 @@
+{
+  "title": "文档可以经不同路径进入模型",
+  "caption": "图示概括常见处理路线，不表示每种文件或服务都支持全部路径。仅抽取文字时，未被保留的图片和版面不会自动进入模型输入。",
+  "file": "文档文件",
+  "fileDetail": "TXT · PDF · DOCX · XLSX · PPTX",
+  "process": "读取、解析或页面渲染",
+  "processDetail": "扫描内容也可以经 OCR 转成文字",
+  "text": "文字与表格数据",
+  "textDetail": "保留标题、段落与行列关系",
+  "visual": "页面图像",
+  "visualDetail": "保留版面、图表与视觉线索",
+  "input": "实际模型输入",
+  "inputDetail": "按任务与接口支持，选择或组合内容"
+}

@@ -1,0 +1,60 @@
+{
+  "title": "把三处信息对起来",
+  "caption": "固定教学样例，省略了完整响应结构；这里不会调用模型、读取当前时间或展示你的终端结果。实际运行时，请用本次 toolCalls、toolResults 和最终文本核对。",
+  "scenarios": [
+    {
+      "label": "正常时区",
+      "summary": "输入是 Asia/Tokyo：请求使用同一时区，工具成功返回，回答依据同一次取样。下方时间仅为示意。",
+      "cards": [
+        {
+          "title": "工具请求 · toolCalls",
+          "lines": [
+            "getCurrentTime",
+            "timeZone: \"Asia/Tokyo\""
+          ]
+        },
+        {
+          "title": "工具结果 · toolResults",
+          "lines": [
+            "ok: true · capturedAt: 2026-01-01T00:00:00.000Z",
+            "localTime: 2026/01/01 GMT+09:00 09:00:00"
+          ]
+        },
+        {
+          "title": "最终回答 · result.text",
+          "lines": [
+            "查询时，东京时间为 2026 年 1 月 1 日 09:00。",
+            "核对时区、日期与取样时刻是否相符。"
+          ]
+        }
+      ]
+    },
+    {
+      "label": "无效时区",
+      "summary": "输入是 Invalid/Zone：确认模型没有替换参数，工具明确返回失败，回答应说明缺少有效结果。",
+      "cards": [
+        {
+          "title": "工具请求 · toolCalls",
+          "lines": [
+            "getCurrentTime",
+            "timeZone: \"Invalid/Zone\""
+          ]
+        },
+        {
+          "title": "工具结果 · toolResults",
+          "lines": [
+            "ok: false · 无法识别这个时区",
+            "没有 localTime，也没有成功的取样结果"
+          ]
+        },
+        {
+          "title": "最终回答 · result.text",
+          "lines": [
+            "无法识别该时区，请提供有效的时区标识。",
+            "核对回答有没有在失败后编造一个时间。"
+          ]
+        }
+      ]
+    }
+  ]
+}

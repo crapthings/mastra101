@@ -1,0 +1,17 @@
+{
+  "name": "mastra-time-assistant-js",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "basic": "node --env-file=.env src/basic.js",
+    "start": "node --env-file=.env src/run.js",
+    "clock": "node src/clock.js"
+  },
+  "dependencies": {
+    "@mastra/core": "1.80.0",
+    "zod": "4.6.7"
+  }
+}

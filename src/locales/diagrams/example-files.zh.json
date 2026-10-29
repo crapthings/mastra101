@@ -1,0 +1,16 @@
+{
+  "title": "从命令找到实际执行的文件",
+  "caption": "这是示例文件的职责与调用关系，不是模型对话时序。文件都位于 src 下，箭头表示由谁使用谁；JS/TS 文件名随页头选项同步切换。",
+  "basic": "pnpm basic · 不带工具",
+  "run": "pnpm start · 查看完整过程",
+  "standalone": "直接创建并调用最小 Agent",
+  "agent": "配置模型、指令和工具",
+  "tool": "描述参数，包装执行函数",
+  "clock": "读取系统时钟并转换时区",
+  "direct": "pnpm clock · 单独检查时间",
+  "importAgent": "调用 Agent",
+  "attach": "挂载工具",
+  "execute": "执行时调用",
+  "invoke": "直接调用",
+  "config": "basic 和 run 都会先通过配置检查，再发起模型请求。"
+}

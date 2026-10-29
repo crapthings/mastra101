@@ -1,0 +1,17 @@
+node_modules
+dist
+.DS_Store
+*.local
+
+# Local reference checkout and package cache
+/mastra/
+.pnpm-store/
+
+# Credentials and generated runtime data
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.log
+reminder-draft.json

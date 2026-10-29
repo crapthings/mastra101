@@ -1,0 +1,159 @@
+{
+  "title": "结构化输出",
+  "lead": "先按用途选择输出格式，再设计字段与行列关系，兼顾清晰、紧凑和可检查。",
+  "sections": [
+    {
+      "title": "先约定内容，再选择格式",
+      "body": "**结构化输出**要分别说明两件事：结果包含哪些信息，以及怎样表示这些信息。JSON、JSONL、YAML、XML、CSV 是不同的表示方式，应该按接收方怎样读取来选择。\n例如两场会议要交给程序处理，可以用对象列表；要逐条保存记录，可以用 JSONL；要交给表格工具，则可以用 CSV。换格式不会自动补足缺失事实。",
+      "table": {
+        "headers": [
+          "格式",
+          "适合的读取方式",
+          "需要留意"
+        ],
+        "rows": [
+          [
+            "JSON",
+            "程序读取对象、列表和嵌套数据",
+            "语法与字段类型都要校验"
+          ],
+          [
+            "JSONL",
+            "逐条追加、保存或处理记录",
+            "每一行都是完整的 JSON 值"
+          ],
+          [
+            "YAML",
+            "人阅读和修改配置式内容",
+            "缩进、引号与类型解释"
+          ],
+          [
+            "XML",
+            "接收方已有标签与层级约定",
+            "标签闭合、转义与结构约束"
+          ],
+          [
+            "CSV",
+            "表格交换和固定列的数据",
+            "列顺序、引号、类型与空值约定"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "JSON：字段直接说明每个值",
+      "body": "假设材料只有两条：项目讨论共 8 人，地点未定；方案评审共 5 人，地点为 302 会议室。约定 topic 为主题文字，attendees 为整数，location 为地点文字或 null。\n**JSON** 对象用字段名说明值的含义，对象列表中的每条记录也能单独理解。下面都是同一组教学数据的表示，不是模型实际返回。",
+      "codeBlocks": [
+        {
+          "label": "对象列表",
+          "code": "[\n  {\n    \"topic\": \"项目讨论\",\n    \"attendees\": 8,\n    \"location\": null\n  },\n  {\n    \"topic\": \"方案评审\",\n    \"attendees\": 5,\n    \"location\": \"302 会议室\"\n  }\n]",
+          "language": "json"
+        }
+      ],
+      "links": [
+        {
+          "label": "JSON 格式规范",
+          "href": "https://www.rfc-editor.org/rfc/rfc8259"
+        }
+      ]
+    },
+    {
+      "title": "JSONL：一行一条，逐条处理",
+      "body": "**JSONL（JSON Lines）**让每一行都是独立、有效的 JSON 值，常用来保存一条条记录。下面两行分别是两个对象，外层没有数组括号，行之间也不加逗号。\n记录内部不能为了美观拆成多行；字符串中的换行需要转义。按行接收时，要等这一行完整后再解析，输出中断留下的半行不能当作有效记录。JSONL 仍会重复字段名，它主要解决逐条处理的问题。",
+      "codeBlocks": [
+        {
+          "label": "两条 JSONL 记录",
+          "code": "{\"topic\":\"项目讨论\",\"attendees\":8,\"location\":null}\n{\"topic\":\"方案评审\",\"attendees\":5,\"location\":\"302 会议室\"}",
+          "language": "jsonl"
+        }
+      ],
+      "links": [
+        {
+          "label": "JSON Lines 格式说明",
+          "href": "https://jsonlines.org/"
+        }
+      ]
+    },
+    {
+      "title": "YAML 与 XML：按接收方的约定组织",
+      "body": "**YAML** 使用缩进表达层级，适合人阅读和维护的配置式内容。需要保持为字符串的值可以明确加引号，避免读取方对类型作出不同解释。\n**XML** 用元素和属性表达结构。提示词里的标签有时只用于分区；如果输出要交给 XML 解析器，就需要有效的标签闭合和转义。下面 missing=\"true\" 是示例双方约定的缺失标记，并不是 XML 自带的空值类型。",
+      "codeBlocks": [
+        {
+          "label": "YAML 列表",
+          "code": "- topic: \"项目讨论\"\n  attendees: 8\n  location: null\n- topic: \"方案评审\"\n  attendees: 5\n  location: \"302 会议室\"",
+          "language": "yaml"
+        },
+        {
+          "label": "XML 记录",
+          "code": "<meetings>\n  <meeting>\n    <topic>项目讨论</topic>\n    <attendees>8</attendees>\n    <location missing=\"true\" />\n  </meeting>\n  <meeting>\n    <topic>方案评审</topic>\n    <attendees>5</attendees>\n    <location>302 会议室</location>\n  </meeting>\n</meetings>",
+          "language": "xml"
+        }
+      ],
+      "links": [
+        {
+          "label": "YAML 1.2 规范",
+          "href": "https://yaml.org/spec/1.2.2/"
+        },
+        {
+          "label": "XML 规范",
+          "href": "https://www.w3.org/TR/xml/"
+        }
+      ]
+    },
+    {
+      "title": "CSV：用表头解释每一列",
+      "body": "**CSV** 适合列结构固定的表格数据。下面第一行是表头，每一条后续记录都按相同列顺序填写。字段含逗号、双引号或换行时，需要按 CSV 规则处理引号与转义。\nCSV 没有统一的字段类型或 null 语义。本例约定 location 的空字段表示未提供，attendees 由接收方转换并校验为整数；不能把这些约定当成格式本身的保证。",
+      "codeBlocks": [
+        {
+          "label": "带表头的 CSV",
+          "code": "topic,attendees,location\n项目讨论,8,\n方案评审,5,302 会议室",
+          "language": "csv"
+        }
+      ],
+      "links": [
+        {
+          "label": "CSV 的常见格式约定",
+          "href": "https://www.rfc-editor.org/rfc/rfc4180"
+        }
+      ]
+    },
+    {
+      "title": "JSON 也可以只写一次字段名",
+      "body": "很多记录拥有相同字段时，可以用 **headers + rows**：headers 按顺序列出字段名，rows 的每一行只保存对应的值。这仍是 JSON，只是把对象列表换成了表格结构，不是一种新的文件格式。\n它减少了每行重复的键名，但含义开始依赖列位置。每行长度必须与表头一致，缺失值保留 null 占位；不能少写一个值，让后面的列整体错位。表头也应唯一且顺序明确。\n这种写法适合字段稳定的批量数据。记录很少、字段变化多或嵌套复杂时，对象列表通常更容易维护。实际能节省多少 Token，取决于记录数量、字段名与模型分词方式，应测量后判断。",
+      "codeBlocks": [
+        {
+          "label": "同一组数据：表头与行",
+          "code": "{\n  \"headers\": [\n    \"topic\",\n    \"attendees\",\n    \"location\"\n  ],\n  \"rows\": [\n    [\n      \"项目讨论\",\n      8,\n      null\n    ],\n    [\n      \"方案评审\",\n      5,\n      \"302 会议室\"\n    ]\n  ]\n}",
+          "language": "json"
+        },
+        {
+          "label": "约定紧凑结构",
+          "code": "返回一个 JSON 对象，包含 headers 与 rows。\nheaders 固定为 [\"topic\", \"attendees\", \"location\"]，顺序不可改变。\nrows 中每行恰好三个值，依次为主题文字、人数整数、地点文字或 null。\n地点缺失时保留 null，不删除该位置，不猜测地点。",
+          "language": "text"
+        }
+      ],
+      "callouts": [
+        {
+          "type": "key",
+          "body": "headers + rows 节省的是重复字段名，代价是更依赖列顺序。先保证含义可还原，再比较体积与 Token 用量。"
+        }
+      ]
+    },
+    {
+      "title": "格式、结构、事实分别检查",
+      "body": "先按约定格式解析，再检查结构，最后回到材料核对。JSON 对象检查字段名与类型，headers + rows 还要检查列位置；CSV 则应用约定的字段类型与空值规则。\n提示词要求某种格式，不等于接口层的 **Schema** 约束。输出被截断、结构不符合要求与内容没有依据，也是不同的问题。先分清失败在哪一层，再选择处理方式。",
+      "callouts": [
+        {
+          "type": "warning",
+          "body": "能解析不等于结构正确，结构正确不等于事实有依据。紧凑输出也要保留这三层检查。"
+        }
+      ]
+    },
+    {
+      "title": "按用途决定，不按符号多少决定",
+      "body": "接收方需要什么、怎样校验、是否方便维护，决定了格式与结构是否合适。只为少写符号而丢掉条件、字段含义或缺失值，会增加后续错误。\n有些任务希望保留自然语言，同时让程序提取其中的指定片段。下一节用语义标记建立这层约定，再看它带来的取舍。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "地点缺失时，headers + rows 中为何要保留 null？即使结果能被 JSON 解析器读取，还要检查哪些结构与原文依据，才能交给程序使用？"
+}

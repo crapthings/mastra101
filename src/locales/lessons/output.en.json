@@ -1,0 +1,24 @@
+{
+  "title": "Reading model output",
+  "lead": "Should your app wait for the whole answer, show it as it arrives, or read it as data?",
+  "sections": [
+    {
+      "title": "Read the complete response",
+      "body": "With a regular response, your application waits for generation to finish before reading the result. This works well for scripts and background jobs.\nThe response may also include usage and finish information, so check its structure before extracting the text."
+    },
+    {
+      "title": "Streaming output",
+      "body": "Streaming sends incremental events or fragments so an interface can show content sooner. It improves time to first content, but does not guarantee a faster overall task.\nNetwork chunks are not complete messages. Parse the service or SDK event protocol and handle errors, interruptions, and completion. Do not JSON.parse each raw network chunk."
+    },
+    {
+      "title": "Structured output",
+      "body": "Suppose you want to save an itinerary to a database. You need a destination, a trip length, and daily plans. Asking for named fields is easier to work with than extracting them from prose.\nUse the API’s structured output features when available, then validate the result in your code. Asking for JSON does not by itself guarantee valid syntax, the right fields, or accurate content."
+    },
+    {
+      "title": "Choose what fits the task",
+      "body": "Explanations read by a user can stream; classification results consumed by code suit structured output.\nStructured responses can also be streamed, but incomplete fragments should not be treated as complete business objects."
+    }
+  ],
+  "noteTitle": "Try it",
+  "note": "If an action depends on an approved field, validate its boolean type and business authorization instead of searching the answer for “approved.”"
+}

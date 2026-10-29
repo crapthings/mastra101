@@ -1,0 +1,16 @@
+{
+  "title": "确认的是动作，暂停的是执行",
+  "caption": "以需要确认的“创建旅行提醒”为例。等待期间保存恢复所需状态；批准后才执行工具，拒绝则回传拒绝信息。两条路径都可能继续交给 Agent 处理。",
+  "request": "模型提出工具请求",
+  "requestDetail": "动作与参数已经明确",
+  "wait": "等待用户决定",
+  "waitDetail": "保存恢复所需状态，尚未执行动作",
+  "yes": "批准",
+  "no": "拒绝",
+  "execute": "执行工具",
+  "executeDetail": "创建提醒，返回实际结果",
+  "decline": "不执行该动作",
+  "declineDetail": "返回拒绝信息",
+  "continue": "Agent 继续处理",
+  "continueDetail": "依据结果或拒绝信息生成后续响应"
+}

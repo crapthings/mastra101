@@ -1,0 +1,29 @@
+{
+  "title": "第一次模型调用",
+  "lead": "准备好消息后，怎么把它发给模型，再拿到回答？",
+  "sections": [
+    {
+      "title": "一次调用需要哪些配置",
+      "body": "调用模型服务，通常要准备三样东西：API 地址、API Key 和模型名称。\n地址决定请求发到哪里，API Key 用来认证，模型名称决定使用哪个模型。服务收到请求后运行模型，再把结果返回给你的程序。"
+    },
+    {
+      "title": "SDK 帮你组织请求",
+      "body": "你可以自己用 fetch 发送 HTTP 请求，也可以使用 SDK。SDK 是客户端库，帮助你构造请求、解析响应。\nSDK 安装在你的项目里，模型仍由服务端运行。下面用 Node.js 内置 fetch 展示一种常见的消息接口请求。"
+    },
+    {
+      "title": "运行前，填好你的配置",
+      "body": "在服务器环境中设置 MODEL_API_URL、MODEL_API_KEY 和 MODEL_ID。地址应指向服务文档中指定的完整接口地址。\n这段代码不能直接用于所有模型服务，运行前需按服务文档核对字段和认证方式。真实请求可能产生费用，教程页面本身不会运行这段代码。"
+    },
+    {
+      "title": "Gateway：中途经过的转接站",
+      "body": "直接调用：应用 → 模型服务 API → 模型推理。\n经过网关：应用 → Gateway → 模型服务 API → 模型推理。\nGateway 是可选的中间层。具体产品可能提供路由、调用记录、限流或故障切换。统一入口不代表所有模型都支持相同功能。"
+    },
+    {
+      "title": "服务也会忙，也会拒绝请求",
+      "body": "网络超时、认证失败、额度不足或服务错误，都可能导致调用失败。先检查响应状态，再按服务的响应结构读取结果。\n下面先打印完整响应，看看生成文本和其他信息分别放在哪里。"
+    }
+  ],
+  "noteTitle": "改动之前先确认",
+  "note": "保留消息内容，只切换模型配置。你需要同时检查目标服务的请求协议和模型能力，不能只凭模型名字猜测它们兼容。",
+  "code": "// 从服务器环境中读取兼容消息接口的配置。\nconst { MODEL_API_URL, MODEL_API_KEY, MODEL_ID } = process.env\n\nif (!MODEL_API_URL || !MODEL_API_KEY || !MODEL_ID) {\n  throw new Error('缺少模型 API 配置')\n}\n\n// 发送一次请求，并限制网络等待时间。\nconst response = await fetch(MODEL_API_URL, {\n  method: 'POST',\n  headers: {\n    Authorization: `Bearer ${MODEL_API_KEY}`,\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify({\n    model: MODEL_ID,\n    messages: [\n      { role: 'system', content: '用中文安排轻松的行程，不要编造营业时间。' },\n      { role: 'user', content: '周末去杭州两天，带老人，少走路，帮我安排一份行程。' }\n    ]\n  }),\n  signal: AbortSignal.timeout(30_000)\n})\n\nif (!response.ok) {\n  throw new Error(`模型请求失败： ${response.status}`)\n}\n\n// 先查看服务响应的结构，再提取生成的文本。\nconst result = await response.json()\nconsole.log(result)"
+}

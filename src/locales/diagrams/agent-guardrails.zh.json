@@ -1,0 +1,16 @@
+{
+  "title": "防护检查有三种结果",
+  "caption": "本例采用 strategy: block 与 errorStrategy: strict。检测到问题与检测器自身失败都会停止放行，但原因必须分别记录；通过检测也不代替工具权限检查。",
+  "input": "本次输入材料",
+  "check": "防护处理器",
+  "checkDetail": "判断是否命中配置的规则",
+  "pass": "检测通过",
+  "passDetail": "继续主任务",
+  "flag": "检测到问题",
+  "flagDetail": "按 strategy 处理",
+  "failure": "检测未完成",
+  "failureDetail": "按 errorStrategy 处理",
+  "passResult": "继续处理，仍需核对",
+  "flagResult": "本例拦截并说明原因",
+  "failureResult": "本例停止，保留错误"
+}

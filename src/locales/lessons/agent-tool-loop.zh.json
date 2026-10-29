@@ -1,0 +1,254 @@
+{
+  "title": "工具调用（Tool Calling）",
+  "lead": "把缺少的信息变成一次工具查询，观察结果怎样进入后续调用，并区分三种结束情况。",
+  "sections": [
+    {
+      "title": "从核对材料，到查询记录",
+      "body": "已有的活动说明只写了“需要预约”，没有个人预约记录。用户现在给出编号 R001，要求查状态。继续改提示词也不能补出这条记录，需要提供查询能力。\n这次用一个本地教学工具模拟预约查询，返回“已预约”“未查到”或“查询失败”。模型请求仍会经过网关，但工具不连接真实预约系统，三个状态都由示例代码控制。\n这样可以把注意力放在同一件事上：Agent 收到不同工具结果后，是否改变后续回答。"
+    },
+    {
+      "title": "让工具结果有明确的含义",
+      "body": "**createTool()** 把说明、参数约定与执行函数放在一起。模型通过 description 和 inputSchema 了解怎样请求查询，程序通过 execute 执行，并按 outputSchema 约定返回数据。\n本例的输入是 bookingId，结果包含 status、detail 和 source。status 表达查询状态，detail 提供具体依据，source 说明数据来自哪里。它们是本例设计的字段，不是 Mastra 强制规定的结果格式。\n打开示例中的 src/04-tools.js，对照下面的完整代码。工具通过 tools 挂到 Agent 上，instructions 则说明什么时候查询，以及拿到不同状态后怎样回答。",
+      "codeBlocks": [
+        {
+          "label": "src/04-tools.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\n\n// 选择可重复观察的教学场景，不访问真实预约系统。\nconst demoMode = z.enum(['正常', '未查到', '失败']).parse(process.argv[2] || '正常')\n\n// 提供只读查询，并区分查到记录、没有匹配记录和查询失败。\nconst lookupReservation = createTool({\n  id: 'lookup-reservation',\n  description: '按预约编号查询教学预约记录，不创建或修改预约。',\n  inputSchema: z.object({\n    bookingId: z.string().min(1).describe('用户提供的预约编号，例如 R001')\n  }),\n  outputSchema: z.object({\n    bookingId: z.string(),\n    status: z.enum(['已预约', '未查到', '查询失败']),\n    detail: z.string(),\n    source: z.string()\n  }),\n  execute: async ({ bookingId }) => {\n    const base = { bookingId, source: '本地教学数据，不是真实预约记录' }\n    if (demoMode === '失败') {\n      return { ...base, status: '查询失败', detail: '模拟预约服务暂时不可用。' }\n    }\n    if (demoMode === '未查到' || bookingId !== 'R001') {\n      return { ...base, status: '未查到', detail: '教学数据中没有这个编号的记录。' }\n    }\n    return { ...base, status: '已预约', detail: '阅读分享会，周六下午两点开始，预约人数为 1 人。' }\n  }\n})\n\n// 让活动助手根据工具返回的状态回答，不把查询说成办理预约。\nconst activityAgent = new Agent({\n  id: 'activity-guide-tools',\n  name: '活动预约查询助手',\n  instructions: `\n    用中文回答。查询预约状态时，先调用 lookupReservation。\n    原样使用用户提供的预约编号；缺少编号时先询问，不自行编造。\n    依据工具返回的 status、detail 和 source 回答，明确这是教学数据。\n    未查到记录时，请用户核对编号；查询失败时，说明状态尚未确认。\n    本次运行不要用相同参数反复查询，不声称创建、修改或取消了预约。\n  `,\n  model: 'vercel/openai/gpt-6.1-sol',\n  tools: { lookupReservation }\n})\n\n// 选择当前请求是否允许工具调用，工具范围仍由应用明确指定。\nconst toolChoice = z.enum(['auto', 'none']).parse(process.argv[3] || 'auto')\n\n// 发起一次查询，打印各步记录以区分模型请求和工具执行结果。\nconst result = await activityAgent.generate('请查一下预约编号 R001 的状态。', {\n  maxSteps: 3,\n  activeTools: ['lookupReservation'],\n  toolChoice,\n  abortSignal: AbortSignal.timeout(60_000),\n  onStepFinish: ({ toolCalls, toolResults, finishReason }) => {\n    console.dir({ toolCalls, toolResults, finishReason }, { depth: null })\n  }\n})\n\nconsole.log('最终回答：')\nconsole.log(result.text || '没有最终文本，请查看执行记录。')"
+        }
+      ]
+    },
+    {
+      "title": "能用哪些工具，是否必须调用",
+      "body": "Agent 的 tools 定义可提供的工具，**activeTools** 可以为本次执行收窄范围；名称使用 tools 对象中的键，例如 lookupReservation，而不是工具内部的 id。\n**toolChoice** 决定选择方式：auto 让模型判断，none 不调用工具，required 要求使用工具，也可以指定某个工具。它们控制请求方式，不证明工具执行成功或查询结果正确。\n本例允许用命令参数比较 auto 与 none。指定 none 时，即使 instructions 要求查询，也不能把生成的文字当成已经查询；应在结果中保留缺少查询依据的状态。",
+      "table": {
+        "headers": [
+          "选项",
+          "适用意图"
+        ],
+        "rows": [
+          [
+            "auto",
+            "让模型按任务决定是否调用"
+          ],
+          [
+            "none",
+            "本次只根据已有内容生成"
+          ],
+          [
+            "required",
+            "当前调用需要使用工具"
+          ],
+          [
+            "{ type: 'tool', toolName }",
+            "当前调用指定工具"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "一次任务，怎样走过多个步骤",
+      "body": "在本章示例目录运行下面的命令。仍使用 Node.js 24 及以上环境，并加载已有的 Vercel 网关凭证。\n通常先由模型返回工具请求，Mastra 再校验参数、调用 execute，并把结果与原请求关联后交回模型。模型读取返回状态，才有依据继续回答。这个过程发生在同一次 generate() 内。\n**onStepFinish** 打印每个模型步骤的记录。toolCalls 用来核对请求名称与编号，toolResults 用来核对执行结果。只看到前者，不能证明已经查到预约。\n步骤数量由实际运行决定。示例设置 maxSteps: 3，是执行上限，不是承诺恰好出现三步，也不是要求调用三次工具。\n工具选择规则会影响后续步骤。若每一步都强制 required，模型可能没有机会直接生成最终回答；运行控制一节会用 prepareStep 将查询阶段与回答阶段分开。",
+      "codeBlocks": [
+        {
+          "label": "终端：正常场景",
+          "language": "bash",
+          "code": "node --env-file=.env src/04-tools.js 正常"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/04-tools.js 正常 none"
+        }
+      ],
+      "callouts": [
+        {
+          "type": "key",
+          "body": "工具结果进入后续模型调用，任务才有新的依据。一次 generate() 可以包含多个步骤，每一步的记录需要放回同一次任务中理解。"
+        }
+      ]
+    },
+    {
+      "title": "三种状态，应该走向不同回答",
+      "body": "保持问题不变，分别运行下面两条命令，切换工具返回的教学状态。每条命令都会重新发起一次 Agent 任务，不会自动延续上次对话。\n“未查到”说明当前数据中没有匹配记录，应继续核对编号与查询范围；“查询失败”则说明这次没有完成查询。两者都不能直接写成“用户没有预约”。",
+      "codeBlocks": [
+        {
+          "label": "终端：未查到与失败场景",
+          "language": "bash",
+          "code": "node --env-file=.env src/04-tools.js 未查到\nnode --env-file=.env src/04-tools.js 失败"
+        }
+      ],
+      "table": {
+        "headers": [
+          "工具状态",
+          "回答应保留什么",
+          "不应声称什么"
+        ],
+        "rows": [
+          [
+            "已预约",
+            "教学记录中的活动与人数，并注明来源",
+            "刚刚替用户完成了预约"
+          ],
+          [
+            "未查到",
+            "当前数据中没有匹配编号，需要核对",
+            "用户肯定没有预约"
+          ],
+          [
+            "查询失败",
+            "查询没有完成，预约状态尚未确认",
+            "预约成功或失败已被确认"
+          ]
+        ]
+      },
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "这三个分支演示的是工具按约定返回的业务结果。参数校验失败、执行函数抛错或请求中止，需要另看错误与运行记录，不能都归成“未查到”。"
+        }
+      ]
+    },
+    {
+      "title": "回答结束，与任务完成分开判断",
+      "body": "查到教学记录并如实说明，可以算完成这次查询。没有匹配记录时，任务可能结束在“需要用户核对编号”；服务失败时，则结束在“暂时无法确认”。结束不总意味着用户最初的问题已经解决。\ninstructions 要求避免重复查询，但执行量仍由程序限制。达到步数上限或发生中止时，应根据已经取得的记录说明进度，不能为了给出完整句子而补造结果。\n如果没有观察到工具调用，先检查实际输入、工具挂载与模型返回；如果有结果却答错，再对照 status 和最终文字。不要只看控制台有没有报错。\n工具也可以封装外部服务，或与工作流、其他 Agent 连接。无论内部实现多复杂，调用方仍需要明确的输入、结果和失败含义；本节的只读查询先把这层约定练清楚。",
+      "links": [
+        {
+          "label": "Mastra：工具及其他能力的接入",
+          "href": "https://mastra.ai/docs/agents/tools"
+        }
+      ]
+    },
+    {
+      "title": "让程序控制循环的范围",
+      "body": "工具结果可以推动下一次模型调用，但应用不能只等模型自行结束。程序还要限制步骤，并决定下一步是否继续允许调用工具。\n下一节通过运行控制，区分工具返回、循环停止与任务完成。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "记录中有 lookupReservation 请求，但工具返回“查询失败”，最终回答却说“你还没有预约”。偏差在哪一层？应该怎样说明这次任务的结果，才能供后续程序继续处理？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "从核对材料，到查询记录",
+          "body": "已有的活动说明只写了“需要预约”，没有个人预约记录。用户现在给出编号 R001，要求查状态。继续改提示词也不能补出这条记录，需要提供查询能力。\n这次用一个本地教学工具模拟预约查询，返回“已预约”“未查到”或“查询失败”。模型请求仍会经过网关，但工具不连接真实预约系统，三个状态都由示例代码控制。\n这样可以把注意力放在同一件事上：Agent 收到不同工具结果后，是否改变后续回答。"
+        },
+        {
+          "title": "让工具结果有明确的含义",
+          "body": "**createTool()** 把说明、参数约定与执行函数放在一起。模型通过 description 和 inputSchema 了解怎样请求查询，程序通过 execute 执行，并按 outputSchema 约定返回数据。\n本例的输入是 bookingId，结果包含 status、detail 和 source。status 表达查询状态，detail 提供具体依据，source 说明数据来自哪里。它们是本例设计的字段，不是 Mastra 强制规定的结果格式。\n打开示例中的 src/04-tools.ts，对照下面的完整代码。工具通过 tools 挂到 Agent 上，instructions 则说明什么时候查询，以及拿到不同状态后怎样回答。",
+          "codeBlocks": [
+            {
+              "label": "src/04-tools.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\n\n// 选择可重复观察的教学场景，不访问真实预约系统。\nconst demoMode = z.enum(['正常', '未查到', '失败']).parse(process.argv[2] || '正常')\n\n// 提供只读查询，并区分查到记录、没有匹配记录和查询失败。\nconst lookupReservation = createTool({\n  id: 'lookup-reservation',\n  description: '按预约编号查询教学预约记录，不创建或修改预约。',\n  inputSchema: z.object({\n    bookingId: z.string().min(1).describe('用户提供的预约编号，例如 R001')\n  }),\n  outputSchema: z.object({\n    bookingId: z.string(),\n    status: z.enum(['已预约', '未查到', '查询失败']),\n    detail: z.string(),\n    source: z.string()\n  }),\n  execute: async ({ bookingId }) => {\n    const base = { bookingId, source: '本地教学数据，不是真实预约记录' }\n    if (demoMode === '失败') {\n      return { ...base, status: '查询失败', detail: '模拟预约服务暂时不可用。' }\n    }\n    if (demoMode === '未查到' || bookingId !== 'R001') {\n      return { ...base, status: '未查到', detail: '教学数据中没有这个编号的记录。' }\n    }\n    return { ...base, status: '已预约', detail: '阅读分享会，周六下午两点开始，预约人数为 1 人。' }\n  }\n})\n\n// 让活动助手根据工具返回的状态回答，不把查询说成办理预约。\nconst activityAgent = new Agent({\n  id: 'activity-guide-tools',\n  name: '活动预约查询助手',\n  instructions: `\n    用中文回答。查询预约状态时，先调用 lookupReservation。\n    原样使用用户提供的预约编号；缺少编号时先询问，不自行编造。\n    依据工具返回的 status、detail 和 source 回答，明确这是教学数据。\n    未查到记录时，请用户核对编号；查询失败时，说明状态尚未确认。\n    本次运行不要用相同参数反复查询，不声称创建、修改或取消了预约。\n  `,\n  model: 'vercel/openai/gpt-6.1-sol',\n  tools: { lookupReservation }\n})\n\n// 选择当前请求是否允许工具调用，工具范围仍由应用明确指定。\nconst toolChoice = z.enum(['auto', 'none']).parse(process.argv[3] || 'auto')\n\n// 发起一次查询，打印各步记录以区分模型请求和工具执行结果。\nconst result = await activityAgent.generate('请查一下预约编号 R001 的状态。', {\n  maxSteps: 3,\n  activeTools: ['lookupReservation'],\n  toolChoice,\n  abortSignal: AbortSignal.timeout(60_000),\n  onStepFinish: ({ toolCalls, toolResults, finishReason }) => {\n    console.dir({ toolCalls, toolResults, finishReason }, { depth: null })\n  }\n})\n\nconsole.log('最终回答：')\nconsole.log(result.text || '没有最终文本，请查看执行记录。')"
+            }
+          ]
+        },
+        {
+          "title": "能用哪些工具，是否必须调用",
+          "body": "Agent 的 tools 定义可提供的工具，**activeTools** 可以为本次执行收窄范围；名称使用 tools 对象中的键，例如 lookupReservation，而不是工具内部的 id。\n**toolChoice** 决定选择方式：auto 让模型判断，none 不调用工具，required 要求使用工具，也可以指定某个工具。它们控制请求方式，不证明工具执行成功或查询结果正确。\n本例允许用命令参数比较 auto 与 none。指定 none 时，即使 instructions 要求查询，也不能把生成的文字当成已经查询；应在结果中保留缺少查询依据的状态。",
+          "table": {
+            "headers": [
+              "选项",
+              "适用意图"
+            ],
+            "rows": [
+              [
+                "auto",
+                "让模型按任务决定是否调用"
+              ],
+              [
+                "none",
+                "本次只根据已有内容生成"
+              ],
+              [
+                "required",
+                "当前调用需要使用工具"
+              ],
+              [
+                "{ type: 'tool', toolName }",
+                "当前调用指定工具"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "一次任务，怎样走过多个步骤",
+          "body": "在本章示例目录运行下面的命令。仍使用 Node.ts 24 及以上环境，并加载已有的 Vercel 网关凭证。\n通常先由模型返回工具请求，Mastra 再校验参数、调用 execute，并把结果与原请求关联后交回模型。模型读取返回状态，才有依据继续回答。这个过程发生在同一次 generate() 内。\n**onStepFinish** 打印每个模型步骤的记录。toolCalls 用来核对请求名称与编号，toolResults 用来核对执行结果。只看到前者，不能证明已经查到预约。\n步骤数量由实际运行决定。示例设置 maxSteps: 3，是执行上限，不是承诺恰好出现三步，也不是要求调用三次工具。\n工具选择规则会影响后续步骤。若每一步都强制 required，模型可能没有机会直接生成最终回答；运行控制一节会用 prepareStep 将查询阶段与回答阶段分开。",
+          "codeBlocks": [
+            {
+              "label": "终端：正常场景",
+              "language": "bash",
+              "code": "node --env-file=.env src/04-tools.ts 正常"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/04-tools.ts 正常 none"
+            }
+          ],
+          "callouts": [
+            {
+              "type": "key",
+              "body": "工具结果进入后续模型调用，任务才有新的依据。一次 generate() 可以包含多个步骤，每一步的记录需要放回同一次任务中理解。"
+            }
+          ]
+        },
+        {
+          "title": "三种状态，应该走向不同回答",
+          "body": "保持问题不变，分别运行下面两条命令，切换工具返回的教学状态。每条命令都会重新发起一次 Agent 任务，不会自动延续上次对话。\n“未查到”说明当前数据中没有匹配记录，应继续核对编号与查询范围；“查询失败”则说明这次没有完成查询。两者都不能直接写成“用户没有预约”。",
+          "codeBlocks": [
+            {
+              "label": "终端：未查到与失败场景",
+              "language": "bash",
+              "code": "node --env-file=.env src/04-tools.ts 未查到\nnode --env-file=.env src/04-tools.ts 失败"
+            }
+          ],
+          "table": {
+            "headers": [
+              "工具状态",
+              "回答应保留什么",
+              "不应声称什么"
+            ],
+            "rows": [
+              [
+                "已预约",
+                "教学记录中的活动与人数，并注明来源",
+                "刚刚替用户完成了预约"
+              ],
+              [
+                "未查到",
+                "当前数据中没有匹配编号，需要核对",
+                "用户肯定没有预约"
+              ],
+              [
+                "查询失败",
+                "查询没有完成，预约状态尚未确认",
+                "预约成功或失败已被确认"
+              ]
+            ]
+          },
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "这三个分支演示的是工具按约定返回的业务结果。参数校验失败、执行函数抛错或请求中止，需要另看错误与运行记录，不能都归成“未查到”。"
+            }
+          ]
+        },
+        {
+          "title": "回答结束，与任务完成分开判断",
+          "body": "查到教学记录并如实说明，可以算完成这次查询。没有匹配记录时，任务可能结束在“需要用户核对编号”；服务失败时，则结束在“暂时无法确认”。结束不总意味着用户最初的问题已经解决。\ninstructions 要求避免重复查询，但执行量仍由程序限制。达到步数上限或发生中止时，应根据已经取得的记录说明进度，不能为了给出完整句子而补造结果。\n如果没有观察到工具调用，先检查实际输入、工具挂载与模型返回；如果有结果却答错，再对照 status 和最终文字。不要只看控制台有没有报错。\n工具也可以封装外部服务，或与工作流、其他 Agent 连接。无论内部实现多复杂，调用方仍需要明确的输入、结果和失败含义；本节的只读查询先把这层约定练清楚。",
+          "links": [
+            {
+              "label": "Mastra：工具及其他能力的接入",
+              "href": "https://mastra.ai/docs/agents/tools"
+            }
+          ]
+        },
+        {
+          "title": "让程序控制循环的范围",
+          "body": "工具结果可以推动下一次模型调用，但应用不能只等模型自行结束。程序还要限制步骤，并决定下一步是否继续允许调用工具。\n下一节通过运行控制，区分工具返回、循环停止与任务完成。"
+        }
+      ]
+    }
+  }
+}

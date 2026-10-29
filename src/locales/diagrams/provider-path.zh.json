@@ -1,0 +1,16 @@
+{
+  "title": "本章的模型请求只走这条路径",
+  "caption": "上方虚线框里的 Mastra 和模型客户端运行在本机，SDK 封装对 API 的调用。请求使用 Vercel 网关凭证到达 Vercel，再由网关访问上游模型服务；读取系统时钟的工具仍在本地执行。",
+  "local": "你的 Node.js 程序",
+  "agent": "Mastra Agent 与模型路由",
+  "identifier": "vercel/openai/gpt-6.1-sol",
+  "sdk": "模型客户端封装 API 请求与响应",
+  "gateway": "Vercel AI Gateway",
+  "key": "AI_GATEWAY_API_KEY",
+  "upstream": "上游模型服务",
+  "model": "OpenAI 厂牌 · GPT-6.1 Sol",
+  "request": "请求 + 网关凭证",
+  "response": "返回结果",
+  "forward": "转发模型请求",
+  "generated": "模型生成结果"
+}

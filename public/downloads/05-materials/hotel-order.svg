@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="660" viewBox="0 0 960 660">
+<rect width="960" height="660" fill="#faf9f6"/>
+<rect x="48" y="40" width="864" height="580" rx="24" fill="#fff" stroke="#d6d3d1"/>
+<g font-family="sans-serif" fill="#292524">
+<text x="90" y="112" font-size="32" font-weight="700">杭州 · 湖畔旅居</text>
+<text x="90" y="157" font-size="21" fill="#78716c">酒店订单 · 虚构教学材料</text>
+<path d="M90 190H870" stroke="#e7e5e4"/>
+<text x="90" y="246" font-size="24">入住：2026 年 11 月 14 日</text>
+<text x="90" y="301" font-size="24">离店：2026 年 11 月 16 日</text>
+<text x="90" y="356" font-size="24">入住人数：2 位成人</text>
+<text x="90" y="411" font-size="24">房型：双床房 · 共 2 晚</text>
+<text x="90" y="466" font-size="24">早餐：未包含</text>
+<text x="90" y="557" font-size="20" fill="#78716c">本图不含实际订单、地址或个人信息。</text>
+</g>
+</svg>

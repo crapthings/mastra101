@@ -1,0 +1,264 @@
+{
+  "title": "运行控制",
+  "lead": "从 maxSteps 理解一次运行能走几步，再控制下一步的配置、停止条件与等待时间。",
+  "sections": [
+    {
+      "title": "先看清一步包含什么",
+      "body": "查询预约时，模型先决定调用工具；程序执行查询，把结果放回本次运行。模型还需要再读一次结果，才能据此整理回答。一次用户请求，因此可能包含多步模型调用。\n在这个普通工具循环中，**步骤（Step）**围绕一次模型调用展开，也包含这次调用触发的工具执行。工具返回本身不会另外占用一个模型步骤；让模型继续阅读结果并回答，才进入下一步。"
+    },
+    {
+      "title": "maxSteps 限制最多走几步",
+      "body": "**maxSteps** 给本次运行设置模型步骤的上限。它是最多允许继续多少步，不是必须走满多少步，也不是最多调用几个工具。一个步骤可能请求多个工具；即使预算还有剩余，模型也可以直接结束回答。\n本例第一步指定查询工具，后续关闭工具选择。这样可以观察：只允许一步时，查询已经执行，却没有第二步让模型读取查询结果并整理回答。",
+      "table": {
+        "headers": [
+          "步数上限",
+          "本例可走的路径",
+          "重点观察"
+        ],
+        "rows": [
+          [
+            "maxSteps: 1",
+            "模型请求查询 → 工具返回 → 停止",
+            "可能已有工具结果，但没有基于该结果的最终回答"
+          ],
+          [
+            "maxSteps: 2",
+            "查询返回后，再调用模型整理回答",
+            "一次查询与一次结果整理通常需要两步"
+          ],
+          [
+            "maxSteps: 3",
+            "允许最多三步，也可以提前结束",
+            "预算增加不代表一定多调用一次模型"
+          ]
+        ]
+      },
+      "callouts": [
+        {
+          "type": "key",
+          "body": "工具执行成功、模型给出回答、用户任务完成，是三个需要分别核对的状态。maxSteps 只限制步骤，不替你判断任务是否完成。"
+        }
+      ]
+    },
+    {
+      "title": "用不同上限观察同一个问题",
+      "body": "05-control.js 沿用同一工具和问题，分别把 maxSteps 设为 1、2、3。对照每步的工具请求、返回结果与最终文字，看看调用停在了哪里。\n示例用 prepareStep 在第一步指定查询工具，后续步骤改为 none，让模型依据已有结果回答。这个设置固定了教学路径；实际运行仍可能遇到模型请求失败或输出不符合要求。",
+      "codeBlocks": [
+        {
+          "label": "src/05-control.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { createReservationTool } from './reservation.js'\nimport { z } from 'zod'\n\n// 对运行步数作确定性校验，避免把无效设置传给框架。\nconst maxSteps = z.coerce.number().int().min(1).max(3).parse(process.argv[2] || '3')\n\n// 选择是否在工具返回后停止，观察停止条件与最终回答的区别。\nconst stopAfterQuery = process.argv[3] === '查完即停'\n\n// 使用正常教学查询观察不同执行上限，不允许反复查询同一编号。\nconst agent = new Agent({\n  id: 'activity-control',\n  name: '活动查询助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '先调用 lookupReservation 查询 R001，再用中文说明教学结果。不要重复调用相同参数。',\n  tools: { lookupReservation: createReservationTool() }\n})\n\n// 在请求进行时接收终端中止，工具若有外部 I/O 也需要配合取消信号。\nconst controller = new AbortController()\n// 将 Ctrl+C 转为本次请求的取消信号。\nconst stop = () => controller.abort()\nprocess.once('SIGINT', stop)\n\ntry {\n  const result = await agent.generate('请查询预约编号 R001。', {\n    maxSteps,\n    prepareStep: ({ stepNumber }) => stepNumber === 0\n      ? { toolChoice: { type: 'tool', toolName: 'lookupReservation' } }\n      : { toolChoice: 'none' },\n    stopWhen: stopAfterQuery\n      ? ({ steps }) => steps.some(step => (step.toolResults?.length || 0) > 0)\n      : undefined,\n    abortSignal: AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]),\n    onStepFinish: ({ toolCalls, toolResults, finishReason }) => {\n      console.dir({ toolCalls, toolResults, finishReason }, { depth: null })\n    }\n  })\n  console.log('结束原因：', result.finishReason)\n  console.log('最终文本：', result.text || '本次没有最终文本。')\n  console.log('请对照步骤记录判断任务完成情况。')\n} catch (error) {\n  console.error('运行未正常完成：', error instanceof Error ? error.message : error)\n  process.exitCode = 1\n} finally {\n  process.removeListener('SIGINT', stop)\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/05-control.js 1"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/05-control.js 2"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/05-control.js 3"
+        }
+      ]
+    },
+    {
+      "title": "按任务路径设置预算",
+      "body": "先写出任务需要的调用路径，再设置上限。像本例这样先查一次、再整理结果，可以先用两步验证；若要先查预约，再根据返回的活动编号查询地点，最后回答，就可能需要三步。能够在同一步请求的多个工具，则不必逐个累加步数。\n用正常、缺少资料和查询失败的场景观察实际步骤。只有发现合理路径确实需要更多步骤时，才调整上限；反复查询相同参数、缺少必需输入，都不该靠增加步数解决。\n步数也不是费用或耗时的完整预算。每步输入输出的 Token 数可能不同，模型请求重试、处理器反馈重试还有各自的上限，后面的错误恢复一节会分别介绍。",
+      "callouts": [
+        {
+          "type": "warning",
+          "body": "提高 maxSteps 只增加继续执行的空间，不保证回答更准确，也不能替代超时、重试上限或工具执行前的检查。"
+        }
+      ]
+    },
+    {
+      "title": "在下一步之前调整配置",
+      "body": "**prepareStep** 在每一步模型调用之前运行，可以根据 **stepNumber** 和已有步骤调整本步配置。stepNumber 从 0 开始，因此 stepNumber === 0 表示第一步。\n本例第一步要求查询，下一步关闭工具选择，减少重复查询。maxSteps 管最多走几步，prepareStep 管这一步怎样调用；实际任务应根据已取得的结果决定是否继续开放工具。"
+    },
+    {
+      "title": "停止条件不等于最终回答",
+      "body": "**stopWhen** 根据已完成步骤判断是否停止。本例增加“查完即停”选项，只要步骤中已有工具结果就停下，方便观察工具返回与最终文字并非同一件事。\n运行下面的命令，再与普通三步模式比较。程序可能拿到了工具数据，却还没有让模型整理回答；这时不能把停止条件命中当成用户任务已经完成。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/05-control.js 3 查完即停"
+        }
+      ]
+    },
+    {
+      "title": "中止要沿执行链传递",
+      "body": "示例把 Ctrl+C 转为 **AbortController** 信号，并与 60 秒超时信号组合后传给 Agent。本地教学工具没有耗时 I/O；真实工具若调用 fetch 等接口，还需要把执行上下文里的 **abortSignal** 传给相应操作。\n信号发出不等于外部服务一定停止，也不撤销已经完成的写入。查询可以报告中断，提交预约等操作则需要另外核实外部状态。"
+    },
+    {
+      "title": "把停止原因与任务状态分开",
+      "body": "达到步数上限、模型结束回答、工具返回业务失败、用户中止，含义各不相同。保留步骤记录、结束原因与工具结果，再判断已经取得什么、还缺少什么。\n不要只看 finishReason 或最终文字是否为空。例如工具已经返回预约记录，但没有后续模型步骤时，查询数据仍然存在；若工具修改了外部状态，停止也不会撤销这次操作。失败恢复与工具审批会在后面分别展开。",
+      "table": {
+        "headers": [
+          "看到的情况",
+          "下一步依据"
+        ],
+        "rows": [
+          [
+            "工具报告服务不可用",
+            "保留未确认状态，按策略决定是否重试"
+          ],
+          [
+            "已有工具结果但没有最终回答",
+            "核对步数、结束原因与结果能否继续使用"
+          ],
+          [
+            "用户中止",
+            "停止推进并说明已完成与未知部分"
+          ],
+          [
+            "等待审批",
+            "保留待确认动作，不当作已执行"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "停止之后，还要交付明确结果",
+      "body": "运行记录可以说明循环为什么停止，却不能代替要交给后续程序的业务结果。查到了预约、没有查到记录、查询失败，需要分别表达。\n下一节为最终输出约定结构，把状态、依据与缺口一起交给后续程序。"
+    }
+  ],
+  "note": "同一个查询在 maxSteps 为 1 时已返回预约记录，却没有基于记录的最终回答。缺少的是哪一步？改成 2 后应该检查什么？如果设成 3，是否一定会调用三次模型？",
+  "noteTitle": "本节检查",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先看清一步包含什么",
+          "body": "查询预约时，模型先决定调用工具；程序执行查询，把结果放回本次运行。模型还需要再读一次结果，才能据此整理回答。一次用户请求，因此可能包含多步模型调用。\n在这个普通工具循环中，**步骤（Step）**围绕一次模型调用展开，也包含这次调用触发的工具执行。工具返回本身不会另外占用一个模型步骤；让模型继续阅读结果并回答，才进入下一步。"
+        },
+        {
+          "title": "maxSteps 限制最多走几步",
+          "body": "**maxSteps** 给本次运行设置模型步骤的上限。它是最多允许继续多少步，不是必须走满多少步，也不是最多调用几个工具。一个步骤可能请求多个工具；即使预算还有剩余，模型也可以直接结束回答。\n本例第一步指定查询工具，后续关闭工具选择。这样可以观察：只允许一步时，查询已经执行，却没有第二步让模型读取查询结果并整理回答。",
+          "table": {
+            "headers": [
+              "步数上限",
+              "本例可走的路径",
+              "重点观察"
+            ],
+            "rows": [
+              [
+                "maxSteps: 1",
+                "模型请求查询 → 工具返回 → 停止",
+                "可能已有工具结果，但没有基于该结果的最终回答"
+              ],
+              [
+                "maxSteps: 2",
+                "查询返回后，再调用模型整理回答",
+                "一次查询与一次结果整理通常需要两步"
+              ],
+              [
+                "maxSteps: 3",
+                "允许最多三步，也可以提前结束",
+                "预算增加不代表一定多调用一次模型"
+              ]
+            ]
+          },
+          "callouts": [
+            {
+              "type": "key",
+              "body": "工具执行成功、模型给出回答、用户任务完成，是三个需要分别核对的状态。maxSteps 只限制步骤，不替你判断任务是否完成。"
+            }
+          ]
+        },
+        {
+          "title": "用不同上限观察同一个问题",
+          "body": "05-control.ts 沿用同一工具和问题，分别把 maxSteps 设为 1、2、3。对照每步的工具请求、返回结果与最终文字，看看调用停在了哪里。\n示例用 prepareStep 在第一步指定查询工具，后续步骤改为 none，让模型依据已有结果回答。这个设置固定了教学路径；实际运行仍可能遇到模型请求失败或输出不符合要求。",
+          "codeBlocks": [
+            {
+              "label": "src/05-control.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { createReservationTool } from './reservation.ts'\nimport { z } from 'zod'\n\n// 对运行步数作确定性校验，避免把无效设置传给框架。\nconst maxSteps = z.coerce.number().int().min(1).max(3).parse(process.argv[2] || '3')\n\n// 选择是否在工具返回后停止，观察停止条件与最终回答的区别。\nconst stopAfterQuery = process.argv[3] === '查完即停'\n\n// 使用正常教学查询观察不同执行上限，不允许反复查询同一编号。\nconst agent = new Agent({\n  id: 'activity-control',\n  name: '活动查询助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '先调用 lookupReservation 查询 R001，再用中文说明教学结果。不要重复调用相同参数。',\n  tools: { lookupReservation: createReservationTool() }\n})\n\n// 在请求进行时接收终端中止，工具若有外部 I/O 也需要配合取消信号。\nconst controller = new AbortController()\n// 将 Ctrl+C 转为本次请求的取消信号。\nconst stop = () => controller.abort()\nprocess.once('SIGINT', stop)\n\ntry {\n  const result = await agent.generate('请查询预约编号 R001。', {\n    maxSteps,\n    prepareStep: ({ stepNumber }) => stepNumber === 0\n      ? { toolChoice: { type: 'tool', toolName: 'lookupReservation' } }\n      : { toolChoice: 'none' },\n    stopWhen: stopAfterQuery\n      ? ({ steps }) => steps.some(step => (step.toolResults?.length || 0) > 0)\n      : undefined,\n    abortSignal: AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]),\n    onStepFinish: ({ toolCalls, toolResults, finishReason }) => {\n      console.dir({ toolCalls, toolResults, finishReason }, { depth: null })\n    }\n  })\n  console.log('结束原因：', result.finishReason)\n  console.log('最终文本：', result.text || '本次没有最终文本。')\n  console.log('请对照步骤记录判断任务完成情况。')\n} catch (error) {\n  console.error('运行未正常完成：', error instanceof Error ? error.message : error)\n  process.exitCode = 1\n} finally {\n  process.removeListener('SIGINT', stop)\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/05-control.ts 1"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/05-control.ts 2"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/05-control.ts 3"
+            }
+          ]
+        },
+        {
+          "title": "按任务路径设置预算",
+          "body": "先写出任务需要的调用路径，再设置上限。像本例这样先查一次、再整理结果，可以先用两步验证；若要先查预约，再根据返回的活动编号查询地点，最后回答，就可能需要三步。能够在同一步请求的多个工具，则不必逐个累加步数。\n用正常、缺少资料和查询失败的场景观察实际步骤。只有发现合理路径确实需要更多步骤时，才调整上限；反复查询相同参数、缺少必需输入，都不该靠增加步数解决。\n步数也不是费用或耗时的完整预算。每步输入输出的 Token 数可能不同，模型请求重试、处理器反馈重试还有各自的上限，后面的错误恢复一节会分别介绍。",
+          "callouts": [
+            {
+              "type": "warning",
+              "body": "提高 maxSteps 只增加继续执行的空间，不保证回答更准确，也不能替代超时、重试上限或工具执行前的检查。"
+            }
+          ]
+        },
+        {
+          "title": "在下一步之前调整配置",
+          "body": "**prepareStep** 在每一步模型调用之前运行，可以根据 **stepNumber** 和已有步骤调整本步配置。stepNumber 从 0 开始，因此 stepNumber === 0 表示第一步。\n本例第一步要求查询，下一步关闭工具选择，减少重复查询。maxSteps 管最多走几步，prepareStep 管这一步怎样调用；实际任务应根据已取得的结果决定是否继续开放工具。"
+        },
+        {
+          "title": "停止条件不等于最终回答",
+          "body": "**stopWhen** 根据已完成步骤判断是否停止。本例增加“查完即停”选项，只要步骤中已有工具结果就停下，方便观察工具返回与最终文字并非同一件事。\n运行下面的命令，再与普通三步模式比较。程序可能拿到了工具数据，却还没有让模型整理回答；这时不能把停止条件命中当成用户任务已经完成。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/05-control.ts 3 查完即停"
+            }
+          ]
+        },
+        {
+          "title": "中止要沿执行链传递",
+          "body": "示例把 Ctrl+C 转为 **AbortController** 信号，并与 60 秒超时信号组合后传给 Agent。本地教学工具没有耗时 I/O；真实工具若调用 fetch 等接口，还需要把执行上下文里的 **abortSignal** 传给相应操作。\n信号发出不等于外部服务一定停止，也不撤销已经完成的写入。查询可以报告中断，提交预约等操作则需要另外核实外部状态。"
+        },
+        {
+          "title": "把停止原因与任务状态分开",
+          "body": "达到步数上限、模型结束回答、工具返回业务失败、用户中止，含义各不相同。保留步骤记录、结束原因与工具结果，再判断已经取得什么、还缺少什么。\n不要只看 finishReason 或最终文字是否为空。例如工具已经返回预约记录，但没有后续模型步骤时，查询数据仍然存在；若工具修改了外部状态，停止也不会撤销这次操作。失败恢复与工具审批会在后面分别展开。",
+          "table": {
+            "headers": [
+              "看到的情况",
+              "下一步依据"
+            ],
+            "rows": [
+              [
+                "工具报告服务不可用",
+                "保留未确认状态，按策略决定是否重试"
+              ],
+              [
+                "已有工具结果但没有最终回答",
+                "核对步数、结束原因与结果能否继续使用"
+              ],
+              [
+                "用户中止",
+                "停止推进并说明已完成与未知部分"
+              ],
+              [
+                "等待审批",
+                "保留待确认动作，不当作已执行"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "停止之后，还要交付明确结果",
+          "body": "运行记录可以说明循环为什么停止，却不能代替要交给后续程序的业务结果。查到了预约、没有查到记录、查询失败，需要分别表达。\n下一节为最终输出约定结构，把状态、依据与缺口一起交给后续程序。"
+        }
+      ]
+    }
+  }
+}

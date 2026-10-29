@@ -1,0 +1,28 @@
+{
+  "skip": "Skip to content",
+  "contents": "CONTENTS",
+  "foundation": "Foundations",
+  "loading": "Loading lesson",
+  "error": "Unable to open this page",
+  "notFound": "This lesson could not be found.",
+  "retry": "Please refresh and try again.",
+  "back": "Back to the first lesson",
+  "pagination": "Lesson navigation",
+  "previous": "Previous lesson",
+  "next": "Next lesson",
+  "lessons": {
+    "intro": "Understanding LLMs",
+    "first": "Your first agent",
+    "execution": "Following the execution",
+    "understanding": "Understanding agents",
+    "api": "Your first model call",
+    "prompts": "Prompts and messages",
+    "context": "Context and conversations",
+    "output": "Reading model output",
+    "tools": "Tool calling"
+  },
+  "chapters": {
+    "llm": "Large language models",
+    "agent": "Agents"
+  }
+}

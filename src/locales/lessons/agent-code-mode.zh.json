@@ -1,0 +1,142 @@
+{
+  "title": "代码模式（Code Mode）",
+  "lead": "把重复查询与计算交给受限的编排代码，理解 Code Mode 能减少什么，又不会替代什么。",
+  "sections": [
+    {
+      "title": "多个查询之后，还要做一次计算",
+      "body": "要统计活动剩余名额，先读取报名列表，再读取容量，最后排除取消记录并计算差值。普通工具循环可以完成，只是可能需要多次模型交互来组织这些动作。\n**Code Mode** 让模型生成一段编排代码，在受限环境中调用已暴露的工具并汇总结果。算术由代码执行，模型负责组织这段计算；结果仍要对照实际工具数据检查。"
+    },
+    {
+      "title": "工具仍在原来的执行环境中工作",
+      "body": "Mastra 的 **createCodeMode()** 返回编排工具与配套 instructions。模型代码中的 external_* 调用，会被桥接到应用提供的工具；这些工具仍在宿主程序中执行自己的查询、校验与业务逻辑。\n代码运行环境和工具权限是两条边界。本例使用 QuickJsCodeModeTransport 执行模型编排代码，只暴露两个返回教学数据的只读工具，没有使用直接运行宿主 Node.js 的 LocalSandbox。"
+    },
+    {
+      "title": "用一组小数据核对结果",
+      "body": "12-code-mode.js 中，报名状态为两个“有效”、一个“已取消”，总容量为 20。按本例规则，有效人数应为 2，剩余名额应为 18。这是数据推导出的检查标准，不是模型实测答案。\n同时把 createCodeMode() 返回的工具与说明挂给 Agent，再观察它是否调用编排工具、调用哪些底层工具，以及汇总结果是否符合规则。\n桥接函数的名称以生成的 instructions 为准。例如本例工具 id 为 list-registrations，当前生成的名称是 external_list_registrations，不要直接从变量名猜调用名称。",
+      "codeBlocks": [
+        {
+          "label": "src/12-code-mode.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { createCodeMode, createTool } from '@mastra/core/tools'\nimport { QuickJsCodeModeTransport } from '@mastra/quickjs'\nimport { z } from 'zod'\n\n// 提供不含个人信息的教学报名状态，仅供统计。\nconst listRegistrations = createTool({\n  id: 'list-registrations',\n  description: '读取本地教学报名列表。',\n  inputSchema: z.object({}),\n  outputSchema: z.object({ statuses: z.array(z.enum(['有效', '已取消'])) }),\n  execute: async () => ({ statuses: ['有效', '有效', '已取消'] })\n})\n\n// 提供同一活动的教学容量，不访问真实服务。\nconst getCapacity = createTool({\n  id: 'get-capacity',\n  description: '读取教学活动的总容量。',\n  inputSchema: z.object({}),\n  outputSchema: z.object({ capacity: z.number().int().nonnegative() }),\n  execute: async () => ({ capacity: 20 })\n})\n\n// 用 QuickJS 隔离模型生成的编排代码，只桥接上面两个只读工具。\nconst { tool, instructions } = createCodeMode(\n  { tools: { listRegistrations, getCapacity } },\n  new QuickJsCodeModeTransport({ memoryLimitMb: 128 })\n)\n\n// 同时挂载 Code Mode 工具与它生成的使用说明。\nconst agent = new Agent({\n  id: 'activity-code-mode',\n  name: '活动名额统计助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: ['用中文回答。调用工具统计教学数据，只计算有效报名，不把已取消记录计入。', instructions],\n  tools: { execute_typescript: tool }\n})\n\n// 观察编排工具的输入输出，并用人工可核对的小数据检查算术。\nconst result = await agent.generate('读取报名列表和容量，计算有效报名人数与剩余名额。', {\n  maxSteps: 3,\n  abortSignal: AbortSignal.timeout(60_000),\n  onStepFinish: ({ toolCalls, toolResults }) => console.dir({ toolCalls, toolResults }, { depth: null })\n})\n\nconsole.log(result.text || '没有最终文本，请查看工具执行结果。')"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/12-code-mode.js"
+        }
+      ]
+    },
+    {
+      "title": "少一次往返，不代表少了业务责任",
+      "body": "Code Mode 可以在返回模型前筛选或汇总工具数据，但工具内部的权限验证、外部请求失败和重复写入问题仍然存在。沙箱隔离了编排代码，不会替宿主工具自动补齐这些检查。\n只需要一次查询时，普通工具调用更直接；执行顺序与分支由业务明确规定时，可以使用工作流。需要模型临时组合多个查询与计算时，再考虑 Code Mode。",
+      "table": {
+        "headers": [
+          "方式",
+          "适合观察的职责"
+        ],
+        "rows": [
+          [
+            "普通工具循环",
+            "模型逐步决定下一次工具调用"
+          ],
+          [
+            "Code Mode",
+            "模型编写调用与计算逻辑，执行后汇总"
+          ],
+          [
+            "工作流",
+            "程序显式组织必须遵循的步骤与数据流"
+          ]
+        ]
+      },
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "不要把 LocalSandbox 等同于强隔离环境。选择代码运行方式时，同时检查文件、网络、进程能力与宿主工具暴露的权限。"
+        }
+      ],
+      "links": [
+        {
+          "label": "Code Mode 与执行边界",
+          "href": "https://mastra.ai/docs/agents/code-mode"
+        }
+      ]
+    },
+    {
+      "title": "最后回到整次任务的证据",
+      "body": "无论采用普通循环还是 Code Mode，最终都要回答：拿到了哪些数据，执行了什么，哪些结论仍未确认。\n最后一节把这些证据放在一起，复盘一次任务，再决定该修改指令、工具、输入处理还是运行配置。"
+    }
+  ],
+  "note": "编排代码在沙箱里运行，但它调用的宿主工具会修改预约。沙箱能否自动保证这次修改被授权？若算术正确，却把已取消记录也计入人数，问题又出在哪里？",
+  "noteTitle": "本节检查",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "多个查询之后，还要做一次计算",
+          "body": "要统计活动剩余名额，先读取报名列表，再读取容量，最后排除取消记录并计算差值。普通工具循环可以完成，只是可能需要多次模型交互来组织这些动作。\n**Code Mode** 让模型生成一段编排代码，在受限环境中调用已暴露的工具并汇总结果。算术由代码执行，模型负责组织这段计算；结果仍要对照实际工具数据检查。"
+        },
+        {
+          "title": "工具仍在原来的执行环境中工作",
+          "body": "Mastra 的 **createCodeMode()** 返回编排工具与配套 instructions。模型代码中的 external_* 调用，会被桥接到应用提供的工具；这些工具仍在宿主程序中执行自己的查询、校验与业务逻辑。\n代码运行环境和工具权限是两条边界。本例使用 QuickJsCodeModeTransport 执行模型编排代码，只暴露两个返回教学数据的只读工具，没有使用直接运行宿主 Node.ts 的 LocalSandbox。"
+        },
+        {
+          "title": "用一组小数据核对结果",
+          "body": "12-code-mode.ts 中，报名状态为两个“有效”、一个“已取消”，总容量为 20。按本例规则，有效人数应为 2，剩余名额应为 18。这是数据推导出的检查标准，不是模型实测答案。\n同时把 createCodeMode() 返回的工具与说明挂给 Agent，再观察它是否调用编排工具、调用哪些底层工具，以及汇总结果是否符合规则。\n桥接函数的名称以生成的 instructions 为准。例如本例工具 id 为 list-registrations，当前生成的名称是 external_list_registrations，不要直接从变量名猜调用名称。",
+          "codeBlocks": [
+            {
+              "label": "src/12-code-mode.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { createCodeMode, createTool } from '@mastra/core/tools'\nimport { QuickJsCodeModeTransport } from '@mastra/quickjs'\nimport { z } from 'zod'\n\n// 提供不含个人信息的教学报名状态，仅供统计。\nconst listRegistrations = createTool({\n  id: 'list-registrations',\n  description: '读取本地教学报名列表。',\n  inputSchema: z.object({}),\n  outputSchema: z.object({ statuses: z.array(z.enum(['有效', '已取消'])) }),\n  execute: async () => ({ statuses: ['有效', '有效', '已取消'] })\n})\n\n// 提供同一活动的教学容量，不访问真实服务。\nconst getCapacity = createTool({\n  id: 'get-capacity',\n  description: '读取教学活动的总容量。',\n  inputSchema: z.object({}),\n  outputSchema: z.object({ capacity: z.number().int().nonnegative() }),\n  execute: async () => ({ capacity: 20 })\n})\n\n// 用 QuickJS 隔离模型生成的编排代码，只桥接上面两个只读工具。\nconst { tool, instructions } = createCodeMode(\n  { tools: { listRegistrations, getCapacity } },\n  new QuickJsCodeModeTransport({ memoryLimitMb: 128 })\n)\n\n// 同时挂载 Code Mode 工具与它生成的使用说明。\nconst agent = new Agent({\n  id: 'activity-code-mode',\n  name: '活动名额统计助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: ['用中文回答。调用工具统计教学数据，只计算有效报名，不把已取消记录计入。', instructions],\n  tools: { execute_typescript: tool }\n})\n\n// 观察编排工具的输入输出，并用人工可核对的小数据检查算术。\nconst result = await agent.generate('读取报名列表和容量，计算有效报名人数与剩余名额。', {\n  maxSteps: 3,\n  abortSignal: AbortSignal.timeout(60_000),\n  onStepFinish: ({ toolCalls, toolResults }) => console.dir({ toolCalls, toolResults }, { depth: null })\n})\n\nconsole.log(result.text || '没有最终文本，请查看工具执行结果。')"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/12-code-mode.ts"
+            }
+          ]
+        },
+        {
+          "title": "少一次往返，不代表少了业务责任",
+          "body": "Code Mode 可以在返回模型前筛选或汇总工具数据，但工具内部的权限验证、外部请求失败和重复写入问题仍然存在。沙箱隔离了编排代码，不会替宿主工具自动补齐这些检查。\n只需要一次查询时，普通工具调用更直接；执行顺序与分支由业务明确规定时，可以使用工作流。需要模型临时组合多个查询与计算时，再考虑 Code Mode。",
+          "table": {
+            "headers": [
+              "方式",
+              "适合观察的职责"
+            ],
+            "rows": [
+              [
+                "普通工具循环",
+                "模型逐步决定下一次工具调用"
+              ],
+              [
+                "Code Mode",
+                "模型编写调用与计算逻辑，执行后汇总"
+              ],
+              [
+                "工作流",
+                "程序显式组织必须遵循的步骤与数据流"
+              ]
+            ]
+          },
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "不要把 LocalSandbox 等同于强隔离环境。选择代码运行方式时，同时检查文件、网络、进程能力与宿主工具暴露的权限。"
+            }
+          ],
+          "links": [
+            {
+              "label": "Code Mode 与执行边界",
+              "href": "https://mastra.ai/docs/agents/code-mode"
+            }
+          ]
+        },
+        {
+          "title": "最后回到整次任务的证据",
+          "body": "无论采用普通循环还是 Code Mode，最终都要回答：拿到了哪些数据，执行了什么，哪些结论仍未确认。\n最后一节把这些证据放在一起，复盘一次任务，再决定该修改指令、工具、输入处理还是运行配置。"
+        }
+      ]
+    }
+  }
+}

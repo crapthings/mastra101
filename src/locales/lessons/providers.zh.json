@@ -1,0 +1,84 @@
+{
+  "title": "接入模型服务",
+  "lead": "通过 Vercel AI Gateway 调用 GPT-6.1 Sol，准备本章唯一需要的模型配置和凭证。",
+  "sections": [
+    {
+      "title": "本章就用这一套配置",
+      "body": "接下来所有可运行示例，都通过 **Vercel AI Gateway** 调用 OpenAI 的 GPT-6.1 Sol。先记住下面这组配置，后面的 Agent 和环境变量都与它对应。\n先看清模型与调用入口的分工，后面才能把配置和凭证放对位置。",
+      "table": {
+        "headers": [
+          "配置项",
+          "本章使用的值"
+        ],
+        "rows": [
+          [
+            "接入入口",
+            "Vercel AI Gateway"
+          ],
+          [
+            "Agent 的 model",
+            "vercel/openai/gpt-6.1-sol"
+          ],
+          [
+            "密钥环境变量",
+            "AI_GATEWAY_API_KEY"
+          ]
+        ]
+      },
+      "links": [
+        {
+          "label": "Vercel：GPT-6.1 Sol",
+          "href": "https://vercel.com/ai-gateway/models/gpt-6.1-sol"
+        }
+      ]
+    },
+    {
+      "title": "厂牌和调用入口各指什么",
+      "body": "**模型厂牌**指模型的开发方。在本例中，OpenAI 开发模型，gpt-6.1-sol 指定型号，Vercel 提供我们实际访问的网关入口。另一个厂牌与系列的例子是 xAI 开发的 Grok。\n**服务供应商（Provider）**在这里指提供调用服务的一方。Google Cloud、AWS 和 Azure 也可以提供其他厂牌的模型。因此，“用哪家的模型”和“向哪家服务发送请求”需要分开看。",
+      "links": [
+        {
+          "label": "X 官方：Grok 与 xAI",
+          "href": "https://help.x.com/en/using-x/about-grok"
+        },
+        {
+          "label": "Google Cloud 合作模型",
+          "href": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/partner-models/use-partner-models"
+        },
+        {
+          "label": "Amazon Bedrock 模型目录",
+          "href": "https://docs.aws.amazon.com/en_us/bedrock/latest/userguide/models.html"
+        },
+        {
+          "label": "Azure 模型目录",
+          "href": "https://azure.microsoft.com/en-us/products/ai-foundry/models"
+        }
+      ]
+    },
+    {
+      "title": "SDK 把 API 调用封装起来",
+      "body": "**API** 是服务对外提供的调用接口。应用按接口约定发送消息和参数，服务再返回结果。\n**SDK** 是在程序里使用的开发库。对于这里的模型调用，它把 API 请求封装成函数或对象，帮助处理请求参数、认证信息和返回数据。调用 SDK，背后仍然会访问相应服务的 API。\n本例通过 Mastra 的 Agent 接口发起任务，再由底层模型接入代码请求 Vercel 网关。我们先用这些封装完成调用，不需要自己拼接 HTTP 请求。"
+    },
+    {
+      "title": "前缀决定请求经过哪里",
+      "body": "**Router（路由器）**负责选择调用目标，**Gateway（网关）**提供中间调用入口。在 vercel/openai/gpt-6.1-sol 中，Mastra 识别 vercel/ 前缀，选择 Vercel 接入；后面的 openai/gpt-6.1-sol 是交给该网关的模型标识。\n因此，本章的请求路径是：应用中的 Mastra → Vercel AI Gateway → 上游模型服务。调用完成后，结果沿这条路径返回。\nOpenRouter、Cloudflare AI Gateway 也提供网关接入，但配置方式各有区别。这里知道它们承担类似的接入职责即可，继续运行本例时仍使用上面的 Vercel 配置。",
+      "links": [
+        {
+          "label": "Mastra：Vercel 接入说明",
+          "href": "https://mastra.ai/models/gateways/vercel"
+        }
+      ]
+    },
+    {
+      "title": "接下来准备网关密钥",
+      "body": "在 Vercel AI Gateway 中准备可用的 API Key，并确认账户可以访问所选模型。下一节会把它写入本地 .env，变量名是 **AI_GATEWAY_API_KEY**。\n启动命令将 .env 中的值加载到进程环境，Mastra 再读取这份凭证完成网关认证。模型入口已经选好，现在可以下载项目并配置运行环境。",
+      "links": [
+        {
+          "label": "Vercel：网关认证说明",
+          "href": "https://vercel.com/docs/ai-gateway/authentication-and-byok"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "model 使用 vercel/openai/gpt-6.1-sol 时，模型由谁开发，请求经过哪个入口？本章应准备哪一方的密钥，并放进哪个环境变量？"
+}

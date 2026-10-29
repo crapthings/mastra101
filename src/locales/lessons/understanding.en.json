@@ -1,0 +1,20 @@
+{
+  "title": "Understanding agents",
+  "lead": "Look up an order, read the result, answer the customer. What connects these steps?",
+  "sections": [
+    {
+      "title": "From lookup to answer",
+      "body": "A customer asks where order A123 is. The application looks up the order and explains the returned delivery status. If the identifier is missing, it needs to ask first. Completing this task requires a model, a lookup tool, and execution control."
+    },
+    {
+      "title": "What an agent does",
+      "body": "In Mastra, an Agent brings together a model, instructions, and available tools. The model can answer directly or request a tool call. Your program executes the tool and returns its result to the model.\nThis can repeat until the model produces a final answer or a stopping condition is reached."
+    },
+    {
+      "title": "Who does what?",
+      "body": "Model: generates a response or tool-call request from the current context.\nTool: a concrete capability implemented in your JavaScript or TypeScript code.\nAgent: organizes the model, instructions, and capabilities into an executable unit."
+    }
+  ],
+  "noteTitle": "Keep this in mind",
+  "note": "An agent depends on the context, model, and tools you supply. Creating one does not automatically grant network access, file access, or user memory."
+}

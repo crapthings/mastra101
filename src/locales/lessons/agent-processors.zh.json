@@ -1,0 +1,120 @@
+{
+  "title": "处理器（Processors）",
+  "lead": "在明确的运行位置检查、转换或拦截内容，让程序规则真正参与一次任务。",
+  "sections": [
+    {
+      "title": "有些要求可以先由程序检查",
+      "body": "教学查询需要预约编号，输入却只写“帮我查一下”。这时可以直接要求补充信息，不必先让模型猜一个编号。\n**Processor（处理器）**在 Agent 执行过程的指定位置处理消息或结果。它可以修改、检查或中止处理；是否采用处理器，取决于规则需要作用于哪里。\n前面使用的 prepareStep 也接在每步模型调用之前。Mastra 源码将它包装成 processInputStep 处理器；它与这里的处理器共享介入时机，不是另一套独立循环。"
+    },
+    {
+      "title": "先认清处理位置",
+      "body": "**processInput** 在调用循环开始前处理输入；**processInputStep** 在每一步模型调用前调整处理；**processOutputStep** 在本步模型响应后、工具执行前检查响应，并可请求重试；**processOutputResult** 查看整次生成结束后的结果。流式分片另有 **processOutputStream**，用于传输过程中的处理。\n这些位置并不等价。例如要阻止不合要求的模型响应继续推进，应在对应步骤检查；如果文字已经发给用户，最终检查就无法收回它。\n本例先使用两个位置：输入阶段检查教学编号是否出现，输出结束后记录是否有文本。它检查的是这个示例的输入约定，不能据此识别所有编号格式或判断查询权限。"
+    },
+    {
+      "title": "读取消息的文本部分",
+      "body": "处理器收到的 messages 是框架消息结构，文本位于 content.parts 中的 text 部分。修改文字时，应保留消息角色和其他内容部分，不把图片、工具调用等误当作普通字符串。\n示例读取用户文本，缺少 R001 时通过 abort() 拦截，并用 result.tripwire 判断这次没有正常作答。运行“缺少编号”可以检查这条程序分支，正常输入仍会请求模型。\n拦截时终端可能同时打印框架的错误记录。应用应读取 tripwire 区分预期拦截与普通异常，而不是看到日志中的 Error 就认定程序已经崩溃。",
+      "codeBlocks": [
+        {
+          "label": "src/08-processors.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\n\n// 检查这个教学任务是否给出了指定编号，拦截不完整输入并观察最终输出。\nconst agent = new Agent({\n  id: 'activity-processors',\n  name: '活动材料检查助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文整理用户材料。编号只说明本次讨论对象，不证明预约已成功。',\n  inputProcessors: [{\n    id: 'require-demo-booking-id',\n    processInput: ({ messages, abort }) => {\n      const text = messages.filter(message => message.role === 'user')\n        .flatMap(message => message.content.parts || [])\n        .filter(part => part.type === 'text')\n        .map(part => part.text).join('\\n')\n      if (!text.includes('R001')) abort('请补充本节使用的教学预约编号 R001。')\n      return messages\n    }\n  }],\n  outputProcessors: [{\n    id: 'observe-final-output',\n    processOutputResult: ({ messages, result }) => {\n      console.log('最终输出检查：', { finishReason: result.finishReason, hasText: Boolean(result.text) })\n      return messages\n    }\n  }]\n})\n\n// 缺少编号时由输入处理器拦截，不请求模型猜测编号。\nconst message = process.argv[2] === '缺少编号'\n  ? '请整理这份活动资料。'\n  : '预约编号 R001，地点还没有公布。请整理待确认事项。'\n\n// 读取 tripwire，避免把被拦截当成正常回答。\nconst result = await agent.generate(message, { maxSteps: 1, abortSignal: AbortSignal.timeout(60_000) })\nif (result.tripwire) {\n  console.log('输入需要补充：', result.tripwire)\n} else {\n  console.log(result.text || '没有最终文本。')\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/08-processors.js 缺少编号"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/08-processors.js"
+        }
+      ]
+    },
+    {
+      "title": "校验规则要能说明自己的边界",
+      "body": "处理器负责让检查在指定位置执行，但检查标准本身还需要设计。编号出现，不代表记录属于当前用户；输出非空，也不代表任务已完成。\n修改消息时保留角色和非文本部分，记录改动的依据。最终输出检查无法收回已经显示的流式文字，需要提前决定缓冲或处理分片的方式。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "处理器控制内容经过哪些检查；工具执行前的权限与业务验证仍要在相应程序边界落实。"
+        }
+      ],
+      "links": [
+        {
+          "label": "处理器的运行位置",
+          "href": "https://mastra.ai/docs/agents/processors"
+        },
+        {
+          "label": "内置防护处理器",
+          "href": "https://mastra.ai/docs/agents/guardrails"
+        }
+      ]
+    },
+    {
+      "title": "从处理位置，到具体防护规则",
+      "body": "处理器解决了“在哪里介入”。接下来还要决定“检查什么，遇到问题怎么处理”。\n下一节单独展开 Guardrails，区分内容违规与检查器失败，再选择对应策略。"
+    }
+  ],
+  "note": "输入处理器只确认文字中有 R001，能否据此认定用户有权查看这条预约？若输出已经流式展示，最终处理器再拦截，能否撤回已展示的文字？",
+  "noteTitle": "本节检查",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "有些要求可以先由程序检查",
+          "body": "教学查询需要预约编号，输入却只写“帮我查一下”。这时可以直接要求补充信息，不必先让模型猜一个编号。\n**Processor（处理器）**在 Agent 执行过程的指定位置处理消息或结果。它可以修改、检查或中止处理；是否采用处理器，取决于规则需要作用于哪里。\n前面使用的 prepareStep 也接在每步模型调用之前。Mastra 源码将它包装成 processInputStep 处理器；它与这里的处理器共享介入时机，不是另一套独立循环。"
+        },
+        {
+          "title": "先认清处理位置",
+          "body": "**processInput** 在调用循环开始前处理输入；**processInputStep** 在每一步模型调用前调整处理；**processOutputStep** 在本步模型响应后、工具执行前检查响应，并可请求重试；**processOutputResult** 查看整次生成结束后的结果。流式分片另有 **processOutputStream**，用于传输过程中的处理。\n这些位置并不等价。例如要阻止不合要求的模型响应继续推进，应在对应步骤检查；如果文字已经发给用户，最终检查就无法收回它。\n本例先使用两个位置：输入阶段检查教学编号是否出现，输出结束后记录是否有文本。它检查的是这个示例的输入约定，不能据此识别所有编号格式或判断查询权限。"
+        },
+        {
+          "title": "读取消息的文本部分",
+          "body": "处理器收到的 messages 是框架消息结构，文本位于 content.parts 中的 text 部分。修改文字时，应保留消息角色和其他内容部分，不把图片、工具调用等误当作普通字符串。\n示例读取用户文本，缺少 R001 时通过 abort() 拦截，并用 result.tripwire 判断这次没有正常作答。运行“缺少编号”可以检查这条程序分支，正常输入仍会请求模型。\n拦截时终端可能同时打印框架的错误记录。应用应读取 tripwire 区分预期拦截与普通异常，而不是看到日志中的 Error 就认定程序已经崩溃。",
+          "codeBlocks": [
+            {
+              "label": "src/08-processors.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\n\n// 检查这个教学任务是否给出了指定编号，拦截不完整输入并观察最终输出。\nconst agent = new Agent({\n  id: 'activity-processors',\n  name: '活动材料检查助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文整理用户材料。编号只说明本次讨论对象，不证明预约已成功。',\n  inputProcessors: [{\n    id: 'require-demo-booking-id',\n    processInput: ({ messages, abort }) => {\n      const text = messages.filter(message => message.role === 'user')\n        .flatMap(message => message.content.parts || [])\n        .filter(part => part.type === 'text')\n        .map(part => part.text).join('\\n')\n      if (!text.includes('R001')) abort('请补充本节使用的教学预约编号 R001。')\n      return messages\n    }\n  }],\n  outputProcessors: [{\n    id: 'observe-final-output',\n    processOutputResult: ({ messages, result }) => {\n      console.log('最终输出检查：', { finishReason: result.finishReason, hasText: Boolean(result.text) })\n      return messages\n    }\n  }]\n})\n\n// 缺少编号时由输入处理器拦截，不请求模型猜测编号。\nconst message = process.argv[2] === '缺少编号'\n  ? '请整理这份活动资料。'\n  : '预约编号 R001，地点还没有公布。请整理待确认事项。'\n\n// 读取 tripwire，避免把被拦截当成正常回答。\nconst result = await agent.generate(message, { maxSteps: 1, abortSignal: AbortSignal.timeout(60_000) })\nif (result.tripwire) {\n  console.log('输入需要补充：', result.tripwire)\n} else {\n  console.log(result.text || '没有最终文本。')\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/08-processors.ts 缺少编号"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/08-processors.ts"
+            }
+          ]
+        },
+        {
+          "title": "校验规则要能说明自己的边界",
+          "body": "处理器负责让检查在指定位置执行，但检查标准本身还需要设计。编号出现，不代表记录属于当前用户；输出非空，也不代表任务已完成。\n修改消息时保留角色和非文本部分，记录改动的依据。最终输出检查无法收回已经显示的流式文字，需要提前决定缓冲或处理分片的方式。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "处理器控制内容经过哪些检查；工具执行前的权限与业务验证仍要在相应程序边界落实。"
+            }
+          ],
+          "links": [
+            {
+              "label": "处理器的运行位置",
+              "href": "https://mastra.ai/docs/agents/processors"
+            },
+            {
+              "label": "内置防护处理器",
+              "href": "https://mastra.ai/docs/agents/guardrails"
+            }
+          ]
+        },
+        {
+          "title": "从处理位置，到具体防护规则",
+          "body": "处理器解决了“在哪里介入”。接下来还要决定“检查什么，遇到问题怎么处理”。\n下一节单独展开 Guardrails，区分内容违规与检查器失败，再选择对应策略。"
+        }
+      ]
+    }
+  }
+}

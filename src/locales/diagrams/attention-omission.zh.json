@@ -1,0 +1,36 @@
+{
+  "title": "条件都已提供，步行限制却没落实",
+  "caption": "这是预设的行程对照，不是实际模型输出或注意力权重图。它展示出行条件与安排的偏差，不能据此定位内部计算原因。",
+  "input": "提供给模型的内容",
+  "output": "示例行程的安排",
+  "rows": [
+    {
+      "title": "目的地",
+      "input": "杭州",
+      "status": "已体现",
+      "output": "安排杭州的行程",
+      "missing": false
+    },
+    {
+      "title": "行程长度",
+      "input": "两天",
+      "status": "已体现",
+      "output": "分两天安排",
+      "missing": false
+    },
+    {
+      "title": "同行人",
+      "input": "带老人",
+      "status": "已提及",
+      "output": "说明老人同行",
+      "missing": false
+    },
+    {
+      "title": "步行限制",
+      "input": "少走路",
+      "status": "未落实",
+      "output": "第二天连续步行两小时",
+      "missing": true
+    }
+  ]
+}

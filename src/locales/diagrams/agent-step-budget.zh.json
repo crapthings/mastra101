@@ -1,0 +1,14 @@
+{
+  "title": "一次查询，为什么通常需要两步",
+  "caption": "以本节指定查询工具的正常路径为例：工具执行仍属于第 1 步。maxSteps 为 1 时在这一步后停止；允许第 2 步，模型才有机会读取结果并回答。设为 3 也不要求走满三步。",
+  "first": "第 1 步",
+  "request": "模型请求查询",
+  "requestDetail": "lookupReservation · R001",
+  "tool": "程序执行工具",
+  "toolDetail": "返回预约记录",
+  "limit": "maxSteps: 1 在此停止",
+  "continue": "预算允许，且满足继续条件",
+  "second": "第 2 步",
+  "answer": "模型根据工具结果回答",
+  "answerDetail": "本例关闭工具选择，整理已有记录"
+}

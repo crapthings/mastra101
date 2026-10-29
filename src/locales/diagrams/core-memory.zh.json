@@ -1,0 +1,15 @@
+{
+  "title": "保存的信息怎样进入一次调用",
+  "caption": "只画出记忆读取这一侧。Memory 按标识、功能配置和筛选规则提供信息；本次消息与工具新结果也会参与上下文。旧的时间记录不能代替重新查询。",
+  "storage": "Storage · 已保存的信息",
+  "storageDetail": "历史消息 · 偏好等记忆数据",
+  "memory": "Memory · 取回并整理",
+  "memoryDetail": "resource / thread 与记忆配置",
+  "context": "本次模型调用的上下文",
+  "contextDetail": "相关记忆与本次任务信息",
+  "current": "本次任务信息",
+  "currentDetail": "新消息 · 工具新结果",
+  "model": "模型调用",
+  "select": "选出相关内容",
+  "read": "读取"
+}

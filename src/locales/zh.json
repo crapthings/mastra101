@@ -1,0 +1,232 @@
+{
+  "skip": "跳到正文",
+  "contents": "学习目录",
+  "foundation": "基础篇",
+  "loading": "正在加载章节",
+  "error": "暂时无法打开这一页",
+  "notFound": "没有找到这个章节。",
+  "retry": "请刷新页面后重试。",
+  "back": "返回第一课",
+  "pagination": "章节导航",
+  "previous": "上一节",
+  "next": "下一节",
+  "lessons": {
+    "intro": "模型与权重",
+    "first": "发起模型调用",
+    "execution": "核对调用结果",
+    "understanding": "Mastra",
+    "api": "第一次模型调用",
+    "prompts": "提示词与消息",
+    "context": "上下文",
+    "output": "读取模型的输出",
+    "tools": "工具调用",
+    "knowledge": "知识的时效",
+    "loop": "调用循环",
+    "hallucination": "模型幻觉",
+    "messages": "提示词与消息",
+    "training": "训练与推理",
+    "task-state": "保存任务进度",
+    "memory": "记忆如何生效",
+    "workflow": "组织任务步骤",
+    "harness": "支撑持续运行",
+    "quality": "观察与评估",
+    "framework-choice": "框架的作用",
+    "setup": "准备运行环境",
+    "time-tool": "接入时间工具",
+    "troubleshooting": "处理失败",
+    "providers": "接入模型服务",
+    "core-agent": "智能体",
+    "core-tools": "工具",
+    "core-context": "上下文",
+    "core-memory": "记忆",
+    "core-workflow": "工作流",
+    "core-control": "运行与控制",
+    "core-skills": "技能",
+    "core-evaluation": "追踪与评估",
+    "input-studio": "对照实验",
+    "input-modalities": "输入与理解",
+    "input-task": "用户提示词",
+    "input-materials": "材料与示例",
+    "input-image": "图像理解",
+    "input-audio": "音频理解",
+    "input-output": "结构化输出",
+    "input-iteration": "验证提示词",
+    "input-text": "文字理解",
+    "input-video": "视频理解",
+    "input-system": "系统提示词",
+    "input-styles": "结构化输入",
+    "input-roles": "角色设定",
+    "input-tone": "表达方式",
+    "input-combined": "多源信息核对",
+    "input-document": "文档理解",
+    "attention": "注意力",
+    "input-generation": "输出与生成",
+    "input-multimodal": "多模态模型",
+    "input-world-models": "世界模型",
+    "input-markers": "语义标记与解析",
+    "input-specialists": "专用模型",
+    "input-planning": "判断与决策",
+    "input-embedding": "嵌入与重排",
+    "agent-responsibility": "智能体配置（Agent）",
+    "agent-tool-loop": "工具调用（Tool Calling）",
+    "agent-structured": "结构化输出（Structured Output）",
+    "agent-streaming": "流式输出（Streaming）",
+    "agent-request-context": "请求上下文（RequestContext）",
+    "agent-processors": "处理器（Processors）",
+    "agent-run-control": "运行控制",
+    "agent-approval": "工具审批（Tool Approval）",
+    "agent-code-mode": "代码模式（Code Mode）",
+    "agent-review": "运行记录与评估",
+    "agent-model-settings": "模型调用设置（modelSettings）",
+    "agent-guardrails": "防护规则（Guardrails）",
+    "agent-recovery": "错误处理与恢复"
+  },
+  "chapters": {
+    "llm": "大语言模型",
+    "agent": "快速开始",
+    "framework": "框架体系",
+    "core": "核心组件",
+    "prompts": "提示词",
+    "modalities": "模态",
+    "agents": "智能体"
+  },
+  "callouts": {
+    "key": "记住",
+    "warning": "容易误解",
+    "caution": "注意"
+  },
+  "diagrams": {
+    "rounds": [
+      "第一轮",
+      "第二轮"
+    ],
+    "model": {
+      "title": "模型怎样运行",
+      "caption": "虚线框表示模型文件，实线框表示运行中的程序。推理程序加载权重和模型结构，处理应用的输入，再返回生成结果。",
+      "files": "权重文件",
+      "weights": "训练得到的参数",
+      "structure": "模型结构与配置",
+      "config": "规定计算方式",
+      "load": "加载",
+      "runtime": "推理程序",
+      "compute": "使用模型进行计算",
+      "app": "应用",
+      "input": "发送输入",
+      "output": "返回结果"
+    },
+    "training": {
+      "title": "训练会更新，推理通常只读取",
+      "caption": "左侧反复比较预测并调整权重；右侧使用已经训练好的权重处理新输入。普通推理通常不修改参数。",
+      "train": "训练",
+      "inference": "普通推理",
+      "data": "训练数据",
+      "compare": "预测并比较差距",
+      "update": "更新权重",
+      "weights": "训练好的权重",
+      "calculate": "执行计算",
+      "input": "结合本次输入",
+      "result": "生成结果",
+      "read": "读取"
+    },
+    "context": {
+      "title": "追问时，哪些消息一起发送",
+      "captions": [
+        "第一轮请求包含通用要求和用户需求。助手回答后，应用需要保留相关对话，才能支持后续追问。",
+        "第二轮不仅发送最后一句追问，也带上相关历史。虚线框内是这次请求的消息，蓝色卡片是新追加的内容。"
+      ],
+      "requests": [
+        "本次请求：2 条消息",
+        "本次请求：4 条消息"
+      ],
+      "rows": [
+        {
+          "title": "系统消息",
+          "body": "安排轻松的行程，信息不足时先询问。"
+        },
+        {
+          "title": "用户需求",
+          "body": "去杭州两天，带老人，少走路。"
+        },
+        {
+          "title": "助手此前的回答",
+          "body": "第二天安排西湖散步和一个室内景点。"
+        },
+        {
+          "title": "用户的新追问",
+          "body": "第二天只保留一个安排。"
+        }
+      ]
+    },
+    "tools": {
+      "title": "模型请求，应用执行",
+      "caption": "模型返回工具名称和参数。应用检查请求、查询外部服务，再把结果交回模型；模型本身没有直接执行外部查询。",
+      "lanes": [
+        "模型",
+        "应用",
+        "外部服务"
+      ],
+      "request": "工具名称和参数",
+      "execute": "检查后发起查询",
+      "result": "返回营业信息",
+      "return": "工具结果进入新请求"
+    },
+    "loop": {
+      "title": "跟着一次查询走一遍",
+      "caption": "这是预设的过程演示，不会实际调用模型或工具。结果回到模型后，可以继续查询，也可以生成最终回答；程序还可以因停止条件结束任务。",
+      "previous": "上一步",
+      "next": "下一步",
+      "reset": "重新开始",
+      "model": "调用模型",
+      "answer": "最终回答",
+      "tool": "检查并执行工具",
+      "result": "加入工具结果",
+      "stop": "结束，说明尚未完成",
+      "final": "信息足够",
+      "request": "请求工具",
+      "return": "返回结果",
+      "again": "带着结果再次调用",
+      "limit": "达到停止条件",
+      "steps": [
+        {
+          "node": "model",
+          "text": "用户想确认餐厅是否营业，模型请求查询。"
+        },
+        {
+          "node": "tool",
+          "text": "应用检查餐厅名称和日期，执行查询工具。"
+        },
+        {
+          "node": "result",
+          "text": "查询返回“周六暂停营业”，应用把结果加入消息。"
+        },
+        {
+          "node": "model",
+          "text": "模型读取结果，请求查询另一家餐厅。"
+        },
+        {
+          "node": "tool",
+          "text": "应用执行第二次查询。"
+        },
+        {
+          "node": "result",
+          "text": "第二家餐厅周六营业，结果再次进入消息。"
+        },
+        {
+          "node": "model",
+          "text": "模型根据两次查询结果，组织替代建议。"
+        },
+        {
+          "node": "answer",
+          "text": "返回建议及查询依据，本次任务结束。"
+        }
+      ]
+    }
+  },
+  "code": {
+    "language": "示例代码语言",
+    "js": "JavaScript",
+    "ts": "TypeScript",
+    "terminal": "终端"
+  },
+  "wip": "WIP · 持续完善中"
+}

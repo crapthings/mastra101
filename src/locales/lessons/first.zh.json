@@ -1,0 +1,75 @@
+{
+  "title": "发起模型调用",
+  "lead": "运行一个没有工具的 Agent，再看它为什么还不能完成实时查询。",
+  "sections": [
+    {
+      "title": "运行第一次调用",
+      "body": "在示例目录执行 pnpm basic。程序会通过 Vercel 网关向模型提问：“现在东京几点？时区是 Asia/Tokyo。”\n这一版没有查询工具。观察模型怎样处理缺少的实时信息即可，不要求它返回某句固定的话；即使文字恰好正确，也不能证明发生过时间查询。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "code": "pnpm basic",
+          "language": "bash"
+        }
+      ]
+    },
+    {
+      "title": "回头看 basic.ts",
+      "body": "**Agent** 的配置包含标识、名称、指令和模型。这里的 instructions 要求信息不足时说明缺口，model 仍是前面选定的 Vercel 网关模型。\nmain() 先检查配置，再通过 **generate()** 发起调用，最后读取 result.text。文件中的 maxSteps 和终止信号暂时只用来限制执行，最后一节会解释它们。",
+      "codeBlocks": [
+        {
+          "label": "src/basic.ts",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { checkConfig } from './config.ts'\n\n// 创建尚未配置查询工具的时间助手。\nconst agent = new Agent({\n  id: 'time-guide-basic',\n  name: '旅行时间助手',\n  instructions: '用中文回答。没有当前时间的可靠来源时，说明缺少信息，不要猜测。',\n  model: 'vercel/openai/gpt-6.1-sol'\n})\n\n// 完成一次不带工具的调用，观察模型如何处理缺少的实时信息。\nasync function main () {\n  checkConfig()\n  const result = await agent.generate('现在东京几点？时区是 Asia/Tokyo。', {\n    maxSteps: 1,\n    abortSignal: AbortSignal.timeout(60_000)\n  })\n  console.log(result.text || '本次没有生成最终文本。')\n}\n\nmain().catch(error => {\n  console.error('调用失败：', error.message)\n  process.exitCode = 1\n})",
+          "language": "typescript"
+        }
+      ]
+    },
+    {
+      "title": "如果没有拿到回答",
+      "body": "提示找不到 .env 时，启动过程还没有进入示例代码，先检查文件是否复制到正确目录。提示密钥未填写时，检查是否仍保留占位文字。\n如果模型服务拒绝访问，再检查网关凭证、模型权限和额度。网络错误或请求中止时，应先解决接入问题，再继续添加工具。"
+    },
+    {
+      "title": "给下一步留一个明确缺口",
+      "body": "只有收到本次模型响应，才说明调用路径已经接通。此时它还没有读取系统时钟的能力。\n下一节先单独运行时间函数，再看 Mastra 怎样把这个函数交给模型使用。这样可以分清数据计算和工具调用两类问题。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "pnpm basic 返回了一段时间回答。它能证明调用路径接通，还是能证明查询过时钟？结合 basic.ts 中的配置说明区别。",
+  "codeVariants": {
+    "js": {
+      "sections": [
+        {
+          "title": "运行第一次调用",
+          "body": "在示例目录执行 pnpm basic。程序会通过 Vercel 网关向模型提问：“现在东京几点？时区是 Asia/Tokyo。”\n这一版没有查询工具。观察模型怎样处理缺少的实时信息即可，不要求它返回某句固定的话；即使文字恰好正确，也不能证明发生过时间查询。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "code": "pnpm basic",
+              "language": "bash"
+            }
+          ]
+        },
+        {
+          "title": "回头看 basic.js",
+          "body": "**Agent** 的配置包含标识、名称、指令和模型。这里的 instructions 要求信息不足时说明缺口，model 仍是前面选定的 Vercel 网关模型。\nmain() 先检查配置，再通过 **generate()** 发起调用，最后读取 result.text。文件中的 maxSteps 和终止信号暂时只用来限制执行，最后一节会解释它们。",
+          "codeBlocks": [
+            {
+              "label": "src/basic.js",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { checkConfig } from './config.js'\n\n// 创建尚未配置查询工具的时间助手。\nconst agent = new Agent({\n  id: 'time-guide-basic',\n  name: '旅行时间助手',\n  instructions: '用中文回答。没有当前时间的可靠来源时，说明缺少信息，不要猜测。',\n  model: 'vercel/openai/gpt-6.1-sol'\n})\n\n// 完成一次不带工具的调用，观察模型如何处理缺少的实时信息。\nasync function main () {\n  checkConfig()\n  const result = await agent.generate('现在东京几点？时区是 Asia/Tokyo。', {\n    maxSteps: 1,\n    abortSignal: AbortSignal.timeout(60_000)\n  })\n  console.log(result.text || '本次没有生成最终文本。')\n}\n\nmain().catch(error => {\n  console.error('调用失败：', error.message)\n  process.exitCode = 1\n})",
+              "language": "javascript"
+            }
+          ]
+        },
+        {
+          "title": "如果没有拿到回答",
+          "body": "提示找不到 .env 时，启动过程还没有进入示例代码，先检查文件是否复制到正确目录。提示密钥未填写时，检查是否仍保留占位文字。\n如果模型服务拒绝访问，再检查网关凭证、模型权限和额度。网络错误或请求中止时，应先解决接入问题，再继续添加工具。"
+        },
+        {
+          "title": "给下一步留一个明确缺口",
+          "body": "只有收到本次模型响应，才说明调用路径已经接通。此时它还没有读取系统时钟的能力。\n下一节先单独运行时间函数，再看 Mastra 怎样把这个函数交给模型使用。这样可以分清数据计算和工具调用两类问题。"
+        }
+      ],
+      "note": "pnpm basic 返回了一段时间回答。它能证明调用路径接通，还是能证明查询过时钟？结合 basic.js 中的配置说明区别。"
+    }
+  }
+}

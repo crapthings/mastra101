@@ -1,0 +1,166 @@
+{
+  "title": "准备运行环境",
+  "lead": "准备独立练习项目，让第一次模型请求具备完整的运行条件。",
+  "sections": [
+    {
+      "title": "下载项目，确认运行位置",
+      "body": "先准备 Node.js 24 或更高版本和 pnpm，并用下面的命令查看版本。若命令不存在，先安装对应工具。\n下载并解压示例，进入 03-time-assistant 文件夹。后面的命令都在这个文件夹中执行，不是在教程网站的源码目录里。下载包包含最终代码，无需逐段复制才能运行。\n页面默认展示 JavaScript，也可以切换到 TypeScript；代码、文件名和下载包会一起切换。选定一种版本完成本章即可，切换页面不会改动已经下载的本地项目。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "code": "node --version\npnpm --version",
+          "language": "bash"
+        }
+      ],
+      "download": {
+        "href": "/downloads/03-time-assistant.zip",
+        "label": "下载 TypeScript 示例（ZIP）"
+      }
+    },
+    {
+      "title": "安装依赖",
+      "body": "package.json 中，@mastra/core 提供 Agent 和工具接口，Zod 描述数据结构，tsx 运行 TypeScript。直接依赖版本已固定，下载包也包含 pnpm-lock.yaml。\n先安装依赖，再将 .env.example 复制为 .env。Windows 用户也可以直接在文件管理器中复制并重命名。",
+      "codeBlocks": [
+        {
+          "label": "package.json",
+          "code": "{\n  \"name\": \"mastra-time-assistant\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"engines\": { \"node\": \">=24\" },\n  \"scripts\": {\n    \"basic\": \"tsx --env-file=.env src/basic.ts\",\n    \"start\": \"tsx --env-file=.env src/run.ts\",\n    \"clock\": \"tsx src/clock.ts\"\n  },\n  \"dependencies\": {\n    \"@mastra/core\": \"1.80.0\",\n    \"zod\": \"4.6.7\"\n  },\n  \"devDependencies\": { \"tsx\": \"4.23.15\" }\n}",
+          "language": "json"
+        },
+        {
+          "label": "终端",
+          "code": "pnpm install\ncp .env.example .env",
+          "language": "bash"
+        }
+      ]
+    },
+    {
+      "title": "填入 Vercel 网关密钥",
+      "body": "按 Vercel 的认证说明准备 AI Gateway API Key，在 .env 中替换占位文字。保留变量名 AI_GATEWAY_API_KEY。\n这是网关专用的密钥，不是通用的 Vercel 账户访问令牌。basic 和 start 脚本会通过 --env-file=.env 加载它；只创建文件而没有加载，不会自动产生环境变量。",
+      "codeBlocks": [
+        {
+          "label": ".env（需要编辑）",
+          "code": "# 填写 Vercel AI Gateway 的 API Key。\nAI_GATEWAY_API_KEY=请填写你的密钥",
+          "language": "bash"
+        }
+      ],
+      "links": [
+        {
+          "label": "Vercel：获取并配置网关凭证",
+          "href": "https://vercel.com/docs/ai-gateway/authentication-and-byok"
+        }
+      ]
+    },
+    {
+      "title": "按运行顺序认识文件",
+      "body": "先运行 basic.ts，确认能访问模型；再用 clock.ts 单独读取时间；最后由 run.ts 调用带工具的 Agent。\n文件已经就位，下一节从第一次模型调用开始。config.ts 只是本例的配置检查函数，不是 Mastra 的额外组件。",
+      "table": {
+        "headers": [
+          "入口",
+          "做什么",
+          "是否请求模型"
+        ],
+        "rows": [
+          [
+            "pnpm basic",
+            "运行不带工具的 Agent",
+            "是"
+          ],
+          [
+            "pnpm clock Asia/Tokyo",
+            "直接执行时间函数",
+            "否"
+          ],
+          [
+            "pnpm start Asia/Tokyo",
+            "运行带工具的 Agent 并打印过程",
+            "是"
+          ]
+        ]
+      }
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "项目中已有 .env，是否就代表运行时能读到密钥？指出本章启动命令怎样加载它，并说明首次请求前还应检查哪些运行条件。",
+  "codeVariants": {
+    "js": {
+      "sections": [
+        {
+          "title": "下载项目，确认运行位置",
+          "body": "先准备 Node.js 24 或更高版本和 pnpm，并用下面的命令查看版本。若命令不存在，先安装对应工具。\n下载并解压示例，进入 03-time-assistant-js 文件夹。后面的命令都在这个文件夹中执行，不是在教程网站的源码目录里。下载包包含最终代码，无需逐段复制才能运行。\n页面默认展示 JavaScript，也可以切换到 TypeScript；代码、文件名和下载包会一起切换。选定一种版本完成本章即可，切换页面不会改动已经下载的本地项目。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "code": "node --version\npnpm --version",
+              "language": "bash"
+            }
+          ],
+          "download": {
+            "href": "/downloads/03-time-assistant-js.zip",
+            "label": "下载 JavaScript 示例（ZIP）"
+          }
+        },
+        {
+          "title": "安装依赖",
+          "body": "package.json 中，@mastra/core 提供 Agent 和工具接口，Zod 描述数据结构，JavaScript 文件由 Node.js 直接运行。直接依赖版本已固定，下载包也包含 pnpm-lock.yaml。\n先安装依赖，再将 .env.example 复制为 .env。Windows 用户也可以直接在文件管理器中复制并重命名。",
+          "codeBlocks": [
+            {
+              "label": "package.json",
+              "code": "{\n  \"name\": \"mastra-time-assistant-js\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"engines\": {\n    \"node\": \">=24\"\n  },\n  \"scripts\": {\n    \"basic\": \"node --env-file=.env src/basic.js\",\n    \"start\": \"node --env-file=.env src/run.js\",\n    \"clock\": \"node src/clock.js\"\n  },\n  \"dependencies\": {\n    \"@mastra/core\": \"1.80.0\",\n    \"zod\": \"4.6.7\"\n  }\n}",
+              "language": "json"
+            },
+            {
+              "label": "终端",
+              "code": "pnpm install\ncp .env.example .env",
+              "language": "bash"
+            }
+          ]
+        },
+        {
+          "title": "填入 Vercel 网关密钥",
+          "body": "按 Vercel 的认证说明准备 AI Gateway API Key，在 .env 中替换占位文字。保留变量名 AI_GATEWAY_API_KEY。\n这是网关专用的密钥，不是通用的 Vercel 账户访问令牌。basic 和 start 脚本会通过 --env-file=.env 加载它；只创建文件而没有加载，不会自动产生环境变量。",
+          "codeBlocks": [
+            {
+              "label": ".env（需要编辑）",
+              "code": "# 填写 Vercel AI Gateway 的 API Key。\nAI_GATEWAY_API_KEY=请填写你的密钥",
+              "language": "bash"
+            }
+          ],
+          "links": [
+            {
+              "label": "Vercel：获取并配置网关凭证",
+              "href": "https://vercel.com/docs/ai-gateway/authentication-and-byok"
+            }
+          ]
+        },
+        {
+          "title": "按运行顺序认识文件",
+          "body": "先运行 basic.js，确认能访问模型；再用 clock.js 单独读取时间；最后由 run.js 调用带工具的 Agent。\n文件已经就位，下一节从第一次模型调用开始。config.js 只是本例的配置检查函数，不是 Mastra 的额外组件。",
+          "table": {
+            "headers": [
+              "入口",
+              "做什么",
+              "是否请求模型"
+            ],
+            "rows": [
+              [
+                "pnpm basic",
+                "运行不带工具的 Agent",
+                "是"
+              ],
+              [
+                "pnpm clock Asia/Tokyo",
+                "直接执行时间函数",
+                "否"
+              ],
+              [
+                "pnpm start Asia/Tokyo",
+                "运行带工具的 Agent 并打印过程",
+                "是"
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

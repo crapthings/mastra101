@@ -1,0 +1,74 @@
+{
+  "title": "核对调用结果",
+  "lead": "查看模型请求、真实工具结果和最终回答，确认一次时间查询确实发生。",
+  "sections": [
+    {
+      "title": "运行带工具的版本",
+      "body": "执行 pnpm start Asia/Tokyo。入口会打印每步的 toolCalls、toolResults 和 finishReason，最后输出模型回答。\n按顺序检查：工具请求是否使用 Asia/Tokyo，工具结果是否为 ok: true，最终回答是否与返回时间一致。具体内容来自这次运行，没有固定的标准措辞。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "code": "pnpm start Asia/Tokyo",
+          "language": "bash"
+        }
+      ]
+    },
+    {
+      "title": "记录是在哪里输出的",
+      "body": "打开 src/run.ts。**onStepFinish** 在每个模型调用步骤结束时接收本步结果，示例直接打印工具请求和工具返回值。\n先看回调和最后的 result.text，就能找到中间过程与最终回答的对应位置。计数和提示用于识别“没有调用工具”等情况，不会替你证明回答正确。",
+      "codeBlocks": [
+        {
+          "label": "src/run.ts",
+          "code": "import { timeAgent } from './agents/time-agent.ts'\nimport { checkConfig } from './config.ts'\n\n// 调用助手并打印实际的工具请求、工具结果与最终回答。\nasync function main () {\n  checkConfig()\n  const timeZone = process.argv[2] || 'Asia/Tokyo'\n  let stepCount = 0\n  let toolCallCount = 0\n  const result = await timeAgent.generate(\n    `请查询当前时间。用户提供的时区是：${timeZone}。请原样使用这个时区。`,\n    {\n      maxSteps: 3,\n      abortSignal: AbortSignal.timeout(60_000),\n      onStepFinish: ({ toolCalls, toolResults, finishReason }) => {\n        stepCount += 1\n        toolCallCount += toolCalls?.length || 0\n        console.log(`第 ${stepCount} 步`)\n        console.dir({ toolCalls, toolResults, finishReason }, { depth: null })\n      }\n    }\n  )\n  console.log('最终回答：')\n  console.log(result.text || '没有最终文本；可能已达到步数上限，请查看上面的执行记录。')\n  if (toolCallCount === 0) {\n    console.log('本次没有观察到工具调用，不能将回答当作已验证的时间查询。')\n  }\n}\n\nmain().catch(error => {\n  console.error('调用失败：', error.message)\n  process.exitCode = 1\n})",
+          "language": "typescript"
+        }
+      ]
+    },
+    {
+      "title": "核对同一个取样时刻",
+      "body": "capturedAt 与 localTime 表示工具读取时钟时的同一瞬间。模型整理回答和网络传输还需要时间，阅读时钟表上已经过了几秒是正常现象。\n核对重点是回答有没有忠实使用工具结果。若模型写错时区或时间，应以返回数据为依据定位问题。"
+    },
+    {
+      "title": "查询没有完成时",
+      "body": "如果没有工具调用记录，就不能认定本次完成了时间查询；如果没有最终文本，也不要把脚本停止当作任务成功。入口会针对这两种情况提示。\n接下来故意提供一个无效时区，检查工具失败后，程序和回答有没有如实反映这个结果。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "在一次正常查询中，把工具请求的时区、工具返回的取样时间与最终回答对应起来。若看到回答时，钟表已走过几秒，应以哪个时刻核对？",
+  "codeVariants": {
+    "js": {
+      "sections": [
+        {
+          "title": "运行带工具的版本",
+          "body": "执行 pnpm start Asia/Tokyo。入口会打印每步的 toolCalls、toolResults 和 finishReason，最后输出模型回答。\n按顺序检查：工具请求是否使用 Asia/Tokyo，工具结果是否为 ok: true，最终回答是否与返回时间一致。具体内容来自这次运行，没有固定的标准措辞。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "code": "pnpm start Asia/Tokyo",
+              "language": "bash"
+            }
+          ]
+        },
+        {
+          "title": "记录是在哪里输出的",
+          "body": "打开 src/run.js。**onStepFinish** 在每个模型调用步骤结束时接收本步结果，示例直接打印工具请求和工具返回值。\n先看回调和最后的 result.text，就能找到中间过程与最终回答的对应位置。计数和提示用于识别“没有调用工具”等情况，不会替你证明回答正确。",
+          "codeBlocks": [
+            {
+              "label": "src/run.js",
+              "code": "import { timeAgent } from './agents/time-agent.js'\nimport { checkConfig } from './config.js'\n\n// 调用助手并打印实际的工具请求、工具结果与最终回答。\nasync function main () {\n  checkConfig()\n  const timeZone = process.argv[2] || 'Asia/Tokyo'\n  let stepCount = 0\n  let toolCallCount = 0\n  const result = await timeAgent.generate(\n    `请查询当前时间。用户提供的时区是：${timeZone}。请原样使用这个时区。`,\n    {\n      maxSteps: 3,\n      abortSignal: AbortSignal.timeout(60_000),\n      onStepFinish: ({ toolCalls, toolResults, finishReason }) => {\n        stepCount += 1\n        toolCallCount += toolCalls?.length || 0\n        console.log(`第 ${stepCount} 步`)\n        console.dir({ toolCalls, toolResults, finishReason }, { depth: null })\n      }\n    }\n  )\n  console.log('最终回答：')\n  console.log(result.text || '没有最终文本；可能已达到步数上限，请查看上面的执行记录。')\n  if (toolCallCount === 0) {\n    console.log('本次没有观察到工具调用，不能将回答当作已验证的时间查询。')\n  }\n}\n\nmain().catch(error => {\n  console.error('调用失败：', error.message)\n  process.exitCode = 1\n})",
+              "language": "javascript"
+            }
+          ]
+        },
+        {
+          "title": "核对同一个取样时刻",
+          "body": "capturedAt 与 localTime 表示工具读取时钟时的同一瞬间。模型整理回答和网络传输还需要时间，阅读时钟表上已经过了几秒是正常现象。\n核对重点是回答有没有忠实使用工具结果。若模型写错时区或时间，应以返回数据为依据定位问题。"
+        },
+        {
+          "title": "查询没有完成时",
+          "body": "如果没有工具调用记录，就不能认定本次完成了时间查询；如果没有最终文本，也不要把脚本停止当作任务成功。入口会针对这两种情况提示。\n接下来故意提供一个无效时区，检查工具失败后，程序和回答有没有如实反映这个结果。"
+        }
+      ]
+    }
+  }
+}

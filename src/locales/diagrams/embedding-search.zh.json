@@ -1,0 +1,20 @@
+{
+  "title": "先检索候选，再结合查询重排",
+  "caption": "以文字材料为例：嵌入检索先返回候选原文，重排再同时读取原始查询与候选内容。两步可以使用不同厂商的模型；重排不接收这里的向量，也不能补回未检索到的材料。",
+  "materials": "活动资料",
+  "materialsDetail": "通知、参加说明等原文",
+  "query": "用户查询",
+  "queryDetail": "活动几点开始？",
+  "documents": "材料向量",
+  "documentsDetail": "编码并保留原文位置",
+  "queryVector": "查询向量",
+  "queryVectorDetail": "按查询任务编码",
+  "compare": "计算相似度，排列候选",
+  "compareDetail": "比较查询与材料的向量",
+  "results": "取回候选原文与来源",
+  "resultsDetail": "先缩小需要进一步比较的范围",
+  "rerank": "重排：查询与候选一起比较",
+  "rerankDetail": "按相关性重新排序",
+  "selected": "选取材料，核对后使用",
+  "selectedDetail": "展示原文，或交给生成模型参考"
+}

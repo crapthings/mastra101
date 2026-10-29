@@ -1,0 +1,25 @@
+{
+  "title": "Prompts and messages",
+  "lead": "Why does one itinerary fit your needs while another reads like a list of attractions?",
+  "sections": [
+    {
+      "title": "State the requirements",
+      "body": "“Plan a trip” and “Two days in Hangzhou with an older family member, short walks, at most two attractions per day” supply different information.\nA prompt is content supplied to a model. Explicit tasks, background, constraints, and output requirements make results easier to assess."
+    },
+    {
+      "title": "System: how the service works",
+      "body": "A travel assistant might use: “Plan relaxed trips. Ask for missing details and do not invent opening hours.”\nAPIs supporting the system role let applications provide these ongoing instructions. They guide output without guaranteeing compliance."
+    },
+    {
+      "title": "User: this particular request",
+      "body": "“Two days in Hangzhou this weekend, with an older family member and short walks” is the current task, typically supplied in a user message.\nSeparating application instructions from trip requirements makes both easier to maintain."
+    },
+    {
+      "title": "Assistant: what was said earlier",
+      "body": "After receiving an itinerary, a user asks to make day two easier. The model needs the earlier plan to interpret that request.\nAssistant messages commonly record earlier model replies. The example combines these roles; supported roles and formats depend on the API."
+    }
+  ],
+  "noteTitle": "Try it",
+  "note": "Keep the trip requirements and switch the priority from short walks to local food. Compare the trade-offs, and verify real distances and opening hours.",
+  "code": "// Combine travel requirements, an earlier plan, and a follow-up.\nconst messages = [\n  { role: 'system', content: 'Plan relaxed trips. Do not invent opening hours.' },\n  { role: 'user', content: 'Two days in Hangzhou with an older family member. Keep walking short.' },\n  { role: 'assistant', content: 'Rest near West Lake on day one and visit two attractions on day two. Verify distances and opening hours.' },\n  { role: 'user', content: 'Make day two easier with only one attraction.' }\n]"
+}

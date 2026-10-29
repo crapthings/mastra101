@@ -1,0 +1,20 @@
+{
+  "title": "Understanding LLMs",
+  "lead": "How does a short travel request become a weekend itinerary?",
+  "sections": [
+    {
+      "title": "Start with a weekend away",
+      "body": "You are spending two days in Hangzhou with an older family member and want short walks. Send those requirements to a model and it can draft an itinerary.\nOther inputs could be customer emails, meeting notes, or product reviews, producing reply drafts, summaries, or classifications."
+    },
+    {
+      "title": "What is a large language model?",
+      "body": "An LLM generates output from the context it receives. Your application prepares the information it can use and decides what to do with the result.\nOutput may be text, structured data, or a tool-call request, depending on the model and API."
+    },
+    {
+      "title": "A convincing plan still needs checking",
+      "body": "A model may recommend a closed restaurant or put distant attractions next to each other. Fluent writing does not establish factual accuracy.\nCurrent opening hours require reliable fresh information or lookup capabilities. A generated lookup request still needs code to execute it."
+    }
+  ],
+  "noteTitle": "Try it",
+  "note": "Add “traveling with a family member who has limited mobility.” Check whether the route actually reduces walking rather than simply repeating the requirement."
+}

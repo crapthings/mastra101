@@ -1,0 +1,110 @@
+{
+  "title": "工具审批（Tool Approval）",
+  "lead": "把确认放在执行之前，保留待确认动作，再根据用户决定恢复或拒绝。",
+  "sections": [
+    {
+      "title": "让用户确认的是具体动作",
+      "body": "查询只读记录之后，用户可能要求保存一份提醒草稿。程序应先展示将调用的工具与参数，让用户知道会写入什么，再决定是否执行。\n本例只在示例目录写入 reminder-draft.json，不发送通知，也不修改预约。保存成功只表示草稿文件已写入，不能说已经安排真实提醒。"
+    },
+    {
+      "title": "审批是运行状态，不是一句提示词",
+      "body": "在工具上设置 **requireApproval: true**，Mastra 会在 execute 前暂停。generate() 返回 finishReason 为 suspended 的结果，并提供 runId 和 suspendPayload 中的工具调用信息。\n恢复需要暂停快照，因此示例通过 **Mastra 实例**配置 LibSQLStore，再用 getAgentById() 取得注册的 Agent。这里存储的是恢复所需状态，不等于已经配置了对话记忆。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "审批通过才允许继续该动作；暂停时的工具名称、参数与调用标识，需要和用户看到的内容对应。"
+        }
+      ]
+    },
+    {
+      "title": "只根据明确的用户输入继续",
+      "body": "运行 11-approval.js，先查看待确认工具与参数。输入“确认”才调用 approveToolCallGenerate()，其他输入走 declineToolCallGenerate()。\n这份完整示例会创建 approval.db 保存快照，批准后还会写入或覆盖 reminder-draft.json。若先检查拒绝分支，可观察没有草稿写入；批准后再核对文件。没有进入预期暂停时，代码打印实际结果，不自动假定已获批准。",
+      "codeBlocks": [
+        {
+          "label": "src/11-approval.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { Mastra } from '@mastra/core'\nimport { createTool } from '@mastra/core/tools'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { z } from 'zod'\nimport { writeFile } from 'node:fs/promises'\nimport { createInterface } from 'node:readline/promises'\nimport { stdin, stdout } from 'node:process'\n\n// 只在明确批准后保存本地提醒草稿，不发送通知或修改真实预约。\nconst saveReminder = createTool({\n  id: 'save-reminder-draft',\n  description: '保存一份本地教学提醒草稿，不发送提醒。',\n  inputSchema: z.object({ text: z.string().min(1).max(200) }),\n  outputSchema: z.object({ status: z.literal('草稿已保存'), file: z.string() }),\n  requireApproval: true,\n  execute: async ({ text }) => {\n    await writeFile('reminder-draft.json', JSON.stringify({ text, source: '教学示例' }, null, 2))\n    return { status: '草稿已保存', file: 'reminder-draft.json' }\n  }\n})\n\n// 配置申请保存草稿的助手，拒绝后不再申请同一动作。\nconst configuredAgent = new Agent({\n  id: 'activity-approval',\n  name: '提醒草稿助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文回答。按用户提供的内容保存一次草稿。被拒绝后说明未保存，不再次申请。不要声称已发送提醒。',\n  tools: { saveReminder }\n})\n\n// 存储用于保存暂停快照，与是否配置对话记忆是两回事。\nconst mastra = new Mastra({\n  agents: { configuredAgent },\n  storage: new LibSQLStore({ id: 'approval-storage', url: 'file:./approval.db' })\n})\n\n// 从实例取得 Agent，使本次运行能使用实例的存储。\nconst agent = mastra.getAgentById('activity-approval')\n// 创建一次待批准的任务，先检查返回的暂停状态。\nconst pending = await agent.generate('保存提醒草稿：周六出发前核对预约状态。', {\n  maxSteps: 3,\n  abortSignal: AbortSignal.timeout(60_000)\n})\n\nif (pending.finishReason === 'suspended' && pending.suspendPayload) {\n  console.log('待确认的工具与参数：')\n  console.dir(pending.suspendPayload, { depth: null })\n  const terminal = createInterface({ input: stdin, output: stdout })\n  let decision\n  try {\n    decision = await terminal.question('将写入或覆盖本目录的 reminder-draft.json。输入“确认”批准，其他输入拒绝：')\n  } finally {\n    terminal.close()\n  }\n  const options = {\n    runId: pending.runId,\n    toolCallId: pending.suspendPayload.toolCallId,\n    maxSteps: 3,\n    abortSignal: AbortSignal.timeout(60_000)\n  }\n  const result = decision.trim() === '确认'\n    ? await agent.approveToolCallGenerate(options)\n    : await agent.declineToolCallGenerate({ ...options, reason: '用户没有确认保存草稿。' })\n  console.log('恢复后的结束原因：', result.finishReason)\n  console.log(result.text || '没有最终文本，请核对运行状态。')\n} else {\n  console.log('没有进入预期的审批暂停，请检查实际结果：')\n  console.dir({ finishReason: pending.finishReason, text: pending.text }, { depth: null })\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/11-approval.js"
+        }
+      ]
+    },
+    {
+      "title": "恢复以后，仍要检查执行结果",
+      "body": "批准表示允许执行，不保证文件写入成功。恢复后检查工具结果与最终状态；拒绝则应保留“没有保存”，不能生成虚假的文件成功说明。\n本例在同一终端进程完成确认。若要跨页面或进程恢复，还要保存运行标识、核实确认者身份，并使用兼容的 Agent 配置和存储重新找到待处理任务。快照不会替应用解决这些交接工作。\n若模型再次提出一个新动作，应重新判断是否需要确认；不能将一次批准当成后续所有动作的通行证。"
+    },
+    {
+      "title": "执行前审批与执行中补充信息不同",
+      "body": "requireApproval 在工具执行前暂停；工具执行中才发现缺少信息时，也可以使用 suspend() 与恢复数据机制。两者的触发位置和恢复内容不同，应按对应接口处理。\n本节先掌握执行前确认。下一节看另一种工具组织方式：让模型用代码组合查询与计算，但仍保留相同的工具执行边界。",
+      "links": [
+        {
+          "label": "工具审批、暂停与恢复",
+          "href": "https://mastra.ai/docs/agents/human-in-the-loop"
+        },
+        {
+          "label": "实例存储配置",
+          "href": "https://mastra.ai/docs/storage"
+        }
+      ]
+    }
+  ],
+  "note": "Agent 返回 suspended，页面已经显示“等待确认”。这时草稿是否写入？用户批准后，如果工具写入失败，应用应怎样区分批准记录与实际结果？",
+  "noteTitle": "本节检查",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "让用户确认的是具体动作",
+          "body": "查询只读记录之后，用户可能要求保存一份提醒草稿。程序应先展示将调用的工具与参数，让用户知道会写入什么，再决定是否执行。\n本例只在示例目录写入 reminder-draft.tson，不发送通知，也不修改预约。保存成功只表示草稿文件已写入，不能说已经安排真实提醒。"
+        },
+        {
+          "title": "审批是运行状态，不是一句提示词",
+          "body": "在工具上设置 **requireApproval: true**，Mastra 会在 execute 前暂停。generate() 返回 finishReason 为 suspended 的结果，并提供 runId 和 suspendPayload 中的工具调用信息。\n恢复需要暂停快照，因此示例通过 **Mastra 实例**配置 LibSQLStore，再用 getAgentById() 取得注册的 Agent。这里存储的是恢复所需状态，不等于已经配置了对话记忆。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "审批通过才允许继续该动作；暂停时的工具名称、参数与调用标识，需要和用户看到的内容对应。"
+            }
+          ]
+        },
+        {
+          "title": "只根据明确的用户输入继续",
+          "body": "运行 11-approval.ts，先查看待确认工具与参数。输入“确认”才调用 approveToolCallGenerate()，其他输入走 declineToolCallGenerate()。\n这份完整示例会创建 approval.db 保存快照，批准后还会写入或覆盖 reminder-draft.tson。若先检查拒绝分支，可观察没有草稿写入；批准后再核对文件。没有进入预期暂停时，代码打印实际结果，不自动假定已获批准。",
+          "codeBlocks": [
+            {
+              "label": "src/11-approval.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { Mastra } from '@mastra/core'\nimport { createTool } from '@mastra/core/tools'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { z } from 'zod'\nimport { writeFile } from 'node:fs/promises'\nimport { createInterface } from 'node:readline/promises'\nimport { stdin, stdout } from 'node:process'\n\n// 只在明确批准后保存本地提醒草稿，不发送通知或修改真实预约。\nconst saveReminder = createTool({\n  id: 'save-reminder-draft',\n  description: '保存一份本地教学提醒草稿，不发送提醒。',\n  inputSchema: z.object({ text: z.string().min(1).max(200) }),\n  outputSchema: z.object({ status: z.literal('草稿已保存'), file: z.string() }),\n  requireApproval: true,\n  execute: async ({ text }) => {\n    await writeFile('reminder-draft.json', JSON.stringify({ text, source: '教学示例' }, null, 2))\n    return { status: '草稿已保存', file: 'reminder-draft.json' }\n  }\n})\n\n// 配置申请保存草稿的助手，拒绝后不再申请同一动作。\nconst configuredAgent = new Agent({\n  id: 'activity-approval',\n  name: '提醒草稿助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文回答。按用户提供的内容保存一次草稿。被拒绝后说明未保存，不再次申请。不要声称已发送提醒。',\n  tools: { saveReminder }\n})\n\n// 存储用于保存暂停快照，与是否配置对话记忆是两回事。\nconst mastra = new Mastra({\n  agents: { configuredAgent },\n  storage: new LibSQLStore({ id: 'approval-storage', url: 'file:./approval.db' })\n})\n\n// 从实例取得 Agent，使本次运行能使用实例的存储。\nconst agent = mastra.getAgentById('activity-approval')\n// 创建一次待批准的任务，先检查返回的暂停状态。\nconst pending = await agent.generate('保存提醒草稿：周六出发前核对预约状态。', {\n  maxSteps: 3,\n  abortSignal: AbortSignal.timeout(60_000)\n})\n\nif (pending.finishReason === 'suspended' && pending.suspendPayload) {\n  console.log('待确认的工具与参数：')\n  console.dir(pending.suspendPayload, { depth: null })\n  const terminal = createInterface({ input: stdin, output: stdout })\n  let decision\n  try {\n    decision = await terminal.question('将写入或覆盖本目录的 reminder-draft.json。输入“确认”批准，其他输入拒绝：')\n  } finally {\n    terminal.close()\n  }\n  const options = {\n    runId: pending.runId,\n    toolCallId: pending.suspendPayload.toolCallId,\n    maxSteps: 3,\n    abortSignal: AbortSignal.timeout(60_000)\n  }\n  const result = decision.trim() === '确认'\n    ? await agent.approveToolCallGenerate(options)\n    : await agent.declineToolCallGenerate({ ...options, reason: '用户没有确认保存草稿。' })\n  console.log('恢复后的结束原因：', result.finishReason)\n  console.log(result.text || '没有最终文本，请核对运行状态。')\n} else {\n  console.log('没有进入预期的审批暂停，请检查实际结果：')\n  console.dir({ finishReason: pending.finishReason, text: pending.text }, { depth: null })\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/11-approval.ts"
+            }
+          ]
+        },
+        {
+          "title": "恢复以后，仍要检查执行结果",
+          "body": "批准表示允许执行，不保证文件写入成功。恢复后检查工具结果与最终状态；拒绝则应保留“没有保存”，不能生成虚假的文件成功说明。\n本例在同一终端进程完成确认。若要跨页面或进程恢复，还要保存运行标识、核实确认者身份，并使用兼容的 Agent 配置和存储重新找到待处理任务。快照不会替应用解决这些交接工作。\n若模型再次提出一个新动作，应重新判断是否需要确认；不能将一次批准当成后续所有动作的通行证。"
+        },
+        {
+          "title": "执行前审批与执行中补充信息不同",
+          "body": "requireApproval 在工具执行前暂停；工具执行中才发现缺少信息时，也可以使用 suspend() 与恢复数据机制。两者的触发位置和恢复内容不同，应按对应接口处理。\n本节先掌握执行前确认。下一节看另一种工具组织方式：让模型用代码组合查询与计算，但仍保留相同的工具执行边界。",
+          "links": [
+            {
+              "label": "工具审批、暂停与恢复",
+              "href": "https://mastra.ai/docs/agents/human-in-the-loop"
+            },
+            {
+              "label": "实例存储配置",
+              "href": "https://mastra.ai/docs/storage"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+@layer base {
+  body { @apply m-0 antialiased; }
+  :focus-visible { @apply outline-2 outline-offset-4 outline-orange-600; }
+}

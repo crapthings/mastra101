@@ -1,0 +1,16 @@
+{
+  "name": "mastra-time-assistant",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "basic": "tsx --env-file=.env src/basic.ts",
+    "start": "tsx --env-file=.env src/run.ts",
+    "clock": "tsx src/clock.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "1.80.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": { "tsx": "4.23.15" }
+}

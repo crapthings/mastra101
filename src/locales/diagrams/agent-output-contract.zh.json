@@ -1,0 +1,12 @@
+{
+  "title": "工具返回值与最终交付物，分别约定",
+  "caption": "工具的 outputSchema 检查执行结果的结构；Agent 的 structuredOutput 约定最终对象。两次结构检查都不能代替对实际查询状态与来源的核对。",
+  "tool": "工具执行结果",
+  "toolDetail": "编号、查询状态、详情与来源",
+  "toolSchema": "outputSchema",
+  "toolSchemaDetail": "检查工具返回的数据结构",
+  "model": "Agent 根据结果继续处理",
+  "modelDetail": "保留成功、未查到或失败的原意",
+  "final": "structuredOutput → result.object",
+  "finalDetail": "交付状态、摘要、来源与缺失项"
+}

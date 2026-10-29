@@ -1,0 +1,25 @@
+{
+  "title": "Your first model call",
+  "lead": "You have your messages ready. How do you send them to a model and get an answer back?",
+  "sections": [
+    {
+      "title": "What you need to make a request",
+      "body": "Most model services require an API URL, an API key, and a model name. The URL is the destination, the key authenticates your request, and the name selects the model. The service runs inference and returns the result.\nYou can send HTTP requests yourself with fetch or use an SDK to build requests and parse responses. The SDK runs in your project; the hosted model runs on the service."
+    },
+    {
+      "title": "Prepare a request",
+      "body": "The Node.js fetch example below uses a common messages-based request format. Before running it, set MODEL_API_URL, MODEL_API_KEY, and MODEL_ID according to your provider’s documentation. Check the authentication method and request fields too.\nKeep the key on the server. Running this snippet makes a real request and may incur charges; this page does not execute it."
+    },
+    {
+      "title": "Where a gateway fits",
+      "body": "Direct: application → model service API → inference.\nVia a gateway: application → gateway → model service API → inference.\nA gateway provides an intermediate entry point. Implementations may offer routing, logs, rate limits, or failover. It is optional, and a shared entry point does not make all model capabilities identical."
+    },
+    {
+      "title": "Check for errors before reading the result",
+      "body": "Requests can fail due to timeouts, authentication, account limits, or service errors. Check HTTP status before interpreting the response using the service schema.\nSDKs and Mastra change how requests are organized; authentication, error handling, and model limitations still apply."
+    }
+  ],
+  "noteTitle": "Before running",
+  "note": "Verify that your service supports the illustrated protocol; otherwise adapt it using its documentation. The API URL must point to the complete generation endpoint.",
+  "code": "// Read server-side configuration for a compatible messages API.\nconst { MODEL_API_URL, MODEL_API_KEY, MODEL_ID } = process.env\n\nif (!MODEL_API_URL || !MODEL_API_KEY || !MODEL_ID) {\n  throw new Error('Missing model API configuration')\n}\n\n// Send one request with a bounded network wait.\nconst response = await fetch(MODEL_API_URL, {\n  method: 'POST',\n  headers: {\n    Authorization: `Bearer ${MODEL_API_KEY}`,\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify({\n    model: MODEL_ID,\n    messages: [\n      { role: 'system', content: 'Plan relaxed trips. Do not invent opening hours.' },\n      { role: 'user', content: 'Plan a relaxed two-day trip to Hangzhou with an older family member.' }\n    ]\n  }),\n  signal: AbortSignal.timeout(30_000)\n})\n\nif (!response.ok) {\n  throw new Error(`Model request failed: ${response.status}`)\n}\n\n// Inspect the service response before selecting its generated text.\nconst result = await response.json()\nconsole.log(result)"
+}

@@ -1,0 +1,19 @@
+{
+  "title": "处理器在运行的哪个位置介入",
+  "caption": "沿正常路径看介入时机：输入检查在循环前，每步响应检查位于模型返回后、工具执行前；流式分片在传输过程中处理。循环结束后才处理完整结果，后置检查无法收回已经展示的文字。",
+  "input": "processInput",
+  "inputDetail": "循环开始前处理消息",
+  "before": "processInputStep",
+  "beforeDetail": "每步模型调用前调整配置",
+  "model": "模型生成响应",
+  "stream": "processOutputStream",
+  "streamDetail": "流式传输时处理分片",
+  "after": "processOutputStep",
+  "afterDetail": "检查本步模型响应",
+  "tool": "按本步请求执行工具",
+  "toolDetail": "没有工具请求时跳过",
+  "final": "processOutputResult",
+  "finalDetail": "循环结束后处理完整结果",
+  "again": "继续下一步",
+  "done": "循环结束"
+}

@@ -1,0 +1,20 @@
+{
+  "name": "mastra-travel-lab",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "studio": "mastra dev --dir src/mastra --env .env",
+    "image": "tsx --env-file=.env src/image.ts",
+    "frames": "tsx --env-file=.env src/video-frames.ts"
+  },
+  "dependencies": {
+    "@mastra/core": "1.80.0"
+  },
+  "devDependencies": {
+    "mastra": "1.36.0",
+    "tsx": "4.23.15"
+  }
+}

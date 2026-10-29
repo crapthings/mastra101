@@ -1,0 +1,19 @@
+{
+  "name": "mastra-travel-lab-js",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "studio": "mastra dev --dir src/mastra --env .env",
+    "image": "node --env-file=.env src/image.js",
+    "frames": "node --env-file=.env src/video-frames.js"
+  },
+  "dependencies": {
+    "@mastra/core": "1.80.0"
+  },
+  "devDependencies": {
+    "mastra": "1.36.0"
+  }
+}

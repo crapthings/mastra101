@@ -1,0 +1,115 @@
+{
+  "title": "接入时间工具",
+  "lead": "把真实时间函数包装成工具，明确它的输入、成功结果和失败结果。",
+  "sections": [
+    {
+      "title": "先看工具要接收什么",
+      "body": "本例直接接收时区标识，例如 Asia/Tokyo 和 Asia/Shanghai。无需先把城市名转换成时区，就能专注于工具本身。\nreadTime 只读取一次系统时钟。capturedAt 保存 UTC 取样时刻，localTime 则显示同一时刻在指定时区的日期、时间和 UTC 偏移。",
+      "codeBlocks": [
+        {
+          "label": "src/tools/read-time.ts",
+          "code": "// 读取系统时钟，并将同一时刻转换为指定时区的中文时间。\nexport function readTime (timeZone: string) {\n  try {\n    const formatter = new Intl.DateTimeFormat('zh-CN', {\n      timeZone,\n      year: 'numeric',\n      month: '2-digit',\n      day: '2-digit',\n      hour: '2-digit',\n      minute: '2-digit',\n      second: '2-digit',\n      hourCycle: 'h23',\n      timeZoneName: 'longOffset'\n    })\n    const now = new Date()\n    return {\n      ok: true as const,\n      timeZone,\n      capturedAt: now.toISOString(),\n      localTime: formatter.format(now)\n    }\n  } catch (error) {\n    if (error instanceof RangeError) {\n      return {\n        ok: false as const,\n        timeZone,\n        error: '无法识别这个时区，请提供有效的时区，例如 Asia/Tokyo。'\n      }\n    }\n    throw error\n  }\n}",
+          "language": "typescript"
+        }
+      ],
+      "callouts": [
+        {
+          "type": "key",
+          "body": "时间由运行环境的系统时钟提供。capturedAt 和 localTime 是同一次取样在不同格式下的表示。"
+        }
+      ]
+    },
+    {
+      "title": "先查数据，不调用模型",
+      "body": "运行下面两个命令。成功结果中应出现 ok: true、timeZone、capturedAt 和 localTime。\n两次运行的取样时刻会略有差别；同一时刻，东京比上海快一小时。这里的准确性取决于运行电脑的系统时钟。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "code": "pnpm clock Asia/Tokyo\npnpm clock Asia/Shanghai",
+          "language": "bash"
+        }
+      ]
+    },
+    {
+      "title": "把函数包装成工具",
+      "body": "**createTool()** 将工具说明、参数结构和执行函数放在一起。description 告诉模型什么时候使用它，inputSchema 描述参数，execute 真正读取时间。\noutputSchema 把结果分成成功和失败两种：成功带时间，失败带原因。输入是字符串并不代表它一定是有效时区，因此 readTime 还要检查时区能否被识别。",
+      "codeBlocks": [
+        {
+          "label": "src/tools/time-tool.ts",
+          "code": "import { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { readTime } from './read-time.ts'\n\n// 将时间函数包装为模型可请求的工具，并明确成功与失败的返回结构。\nexport const getCurrentTime = createTool({\n  id: 'get-current-time',\n  description: '读取指定时区的当前时间，返回取样时刻。适合回答“现在几点”。',\n  inputSchema: z.object({\n    timeZone: z.string().min(1).describe('时区标识，例如 Asia/Tokyo 或 Asia/Shanghai')\n  }),\n  outputSchema: z.discriminatedUnion('ok', [\n    z.object({\n      ok: z.literal(true),\n      timeZone: z.string(),\n      capturedAt: z.string(),\n      localTime: z.string()\n    }),\n    z.object({\n      ok: z.literal(false),\n      timeZone: z.string(),\n      error: z.string()\n    })\n  ]),\n  execute: async ({ timeZone }) => readTime(timeZone)\n})",
+          "language": "typescript"
+        }
+      ]
+    },
+    {
+      "title": "让 Agent 可以请求这个工具",
+      "body": "time-agent.ts 把 getCurrentTime 放进 tools，并说明查询时间时应该使用它。你不必手动解析模型回复中的函数名，Mastra 会组织工具请求与结果回传。\n下一节运行最终入口，检查模型是否真的传入了指定时区，并使用了工具结果。",
+      "codeBlocks": [
+        {
+          "label": "src/agents/time-agent.ts",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { getCurrentTime } from '../tools/time-tool.ts'\n\n// 为时间助手提供真实查询能力，并约定失败时应怎样回答。\nexport const timeAgent = new Agent({\n  id: 'time-guide',\n  name: '旅行时间助手',\n  instructions: `\n    用中文回答。询问当前时间时，先调用 getCurrentTime，再依据结果回答。\n    用户给出了明确时区时，原样传给工具；没有明确时区时先询问。\n    不要自行修正用户提供的时区。\n    工具返回 ok: false 时，解释失败并请求有效时区，不要编造时间或反复调用相同参数。\n    回答成功结果时，包含时区与取样时间，并说明这是查询时刻的时间。\n  `,\n  model: 'vercel/openai/gpt-6.1-sol',\n  tools: { getCurrentTime }\n})",
+          "language": "typescript"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "readTime 已能直接返回时间，为什么还要使用 createTool() 并挂到 Agent 上？指出工具说明、参数约定与执行函数各自负责什么。",
+  "codeVariants": {
+    "js": {
+      "sections": [
+        {
+          "title": "先看工具要接收什么",
+          "body": "本例直接接收时区标识，例如 Asia/Tokyo 和 Asia/Shanghai。无需先把城市名转换成时区，就能专注于工具本身。\nreadTime 只读取一次系统时钟。capturedAt 保存 UTC 取样时刻，localTime 则显示同一时刻在指定时区的日期、时间和 UTC 偏移。",
+          "codeBlocks": [
+            {
+              "label": "src/tools/read-time.js",
+              "code": "// 读取系统时钟，并将同一时刻转换为指定时区的中文时间。\nexport function readTime (timeZone) {\n  try {\n    const formatter = new Intl.DateTimeFormat('zh-CN', {\n      timeZone,\n      year: 'numeric',\n      month: '2-digit',\n      day: '2-digit',\n      hour: '2-digit',\n      minute: '2-digit',\n      second: '2-digit',\n      hourCycle: 'h23',\n      timeZoneName: 'longOffset'\n    })\n    const now = new Date()\n    return {\n      ok: true,\n      timeZone,\n      capturedAt: now.toISOString(),\n      localTime: formatter.format(now)\n    }\n  } catch (error) {\n    if (error instanceof RangeError) {\n      return {\n        ok: false,\n        timeZone,\n        error: '无法识别这个时区，请提供有效的时区，例如 Asia/Tokyo。'\n      }\n    }\n    throw error\n  }\n}",
+              "language": "javascript"
+            }
+          ],
+          "callouts": [
+            {
+              "type": "key",
+              "body": "时间由运行环境的系统时钟提供。capturedAt 和 localTime 是同一次取样在不同格式下的表示。"
+            }
+          ]
+        },
+        {
+          "title": "先查数据，不调用模型",
+          "body": "运行下面两个命令。成功结果中应出现 ok: true、timeZone、capturedAt 和 localTime。\n两次运行的取样时刻会略有差别；同一时刻，东京比上海快一小时。这里的准确性取决于运行电脑的系统时钟。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "code": "pnpm clock Asia/Tokyo\npnpm clock Asia/Shanghai",
+              "language": "bash"
+            }
+          ]
+        },
+        {
+          "title": "把函数包装成工具",
+          "body": "**createTool()** 将工具说明、参数结构和执行函数放在一起。description 告诉模型什么时候使用它，inputSchema 描述参数，execute 真正读取时间。\noutputSchema 把结果分成成功和失败两种：成功带时间，失败带原因。输入是字符串并不代表它一定是有效时区，因此 readTime 还要检查时区能否被识别。",
+          "codeBlocks": [
+            {
+              "label": "src/tools/time-tool.js",
+              "code": "import { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { readTime } from './read-time.js'\n\n// 将时间函数包装为模型可请求的工具，并明确成功与失败的返回结构。\nexport const getCurrentTime = createTool({\n  id: 'get-current-time',\n  description: '读取指定时区的当前时间，返回取样时刻。适合回答“现在几点”。',\n  inputSchema: z.object({\n    timeZone: z.string().min(1).describe('时区标识，例如 Asia/Tokyo 或 Asia/Shanghai')\n  }),\n  outputSchema: z.discriminatedUnion('ok', [\n    z.object({\n      ok: z.literal(true),\n      timeZone: z.string(),\n      capturedAt: z.string(),\n      localTime: z.string()\n    }),\n    z.object({\n      ok: z.literal(false),\n      timeZone: z.string(),\n      error: z.string()\n    })\n  ]),\n  execute: async ({ timeZone }) => readTime(timeZone)\n})",
+              "language": "javascript"
+            }
+          ]
+        },
+        {
+          "title": "让 Agent 可以请求这个工具",
+          "body": "time-agent.js 把 getCurrentTime 放进 tools，并说明查询时间时应该使用它。你不必手动解析模型回复中的函数名，Mastra 会组织工具请求与结果回传。\n下一节运行最终入口，检查模型是否真的传入了指定时区，并使用了工具结果。",
+          "codeBlocks": [
+            {
+              "label": "src/agents/time-agent.js",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { getCurrentTime } from '../tools/time-tool.js'\n\n// 为时间助手提供真实查询能力，并约定失败时应怎样回答。\nexport const timeAgent = new Agent({\n  id: 'time-guide',\n  name: '旅行时间助手',\n  instructions: `\n    用中文回答。询问当前时间时，先调用 getCurrentTime，再依据结果回答。\n    用户给出了明确时区时，原样传给工具；没有明确时区时先询问。\n    不要自行修正用户提供的时区。\n    工具返回 ok: false 时，解释失败并请求有效时区，不要编造时间或反复调用相同参数。\n    回答成功结果时，包含时区与取样时间，并说明这是查询时刻的时间。\n  `,\n  model: 'vercel/openai/gpt-6.1-sol',\n  tools: { getCurrentTime }\n})",
+              "language": "javascript"
+            }
+          ]
+        }
+      ],
+      "note": "readTime 已能直接返回时间，为什么还要使用 createTool() 并挂到 Agent 上？指出工具说明、参数约定与执行函数各自负责什么。"
+    }
+  }
+}

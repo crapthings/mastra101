@@ -1,0 +1,17 @@
+{
+  "title": "配置一次，按任务发起运行",
+  "caption": "一次使用工具的运行示意。虚线框内属于同一次 generate()，其中有两次模型调用；模型也可能直接回答，或在停止条件下结束。",
+  "config": "Agent 配置",
+  "configDetail": "模型 · 指令 · 可用工具",
+  "run": "一次运行 · generate()",
+  "first": "第一次模型调用",
+  "firstDetail": "读取问题，提出工具请求",
+  "tool": "执行查询工具",
+  "toolDetail": "程序读取系统时钟",
+  "second": "第二次模型调用",
+  "secondDetail": "读取工具结果，组织回答",
+  "result": "本次运行结果",
+  "start": "带着用户消息发起",
+  "request": "工具名称与参数",
+  "returned": "结果加入后续上下文"
+}

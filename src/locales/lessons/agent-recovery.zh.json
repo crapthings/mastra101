@@ -1,0 +1,158 @@
+{
+  "title": "错误处理与恢复",
+  "lead": "先定位失败发生在哪一层，再决定重试、补充输入、保留结果或终止任务。",
+  "sections": [
+    {
+      "title": "先分清到底是哪一步失败",
+      "body": "网关请求暂时失败、工具查不到记录、结果字段不符合约定，表面上都像“没有得到答案”，处理方式却不同。\n对暂时性的模型请求错误，可以有限重试；工具返回未查到记录，应核对编号与数据范围；结构不符则检查输出约定。直接重新发起整个 Agent 任务，可能重复执行已经完成的工具动作。"
+    },
+    {
+      "title": "不同重试，重新做的工作不同",
+      "body": "**maxRetries** 用于模型请求层的重试配置；**maxProcessorRetries** 限制处理器触发的再次处理。前者面对调用错误，后者可能携带检查反馈重新生成。它们都不是预约服务的业务重试次数。\n处理器重试可能重做同一步，不能只靠 maxSteps 估算所有模型请求的数量。程序还应设置总时间预算，并记录具体重试发生在哪一层。",
+      "table": {
+        "headers": [
+          "设置",
+          "作用",
+          "不能据此推断什么"
+        ],
+        "rows": [
+          [
+            "maxRetries",
+            "模型请求层的重试配置",
+            "不会把所有业务失败都自动修复"
+          ],
+          [
+            "maxProcessorRetries",
+            "限制处理器触发的重试",
+            "不是工具写入的幂等保证"
+          ],
+          [
+            "maxSteps",
+            "限制顺序执行步骤",
+            "不是所有底层请求次数之和"
+          ],
+          [
+            "timeout.totalMs",
+            "为整次执行设置时间预算",
+            "取消不会撤销已完成的外部操作"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "用一个有上限的反馈练习",
+      "body": "示例在 processOutputStep 检查每步输出是否含“待确认”，失败时通过 abort(..., { retry: true }) 提供反馈。正常模式仍需对照原文判断内容；出现这几个字本身不证明事实正确。\n本例的 maxProcessorRetries: 1 允许检查失败后再尝试一次，不是总共只生成一次。运行“强制拦截”会让检查始终不通过：在模型请求正常返回的前提下，初次生成与一次反馈重试都被拒绝，最终读取 tripwire。\n这里的 maxSteps: 1 仍只允许一个顺序步骤，但该步骤可能因处理器反馈而重新生成；这正是步数与重试次数需要分开配置的原因。为了让本例的层次清楚，代码关闭默认错误处理器，只保留显式的模型请求重试与输出检查反馈；这是教学配置，不是所有项目都应采用的默认方案。\n这里使用每步输出检查，因为反馈需要回到下一次模型尝试；processOutputResult 在整次生成结束后运行，不能直接当作同一条重试入口。",
+      "codeBlocks": [
+        {
+          "label": "src/10-recovery.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\n\n// 强制拦截用于观察处理器重试上限，不代表真实模型一定会答错。\nconst forceReject = process.argv[2] === '强制拦截'\n\n// 分开设置模型请求重试和输出检查反馈的重试，不重跑外部业务操作。\nconst agent = new Agent({\n  id: 'activity-recovery',\n  name: '活动结果检查助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文整理活动资料。地点未知时明确写“待确认”。',\n  maxRetries: 2,\n  maxProcessorRetries: 1,\n  errorProcessorDefaults: false,\n  outputProcessors: [{\n    id: 'require-pending-label',\n    processOutputStep: ({ messages, text, abort }) => {\n      const accepted = !forceReject && Boolean(text?.includes('待确认'))\n      if (!accepted) abort('结果未通过检查，请保留“待确认”标记。', { retry: true })\n      return messages\n    }\n  }]\n})\n\ntry {\n  const result = await agent.generate('活动周六下午两点开始，地点尚未公布。请整理安排。', {\n    maxSteps: 1,\n    modelSettings: { timeout: { totalMs: 60_000 } }\n  })\n  if (result.tripwire) {\n    console.log('检查仍未通过，不交付为已完成结果：', result.tripwire)\n  } else {\n    console.log(result.text || '没有可交付的最终文本。')\n  }\n  console.log('结束原因：', result.finishReason)\n} catch (error) {\n  console.error('运行未完成，保留错误并决定下一步：', error instanceof Error ? error.message : error)\n  process.exitCode = 1\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/10-recovery.js"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/10-recovery.js 强制拦截"
+        }
+      ]
+    },
+    {
+      "title": "先核对已经发生的操作，再恢复",
+      "body": "只读查询通常容易重新执行；写入请求超时则可能已经生效。恢复之前应使用任务标识、业务记录或幂等键核实结果，避免重复创建提醒或预约。\n默认错误处理器、模型请求重试、备用模型等机制可能共同参与恢复。配置时分别确认触发条件、次数与优先关系，不能简单认为设置 maxRetries: 0 就关闭了所有层的恢复逻辑。\n切换备用模型也要考虑工具调用与结构化能力是否兼容，并保留最终使用的模型记录。更换模型之后仍要检查结果，不能把“换了模型”当成恢复成功。",
+      "links": [
+        {
+          "label": "Mastra：处理器重试与错误处理",
+          "href": "https://mastra.ai/docs/agents/processors"
+        }
+      ]
+    },
+    {
+      "title": "无法自动恢复时，留下可以继续的状态",
+      "body": "重试耗尽后，保留原始输入、已取得结果和失败原因。用户可以补充材料，程序也可以按明确条件稍后继续，而不是把空值包装成成功。\n有一种暂停本来就是任务的一部分：等待用户批准。下一节通过工具审批，让应用在执行前停下来，并根据用户决定恢复。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "模型请求重试两次、处理器反馈重试一次、工具曾提交写入请求。这些次数能否用 maxSteps 统一解释？重新发起任务前，应该先核实哪一项外部状态？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先分清到底是哪一步失败",
+          "body": "网关请求暂时失败、工具查不到记录、结果字段不符合约定，表面上都像“没有得到答案”，处理方式却不同。\n对暂时性的模型请求错误，可以有限重试；工具返回未查到记录，应核对编号与数据范围；结构不符则检查输出约定。直接重新发起整个 Agent 任务，可能重复执行已经完成的工具动作。"
+        },
+        {
+          "title": "不同重试，重新做的工作不同",
+          "body": "**maxRetries** 用于模型请求层的重试配置；**maxProcessorRetries** 限制处理器触发的再次处理。前者面对调用错误，后者可能携带检查反馈重新生成。它们都不是预约服务的业务重试次数。\n处理器重试可能重做同一步，不能只靠 maxSteps 估算所有模型请求的数量。程序还应设置总时间预算，并记录具体重试发生在哪一层。",
+          "table": {
+            "headers": [
+              "设置",
+              "作用",
+              "不能据此推断什么"
+            ],
+            "rows": [
+              [
+                "maxRetries",
+                "模型请求层的重试配置",
+                "不会把所有业务失败都自动修复"
+              ],
+              [
+                "maxProcessorRetries",
+                "限制处理器触发的重试",
+                "不是工具写入的幂等保证"
+              ],
+              [
+                "maxSteps",
+                "限制顺序执行步骤",
+                "不是所有底层请求次数之和"
+              ],
+              [
+                "timeout.totalMs",
+                "为整次执行设置时间预算",
+                "取消不会撤销已完成的外部操作"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "用一个有上限的反馈练习",
+          "body": "示例在 processOutputStep 检查每步输出是否含“待确认”，失败时通过 abort(..., { retry: true }) 提供反馈。正常模式仍需对照原文判断内容；出现这几个字本身不证明事实正确。\n本例的 maxProcessorRetries: 1 允许检查失败后再尝试一次，不是总共只生成一次。运行“强制拦截”会让检查始终不通过：在模型请求正常返回的前提下，初次生成与一次反馈重试都被拒绝，最终读取 tripwire。\n这里的 maxSteps: 1 仍只允许一个顺序步骤，但该步骤可能因处理器反馈而重新生成；这正是步数与重试次数需要分开配置的原因。为了让本例的层次清楚，代码关闭默认错误处理器，只保留显式的模型请求重试与输出检查反馈；这是教学配置，不是所有项目都应采用的默认方案。\n这里使用每步输出检查，因为反馈需要回到下一次模型尝试；processOutputResult 在整次生成结束后运行，不能直接当作同一条重试入口。",
+          "codeBlocks": [
+            {
+              "label": "src/10-recovery.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\n\n// 强制拦截用于观察处理器重试上限，不代表真实模型一定会答错。\nconst forceReject = process.argv[2] === '强制拦截'\n\n// 分开设置模型请求重试和输出检查反馈的重试，不重跑外部业务操作。\nconst agent = new Agent({\n  id: 'activity-recovery',\n  name: '活动结果检查助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文整理活动资料。地点未知时明确写“待确认”。',\n  maxRetries: 2,\n  maxProcessorRetries: 1,\n  errorProcessorDefaults: false,\n  outputProcessors: [{\n    id: 'require-pending-label',\n    processOutputStep: ({ messages, text, abort }) => {\n      const accepted = !forceReject && Boolean(text?.includes('待确认'))\n      if (!accepted) abort('结果未通过检查，请保留“待确认”标记。', { retry: true })\n      return messages\n    }\n  }]\n})\n\ntry {\n  const result = await agent.generate('活动周六下午两点开始，地点尚未公布。请整理安排。', {\n    maxSteps: 1,\n    modelSettings: { timeout: { totalMs: 60_000 } }\n  })\n  if (result.tripwire) {\n    console.log('检查仍未通过，不交付为已完成结果：', result.tripwire)\n  } else {\n    console.log(result.text || '没有可交付的最终文本。')\n  }\n  console.log('结束原因：', result.finishReason)\n} catch (error) {\n  console.error('运行未完成，保留错误并决定下一步：', error instanceof Error ? error.message : error)\n  process.exitCode = 1\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/10-recovery.ts"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/10-recovery.ts 强制拦截"
+            }
+          ]
+        },
+        {
+          "title": "先核对已经发生的操作，再恢复",
+          "body": "只读查询通常容易重新执行；写入请求超时则可能已经生效。恢复之前应使用任务标识、业务记录或幂等键核实结果，避免重复创建提醒或预约。\n默认错误处理器、模型请求重试、备用模型等机制可能共同参与恢复。配置时分别确认触发条件、次数与优先关系，不能简单认为设置 maxRetries: 0 就关闭了所有层的恢复逻辑。\n切换备用模型也要考虑工具调用与结构化能力是否兼容，并保留最终使用的模型记录。更换模型之后仍要检查结果，不能把“换了模型”当成恢复成功。",
+          "links": [
+            {
+              "label": "Mastra：处理器重试与错误处理",
+              "href": "https://mastra.ai/docs/agents/processors"
+            }
+          ]
+        },
+        {
+          "title": "无法自动恢复时，留下可以继续的状态",
+          "body": "重试耗尽后，保留原始输入、已取得结果和失败原因。用户可以补充材料，程序也可以按明确条件稍后继续，而不是把空值包装成成功。\n有一种暂停本来就是任务的一部分：等待用户批准。下一节通过工具审批，让应用在执行前停下来，并根据用户决定恢复。"
+        }
+      ]
+    }
+  }
+}
