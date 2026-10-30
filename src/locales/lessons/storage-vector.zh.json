@@ -1,0 +1,70 @@
+{
+  "title": "原文与向量索引（Storage & Vector Index）",
+  "lead": "沿消息标识把检索结果接回原文，分清两个接口各自保存什么。",
+  "sections": [
+    {
+      "title": "检索需要向量，回答还需要原文",
+      "body": "08 的语义召回先生成向量，再找相关消息。模型最终需要的是可理解的原始资料，向量检索结果因此要能关联回消息。\n**storage** 保存会话与原文等运行数据，**vector** 提供索引、相似度查询及相关元数据。一个服务可能同时支持两种能力，但它们的配置与接口仍不同。"
+    },
+    {
+      "title": "用同一个消息标识连接两份记录",
+      "body": "本例把原文与索引分别放在两个本地文件，便于直接观察职责。先保存“东门入场”的消息，再把 messageId 与 threadId 放进向量元数据。\n检索取得候选后，再按关联标识取回原消息。真实语义召回由嵌入模型生成向量；本例使用固定三维向量，仅演示保存、查询与关联，不调用嵌入服务。",
+      "codeBlocks": [
+        {
+          "label": "src/05-vector-index.js",
+          "language": "javascript",
+          "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore, LibSQLVector } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 原始消息通过存储接口保存。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'message-storage', url: 'file:./05-messages.db' }),\n  options: { semanticRecall: false, generateTitle: false }\n})\n// 检索向量通过独立向量接口保存，刻意放进另一文件便于观察职责。\nconst vector = new LibSQLVector({ id: 'message-vector', url: 'file:./05-vectors.db' })\n// 原消息标识用于从检索结果找到对应原文。\nconst messageId = randomUUID()\n// 每次运行只核对这一段教学会话。\nconst thread = await memory.createThread({ threadId: randomUUID(), resourceId: 'demo-reader', title: '原文与索引' })\nawait memory.saveMessages({ messages: [{\n  id: messageId, threadId: thread.id, resourceId: 'demo-reader', role: 'user', createdAt: new Date(),\n  content: { format: 2, parts: [{ type: 'text', text: '阅读分享会从东门入场。' }] }\n}] })\nawait vector.createIndex({ indexName: 'teaching_messages', dimension: 3 })\n// 固定三维向量只演示索引读写，不是对中文语义的真实嵌入。\nawait vector.upsert({\n  indexName: 'teaching_messages', ids: [messageId], vectors: [[1, 0, 0]],\n  metadata: [{ messageId, threadId: thread.id }]\n})\n// 查询范围限制为本次会话，不依赖旧试跑留下的向量。\nconst matches = await vector.query({ indexName: 'teaching_messages', queryVector: [1, 0, 0], topK: 1, filter: { threadId: thread.id } })\n// 使用结果中的原消息标识，在会话记录里取回对应文本。\nconst stored = await memory.recall({ threadId: thread.id, resourceId: 'demo-reader', perPage: false })\nconsole.dir({ matches, original: stored.messages.find(message => message.id === matches[0]?.metadata?.messageId) }, { depth: null })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/05-vector-index.js"
+        }
+      ]
+    },
+    {
+      "title": "索引命中以后，继续核对记录",
+      "body": "先检查 matches 中的消息标识能否对应 original，再核对原文、会话与本次教学资料是否一致。这一步把“检索有结果”接到了“后续有依据可用”。\n维护时也要保留这份对应关系：原文删除后，残留索引可能指向不存在的消息；更换嵌入模型后，需要重新核对向量生成与索引配置。即使维度相同，不同模型的向量空间也不能直接假定兼容，通常需要重新生成相应索引数据。"
+    },
+    {
+      "title": "可以共用后端，也可以按职责拆开",
+      "body": "同一数据库服务可能同时提供消息和向量接口，也可以使用不同后端。决定拆分时，应能说明它解决了什么实际问题。\n下一节的组合存储处理的是另一个层次：把 Mastra 的不同存储领域路由到不同后端。向量服务仍通过 vector 单独配置。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "向量查询有命中，但 original 为空。应先检查哪个关联标识与哪份存储？如果改用另一个同维度嵌入模型，能否只换查询模型而继续使用全部旧向量？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "检索需要向量，回答还需要原文",
+          "body": "08 的语义召回先生成向量，再找相关消息。模型最终需要的是可理解的原始资料，向量检索结果因此要能关联回消息。\n**storage** 保存会话与原文等运行数据，**vector** 提供索引、相似度查询及相关元数据。一个服务可能同时支持两种能力，但它们的配置与接口仍不同。"
+        },
+        {
+          "title": "用同一个消息标识连接两份记录",
+          "body": "本例把原文与索引分别放在两个本地文件，便于直接观察职责。先保存“东门入场”的消息，再把 messageId 与 threadId 放进向量元数据。\n检索取得候选后，再按关联标识取回原消息。真实语义召回由嵌入模型生成向量；本例使用固定三维向量，仅演示保存、查询与关联，不调用嵌入服务。",
+          "codeBlocks": [
+            {
+              "label": "src/05-vector-index.ts",
+              "language": "typescript",
+              "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore, LibSQLVector } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 原始消息通过存储接口保存。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'message-storage', url: 'file:./05-messages.db' }),\n  options: { semanticRecall: false, generateTitle: false }\n})\n// 检索向量通过独立向量接口保存，刻意放进另一文件便于观察职责。\nconst vector = new LibSQLVector({ id: 'message-vector', url: 'file:./05-vectors.db' })\n// 原消息标识用于从检索结果找到对应原文。\nconst messageId = randomUUID()\n// 每次运行只核对这一段教学会话。\nconst thread = await memory.createThread({ threadId: randomUUID(), resourceId: 'demo-reader', title: '原文与索引' })\nawait memory.saveMessages({ messages: [{\n  id: messageId, threadId: thread.id, resourceId: 'demo-reader', role: 'user', createdAt: new Date(),\n  content: { format: 2, parts: [{ type: 'text', text: '阅读分享会从东门入场。' }] }\n}] })\nawait vector.createIndex({ indexName: 'teaching_messages', dimension: 3 })\n// 固定三维向量只演示索引读写，不是对中文语义的真实嵌入。\nawait vector.upsert({\n  indexName: 'teaching_messages', ids: [messageId], vectors: [[1, 0, 0]],\n  metadata: [{ messageId, threadId: thread.id }]\n})\n// 查询范围限制为本次会话，不依赖旧试跑留下的向量。\nconst matches = await vector.query({ indexName: 'teaching_messages', queryVector: [1, 0, 0], topK: 1, filter: { threadId: thread.id } })\n// 使用结果中的原消息标识，在会话记录里取回对应文本。\nconst stored = await memory.recall({ threadId: thread.id, resourceId: 'demo-reader', perPage: false })\nconsole.dir({ matches, original: stored.messages.find(message => message.id === matches[0]?.metadata?.messageId) }, { depth: null })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/05-vector-index.ts"
+            }
+          ]
+        },
+        {
+          "title": "索引命中以后，继续核对记录",
+          "body": "先检查 matches 中的消息标识能否对应 original，再核对原文、会话与本次教学资料是否一致。这一步把“检索有结果”接到了“后续有依据可用”。\n维护时也要保留这份对应关系：原文删除后，残留索引可能指向不存在的消息；更换嵌入模型后，需要重新核对向量生成与索引配置。即使维度相同，不同模型的向量空间也不能直接假定兼容，通常需要重新生成相应索引数据。"
+        },
+        {
+          "title": "可以共用后端，也可以按职责拆开",
+          "body": "同一数据库服务可能同时提供消息和向量接口，也可以使用不同后端。决定拆分时，应能说明它解决了什么实际问题。\n下一节的组合存储处理的是另一个层次：把 Mastra 的不同存储领域路由到不同后端。向量服务仍通过 vector 单独配置。"
+        }
+      ]
+    }
+  }
+}

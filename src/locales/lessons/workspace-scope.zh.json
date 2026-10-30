@@ -1,0 +1,70 @@
+{
+  "title": "资料范围（Resource Scope）",
+  "lead": "按应用确认的归属选择文件位置，避免把共享工作区误当成自动按用户隔离。",
+  "sections": [
+    {
+      "title": "同一个助手，可以读取不同用户的材料",
+      "body": "同一套 Agent 配置可能服务多位用户。每个人的通知附件、草稿和产物不应仅靠模型记住“这是别人的资料”来区分。\nWorkspace 可以使用 **filesystem resolver**，根据本次 RequestContext 返回相应文件系统。归属由应用核实，路径选择由程序落实。"
+    },
+    {
+      "title": "先确认标识，再解析文件系统",
+      "body": "示例只接受 reader-a 与 reader-b 两个教学标识。每次新建请求上下文，通过 **resolveFilesystem()** 得到相应目录，再写入并读回同名 preference.txt。\n相同文件名不代表同一份数据：两个目录的内容应分别保留各自归属。未知标识不能直接变成任意宿主路径。",
+      "codeBlocks": [
+        {
+          "label": "src/06-resource-scope.js",
+          "language": "javascript",
+          "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { RequestContext } from '@mastra/core/request-context'\nimport { z } from 'zod'\n\n// 教学归属来自应用已确认的有限集合，不直接把任意用户输入拼成路径。\nconst readerSchema = z.enum(['reader-a', 'reader-b'])\n// 每个请求解析到对应用户的文件系统。\nconst workspace = new Workspace({\n  filesystem: ({ requestContext }) => new LocalFilesystem({ basePath: resolve('lab/06-users', readerSchema.parse(requestContext.get('reader'))) })\n})\nfor (const reader of ['reader-a', 'reader-b']) {\n  const requestContext = new RequestContext()\n  requestContext.set('reader', reader)\n  const filesystem = await workspace.resolveFilesystem({ requestContext })\n  await filesystem.init()\n  await filesystem.writeFile('preference.txt', `${reader} 的教学资料，仅属于这位用户。`)\n  console.log(reader, await filesystem.readFile('preference.txt', { encoding: 'utf8' }))\n}\nawait workspace.destroy()"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/06-resource-scope.js"
+        }
+      ]
+    },
+    {
+      "title": "目录范围与访问授权分别落实",
+      "body": "resolver 负责根据条件返回后端，身份核实与访问许可仍需要真实应用完成。不要把用户消息中声明的身份直接作为可信目录键。\n09 的数据库归属、08 的记忆范围与这里的文件范围可以使用一致的业务标识，但不会仅因为名称相同就自动同步配置。"
+    },
+    {
+      "title": "资料范围明确之后，保留交付物",
+      "body": "读取与修改最终会产生清单、报告或其他文件。\n最后一节让产物有路径、有来源和可核对的内容，再观察进程退出后的保留。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "两位用户都操作 preference.txt。怎样通过请求归属、解析到的目录和读回内容，确认没有串用文件？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "同一个助手，可以读取不同用户的材料",
+          "body": "同一套 Agent 配置可能服务多位用户。每个人的通知附件、草稿和产物不应仅靠模型记住“这是别人的资料”来区分。\nWorkspace 可以使用 **filesystem resolver**，根据本次 RequestContext 返回相应文件系统。归属由应用核实，路径选择由程序落实。"
+        },
+        {
+          "title": "先确认标识，再解析文件系统",
+          "body": "示例只接受 reader-a 与 reader-b 两个教学标识。每次新建请求上下文，通过 **resolveFilesystem()** 得到相应目录，再写入并读回同名 preference.txt。\n相同文件名不代表同一份数据：两个目录的内容应分别保留各自归属。未知标识不能直接变成任意宿主路径。",
+          "codeBlocks": [
+            {
+              "label": "src/06-resource-scope.ts",
+              "language": "typescript",
+              "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { RequestContext } from '@mastra/core/request-context'\nimport { z } from 'zod'\n\n// 教学归属来自应用已确认的有限集合，不直接把任意用户输入拼成路径。\nconst readerSchema = z.enum(['reader-a', 'reader-b'])\n// 每个请求解析到对应用户的文件系统。\nconst workspace = new Workspace({\n  filesystem: ({ requestContext }) => new LocalFilesystem({ basePath: resolve('lab/06-users', readerSchema.parse(requestContext.get('reader'))) })\n})\nfor (const reader of ['reader-a', 'reader-b']) {\n  const requestContext = new RequestContext()\n  requestContext.set('reader', reader)\n  const filesystem = await workspace.resolveFilesystem({ requestContext })\n  await filesystem.init()\n  await filesystem.writeFile('preference.txt', `${reader} 的教学资料，仅属于这位用户。`)\n  console.log(reader, await filesystem.readFile('preference.txt', { encoding: 'utf8' }))\n}\nawait workspace.destroy()"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/06-resource-scope.ts"
+            }
+          ]
+        },
+        {
+          "title": "目录范围与访问授权分别落实",
+          "body": "resolver 负责根据条件返回后端，身份核实与访问许可仍需要真实应用完成。不要把用户消息中声明的身份直接作为可信目录键。\n09 的数据库归属、08 的记忆范围与这里的文件范围可以使用一致的业务标识，但不会仅因为名称相同就自动同步配置。"
+        },
+        {
+          "title": "资料范围明确之后，保留交付物",
+          "body": "读取与修改最终会产生清单、报告或其他文件。\n最后一节让产物有路径、有来源和可核对的内容，再观察进程退出后的保留。"
+        }
+      ]
+    }
+  }
+}

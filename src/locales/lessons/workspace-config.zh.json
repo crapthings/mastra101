@@ -1,0 +1,88 @@
+{
+  "title": "工作区配置（Workspace）",
+  "lead": "把文件、搜索与共享方法组织到一个明确的工作范围，先让资料有处可读、产物有处可放。",
+  "sections": [
+    {
+      "title": "方法写好了，资料放在哪里",
+      "body": "技能已经说明怎样核对活动，但主办方通知、更新记录与模板可能位于多个文件。助手还需要知道从哪里读取，以及结果应该保存到哪里。\n**工作区（Workspace）**组织文件系统、搜索、技能等可用能力，也可以接入执行环境。本章先只配置文件系统，完成读取、搜索与交付产物。"
+    },
+    {
+      "title": "Workspace 组织能力，Filesystem 落实文件操作",
+      "body": "**文件系统（Filesystem）**提供读写文件的接口。这里的 **LocalFilesystem** 连接应用宿主上的目录，Workspace 再把这项能力提供给 Agent 和应用代码。\n配置文件系统后，Agent 可以获得相应的文件工具。是否允许写入、哪些路径可见，仍取决于具体配置；工作区本身不会把一个宿主目录变成操作系统级沙箱。"
+    },
+    {
+      "title": "先读回一份活动资料",
+      "body": "下载示例，进入 12-workspace 文件夹，使用 Node.js 24 或更高版本安装依赖。所有入口只操作本地教学文件，不调用模型。\n本例使用 lab/01-workspace 目录，写入活动资料后直接读回，并打印是否配置了 Sandbox。文件操作可以在没有执行环境的情况下完成。",
+      "download": {
+        "href": "/downloads/12-workspace.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install"
+        },
+        {
+          "label": "src/01-workspace.js",
+          "language": "javascript",
+          "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// 工作区组织文件能力，本例没有配置任何命令执行环境。\nconst workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: resolve('lab/01-workspace') }) })\nawait workspace.init()\ntry {\n  await workspace.filesystem.writeFile('activity.txt', '主办方资料：阅读分享会周六两点开始，南门入场。')\n  console.log(await workspace.filesystem.readFile('activity.txt', { encoding: 'utf8' }))\n  console.log('配置了执行环境：', workspace.hasSandboxConfig())\n} finally {\n  await workspace.destroy()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/01-workspace.js"
+        }
+      ]
+    },
+    {
+      "title": "文件与运行数据各自有位置",
+      "body": "09 的 Storage 保存消息、快照等运行记录，Filesystem 保存通知文件、模板和生成产物。它们可以关联，但配置一方并不会自动填好另一方。\n下一节先把路径讲清楚，避免“文件名相同”却读到了另一份资料。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "只需读取通知、保存清单时，要配置哪些能力？什么时候才需要再接入 Sandbox？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "方法写好了，资料放在哪里",
+          "body": "技能已经说明怎样核对活动，但主办方通知、更新记录与模板可能位于多个文件。助手还需要知道从哪里读取，以及结果应该保存到哪里。\n**工作区（Workspace）**组织文件系统、搜索、技能等可用能力，也可以接入执行环境。本章先只配置文件系统，完成读取、搜索与交付产物。"
+        },
+        {
+          "title": "Workspace 组织能力，Filesystem 落实文件操作",
+          "body": "**文件系统（Filesystem）**提供读写文件的接口。这里的 **LocalFilesystem** 连接应用宿主上的目录，Workspace 再把这项能力提供给 Agent 和应用代码。\n配置文件系统后，Agent 可以获得相应的文件工具。是否允许写入、哪些路径可见，仍取决于具体配置；工作区本身不会把一个宿主目录变成操作系统级沙箱。"
+        },
+        {
+          "title": "先读回一份活动资料",
+          "body": "下载示例，进入 12-workspace-ts 文件夹，使用 Node.ts 24 或更高版本安装依赖。所有入口只操作本地教学文件，不调用模型。\n本例使用 lab/01-workspace 目录，写入活动资料后直接读回，并打印是否配置了 Sandbox。文件操作可以在没有执行环境的情况下完成。",
+          "download": {
+            "href": "/downloads/12-workspace-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install"
+            },
+            {
+              "label": "src/01-workspace.ts",
+              "language": "typescript",
+              "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// 工作区组织文件能力，本例没有配置任何命令执行环境。\nconst workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: resolve('lab/01-workspace') }) })\nawait workspace.init()\ntry {\n  await workspace.filesystem.writeFile('activity.txt', '主办方资料：阅读分享会周六两点开始，南门入场。')\n  console.log(await workspace.filesystem.readFile('activity.txt', { encoding: 'utf8' }))\n  console.log('配置了执行环境：', workspace.hasSandboxConfig())\n} finally {\n  await workspace.destroy()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/01-workspace.ts"
+            }
+          ]
+        },
+        {
+          "title": "文件与运行数据各自有位置",
+          "body": "09 的 Storage 保存消息、快照等运行记录，Filesystem 保存通知文件、模板和生成产物。它们可以关联，但配置一方并不会自动填好另一方。\n下一节先把路径讲清楚，避免“文件名相同”却读到了另一份资料。"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,102 @@
+{
+  "title": "语义召回（Semantic Recall）",
+  "lead": "从相关旧消息中寻找依据，区分检索命中与事实仍然有效。",
+  "sections": [
+    {
+      "title": "换一种说法，也想找回原来的资料",
+      "body": "旧消息写“参与者统一从东门进入”，新问题问“上次说从哪个入口进场”。关键词没有完全重复，但讨论的是同一件事。\n**语义召回（Semantic Recall）**把查询与旧消息转换成嵌入表示，再检索相关内容。这接上 06 的嵌入知识：相似度帮助找候选，候选是否适用还需核对。"
+    },
+    {
+      "title": "存储、嵌入与向量索引配合",
+      "body": "消息存储保留原文，**embedder** 生成检索向量，**vector** 提供向量索引。**topK** 控制检索命中数量，**messageRange** 可带回命中消息附近的上下文，scope 决定只查当前会话还是同一资源的其他会话。\n本例先往旧会话保存一条明确资料，再从同一资源的新会话检索。脚本直接打印召回内容，先检查检索取回了什么。把候选加入 Agent 的模型上下文后，才进入根据资料回答的阶段。"
+    },
+    {
+      "title": "嵌入模型也走同一个网关",
+      "body": "聊天继续使用前面的模型，嵌入则需要能输出向量的模型。本例使用 openai/text-embedding-3-small，经同一 Vercel 网关的兼容接口调用，仍读取 AI_GATEWAY_API_KEY。\n本例固定版本的 ModelRouterEmbeddingModel 用配置对象指定 providerId、modelId 和接口地址。这里的配置对象用来指定兼容接口；前面聊天模型的三段字符串属于另一个入口，不能直接套用到这个构造器。",
+      "codeBlocks": [
+        {
+          "label": "src/05-semantic-recall.js",
+          "language": "javascript",
+          "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore, LibSQLVector } from '@mastra/libsql'\nimport { ModelRouterEmbeddingModel } from '@mastra/core/llm'\nimport { randomUUID } from 'node:crypto'\n\n// 语义召回使用嵌入模型，通过 Vercel 的兼容接口接入。\nconst embedder = new ModelRouterEmbeddingModel({\n  providerId: 'vercel', modelId: 'openai/text-embedding-3-small',\n  url: 'https://ai-gateway.vercel.sh/v1', apiKey: process.env.AI_GATEWAY_API_KEY\n})\n\n// 数据库存消息，向量索引存检索所需表示，召回范围限定到同一资源。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'recall-storage', url: 'file:./05-recall.db' }),\n  vector: new LibSQLVector({ id: 'recall-vector', url: 'file:./05-recall.db' }), embedder,\n  options: { lastMessages: 2, generateTitle: false, semanticRecall: { topK: 2, messageRange: 0, scope: 'resource' } }\n})\n\n// 为同一教学用户准备一段旧会话和一段新会话。\nconst resourceId = randomUUID()\n// 旧会话存放待检索的资料。\nconst oldThread = await memory.createThread({ threadId: randomUUID(), resourceId, title: '上次的活动安排' })\n// 新会话用于提问，不直接复制旧消息。\nconst currentThread = await memory.createThread({ threadId: randomUUID(), resourceId, title: '这次的活动提问' })\nawait memory.saveMessages({ messages: [{\n  id: randomUUID(), threadId: oldThread.id, resourceId, role: 'user', createdAt: new Date(),\n  content: { format: 2, parts: [{ type: 'text', text: '阅读分享会的参与者统一从东门进入，现场凭预约码核验。' }] }\n}] })\n\n// 改用不同措辞检索旧消息，这个脚本不调用聊天模型生成答案。\nconst recalled = await memory.recall({\n  threadId: currentThread.id, resourceId, vectorSearchString: '上次说从哪个入口进场？',\n  threadConfig: { semanticRecall: { topK: 2, messageRange: 0, scope: 'resource' } }\n})\nconsole.dir(recalled.messages.map(message => ({ threadId: message.threadId, parts: message.content.parts })), { depth: null })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/05-semantic-recall.js"
+        }
+      ],
+      "links": [
+        {
+          "label": "Vercel：兼容 API",
+          "href": "https://vercel.com/docs/ai-gateway/sdks-and-apis"
+        }
+      ]
+    },
+    {
+      "title": "相关，不代表最新或可信",
+      "body": "如果旧记录说东门，后续更正为南门，两个结果都可能很相关。回答前应保留时间、来源和更正关系，不能把最高相似度当成最终事实。\n资源范围召回可以跨会话找候选，但仍须遵守应用确定的访问范围。未命中时，应说明依据不足，而不是根据问题补造旧记忆。"
+    },
+    {
+      "title": "找回更多，也会占用更多上下文",
+      "body": "历史、工作记忆和召回结果都会占用本次输入空间。候选越多，未必越容易找准当前任务所需的细节。\n下一节回到上下文预算，决定哪些内容值得带进这次请求。",
+      "links": [
+        {
+          "label": "Mastra：语义召回",
+          "href": "https://mastra.ai/docs/memory/semantic-recall"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "新会话没有直接传入旧资料，却通过召回取得了“东门入场”。还需要怎样组织内容，才能供 Agent 回答？如果同时找到更晚的“南门入场”，应保留哪些信息来判断采用哪一条？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "换一种说法，也想找回原来的资料",
+          "body": "旧消息写“参与者统一从东门进入”，新问题问“上次说从哪个入口进场”。关键词没有完全重复，但讨论的是同一件事。\n**语义召回（Semantic Recall）**把查询与旧消息转换成嵌入表示，再检索相关内容。这接上 06 的嵌入知识：相似度帮助找候选，候选是否适用还需核对。"
+        },
+        {
+          "title": "存储、嵌入与向量索引配合",
+          "body": "消息存储保留原文，**embedder** 生成检索向量，**vector** 提供向量索引。**topK** 控制检索命中数量，**messageRange** 可带回命中消息附近的上下文，scope 决定只查当前会话还是同一资源的其他会话。\n本例先往旧会话保存一条明确资料，再从同一资源的新会话检索。脚本直接打印召回内容，先检查检索取回了什么。把候选加入 Agent 的模型上下文后，才进入根据资料回答的阶段。"
+        },
+        {
+          "title": "嵌入模型也走同一个网关",
+          "body": "聊天继续使用前面的模型，嵌入则需要能输出向量的模型。本例使用 openai/text-embedding-3-small，经同一 Vercel 网关的兼容接口调用，仍读取 AI_GATEWAY_API_KEY。\n本例固定版本的 ModelRouterEmbeddingModel 用配置对象指定 providerId、modelId 和接口地址。这里的配置对象用来指定兼容接口；前面聊天模型的三段字符串属于另一个入口，不能直接套用到这个构造器。",
+          "codeBlocks": [
+            {
+              "label": "src/05-semantic-recall.ts",
+              "language": "typescript",
+              "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore, LibSQLVector } from '@mastra/libsql'\nimport { ModelRouterEmbeddingModel } from '@mastra/core/llm'\nimport { randomUUID } from 'node:crypto'\n\n// 语义召回使用嵌入模型，通过 Vercel 的兼容接口接入。\nconst embedder = new ModelRouterEmbeddingModel({\n  providerId: 'vercel', modelId: 'openai/text-embedding-3-small',\n  url: 'https://ai-gateway.vercel.sh/v1', apiKey: process.env.AI_GATEWAY_API_KEY\n})\n\n// 数据库存消息，向量索引存检索所需表示，召回范围限定到同一资源。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'recall-storage', url: 'file:./05-recall.db' }),\n  vector: new LibSQLVector({ id: 'recall-vector', url: 'file:./05-recall.db' }), embedder,\n  options: { lastMessages: 2, generateTitle: false, semanticRecall: { topK: 2, messageRange: 0, scope: 'resource' } }\n})\n\n// 为同一教学用户准备一段旧会话和一段新会话。\nconst resourceId = randomUUID()\n// 旧会话存放待检索的资料。\nconst oldThread = await memory.createThread({ threadId: randomUUID(), resourceId, title: '上次的活动安排' })\n// 新会话用于提问，不直接复制旧消息。\nconst currentThread = await memory.createThread({ threadId: randomUUID(), resourceId, title: '这次的活动提问' })\nawait memory.saveMessages({ messages: [{\n  id: randomUUID(), threadId: oldThread.id, resourceId, role: 'user', createdAt: new Date(),\n  content: { format: 2, parts: [{ type: 'text', text: '阅读分享会的参与者统一从东门进入，现场凭预约码核验。' }] }\n}] })\n\n// 改用不同措辞检索旧消息，这个脚本不调用聊天模型生成答案。\nconst recalled = await memory.recall({\n  threadId: currentThread.id, resourceId, vectorSearchString: '上次说从哪个入口进场？',\n  threadConfig: { semanticRecall: { topK: 2, messageRange: 0, scope: 'resource' } }\n})\nconsole.dir(recalled.messages.map(message => ({ threadId: message.threadId, parts: message.content.parts })), { depth: null })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/05-semantic-recall.ts"
+            }
+          ],
+          "links": [
+            {
+              "label": "Vercel：兼容 API",
+              "href": "https://vercel.com/docs/ai-gateway/sdks-and-apis"
+            }
+          ]
+        },
+        {
+          "title": "相关，不代表最新或可信",
+          "body": "如果旧记录说东门，后续更正为南门，两个结果都可能很相关。回答前应保留时间、来源和更正关系，不能把最高相似度当成最终事实。\n资源范围召回可以跨会话找候选，但仍须遵守应用确定的访问范围。未命中时，应说明依据不足，而不是根据问题补造旧记忆。"
+        },
+        {
+          "title": "找回更多，也会占用更多上下文",
+          "body": "历史、工作记忆和召回结果都会占用本次输入空间。候选越多，未必越容易找准当前任务所需的细节。\n下一节回到上下文预算，决定哪些内容值得带进这次请求。",
+          "links": [
+            {
+              "label": "Mastra：语义召回",
+              "href": "https://mastra.ai/docs/memory/semantic-recall"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

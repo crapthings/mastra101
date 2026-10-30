@@ -1,0 +1,80 @@
+{
+  "title": "工作目录与依赖（Environment & Dependencies）",
+  "lead": "核对脚本读取文件的位置、实际使用的运行时，以及需要准备的依赖。",
+  "sections": [
+    {
+      "title": "相对文件路径从命令目录开始",
+      "body": "脚本读取 input.json 时，需要知道命令的 **cwd**。LocalSandbox 的 **workingDirectory** 提供默认位置，单次命令也可以按接口支持指定自己的 cwd。\n文件系统接口的 basePath 与执行目录分别配置。前面能用文件工具读到材料，不代表命令已经能用同样路径读到；需要明确两者的关联或挂载。"
+    },
+    {
+      "title": "让程序打印它实际收到什么",
+      "body": "本例先在工作目录写入教学 input.json，再执行 Node 读回，并打印单次传入的 ACTIVITY_STYLE 与运行时版本。\n应用需要哪些环境值，就明确提供哪些值，并核对实际执行后端。不要依赖开发机上偶然存在的目录、包或全局工具。",
+      "codeBlocks": [
+        {
+          "label": "src/03-environment.js",
+          "language": "javascript",
+          "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { writeFile } from 'node:fs/promises'\nimport { z } from 'zod'\n\n// 固定两种路径，观察本进程能执行 Node 不等于任意依赖都已存在。\nconst mode = z.enum(['正常', '缺少依赖']).parse(process.argv[2] || '正常')\n// 工作目录决定脚本里相对文件的读取位置。\nconst sandbox = new LocalSandbox({ workingDirectory: resolve('lab/03-environment') })\ntry {\n  await sandbox.start()\n  await writeFile(resolve(sandbox.workingDirectory, 'input.json'), JSON.stringify({ title: '阅读分享会', venue: '南门' }))\n  const script = mode === '缺少依赖'\n    ? 'await import(\"mastra101-teaching-missing-dependency\")'\n    : 'const {readFile}=await import(\"node:fs/promises\"); const data=JSON.parse(await readFile(\"input.json\",\"utf8\")); console.log(JSON.stringify({data,style:process.env.ACTIVITY_STYLE,node:process.version}))'\n  const result = await sandbox.executeCommand(process.execPath, ['--input-type=module', '-e', script], { env: { ACTIVITY_STYLE: '简短' } })\n  console.dir(result, { depth: null })\n} finally {\n  await sandbox.destroy()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/03-environment.js 正常"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/03-environment.js 缺少依赖"
+        }
+      ]
+    },
+    {
+      "title": "能运行 Node，不等于依赖都齐全",
+      "body": "“缺少依赖”模式尝试加载一个不存在的教学包，观察模块查找失败。真实项目应在实际运行环境里准备需要的包与版本，并检查安装和执行结果。\n不同后端对镜像、依赖缓存、网络和进程的管理方式不同。先确定代码将在哪里运行，再安排依赖，而不是只看宿主项目是否安装过某个包。"
+    },
+    {
+      "title": "用报名数据检验执行过程",
+      "body": "下一节用固定报名数据执行统计，并把文件产物读回来核对。用原始记录与预期人数对照，确认计算与文件写入都已完成。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "文件工具能读到 input.json，命令却报告文件不存在。应先比较哪两处路径？怎样确认命令实际使用的运行时与依赖？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "相对文件路径从命令目录开始",
+          "body": "脚本读取 input.tson 时，需要知道命令的 **cwd**。LocalSandbox 的 **workingDirectory** 提供默认位置，单次命令也可以按接口支持指定自己的 cwd。\n文件系统接口的 basePath 与执行目录分别配置。前面能用文件工具读到材料，不代表命令已经能用同样路径读到；需要明确两者的关联或挂载。"
+        },
+        {
+          "title": "让程序打印它实际收到什么",
+          "body": "本例先在工作目录写入教学 input.tson，再执行 Node 读回，并打印单次传入的 ACTIVITY_STYLE 与运行时版本。\n应用需要哪些环境值，就明确提供哪些值，并核对实际执行后端。不要依赖开发机上偶然存在的目录、包或全局工具。",
+          "codeBlocks": [
+            {
+              "label": "src/03-environment.ts",
+              "language": "typescript",
+              "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { writeFile } from 'node:fs/promises'\nimport { z } from 'zod'\n\n// 固定两种路径，观察本进程能执行 Node 不等于任意依赖都已存在。\nconst mode = z.enum(['正常', '缺少依赖']).parse(process.argv[2] || '正常')\n// 工作目录决定脚本里相对文件的读取位置。\nconst sandbox = new LocalSandbox({ workingDirectory: resolve('lab/03-environment') })\ntry {\n  await sandbox.start()\n  await writeFile(resolve(sandbox.workingDirectory, 'input.json'), JSON.stringify({ title: '阅读分享会', venue: '南门' }))\n  const script = mode === '缺少依赖'\n    ? 'await import(\"mastra101-teaching-missing-dependency\")'\n    : 'const {readFile}=await import(\"node:fs/promises\"); const data=JSON.parse(await readFile(\"input.json\",\"utf8\")); console.log(JSON.stringify({data,style:process.env.ACTIVITY_STYLE,node:process.version}))'\n  const result = await sandbox.executeCommand(process.execPath, ['--input-type=module', '-e', script], { env: { ACTIVITY_STYLE: '简短' } })\n  console.dir(result, { depth: null })\n} finally {\n  await sandbox.destroy()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/03-environment.ts 正常"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/03-environment.ts 缺少依赖"
+            }
+          ]
+        },
+        {
+          "title": "能运行 Node，不等于依赖都齐全",
+          "body": "“缺少依赖”模式尝试加载一个不存在的教学包，观察模块查找失败。真实项目应在实际运行环境里准备需要的包与版本，并检查安装和执行结果。\n不同后端对镜像、依赖缓存、网络和进程的管理方式不同。先确定代码将在哪里运行，再安排依赖，而不是只看宿主项目是否安装过某个包。"
+        },
+        {
+          "title": "用报名数据检验执行过程",
+          "body": "下一节用固定报名数据执行统计，并把文件产物读回来核对。用原始记录与预期人数对照，确认计算与文件写入都已完成。"
+        }
+      ]
+    }
+  }
+}

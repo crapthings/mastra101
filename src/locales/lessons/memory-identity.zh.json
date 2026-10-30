@@ -1,0 +1,138 @@
+{
+  "title": "会话与归属（Threads & Resources）",
+  "lead": "让同一个人的不同活动分开记录，同时确定哪些信息可以跨会话使用。",
+  "sections": [
+    {
+      "title": "同一个人，也会同时聊两件事",
+      "body": "同一位用户上午问阅读分享会，下午问周末展览。如果两段历史混在一起，“入口”“预约码”很容易指错活动。\n**会话（Thread）**组织一段对话；**归属（Resource）**标记它属于哪个用户或业务实体。同一归属可以拥有多段会话，每段会话的标识仍需独立。"
+    },
+    {
+      "title": "调用标识与存储字段对应起来",
+      "body": "调用 Agent 时使用 memory.thread 与 memory.resource；查询记忆 API 时，常见字段是 threadId 与 resourceId。它们对应同一组标识，只是所在接口不同。\nthreadId 标识会话，不宜拿“阅读分享会”这样的公共标题代替唯一标识。标题可以重复，标识必须区分不同记录。",
+      "table": {
+        "headers": [
+          "标识",
+          "活动助手里的含义",
+          "直接决定什么"
+        ],
+        "rows": [
+          [
+            "resource / resourceId",
+            "某位已确认的教学用户",
+            "资源范围的信息归属"
+          ],
+          [
+            "thread / threadId",
+            "这位用户的一段活动对话",
+            "本次使用哪段消息历史"
+          ],
+          [
+            "Agent id",
+            "同一套助手配置",
+            "不能代替用户与会话标识"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "先看本地数据怎样分组",
+      "body": "本例不调用模型，直接创建三段会话：第一位用户有两段，第二位用户有一段。再按第一位用户的 resourceId 列出会话，应得到两条记录。\n这个列表可以支撑聊天侧栏。应用打开其中一段时，还要确认当前用户有权访问对应归属，再读取消息。",
+      "codeBlocks": [
+        {
+          "label": "src/02-threads.js",
+          "language": "javascript",
+          "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 只使用本地存储观察会话归属，不调用模型。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'thread-storage', url: 'file:./02-threads.db' }),\n  options: { semanticRecall: false, generateTitle: false }\n})\n\n// 两位教学用户有不同归属，同一用户可以拥有多段会话。\nconst firstReader = `reader-${randomUUID()}`\n// 第二位教学用户的标识独立生成。\nconst secondReader = `reader-${randomUUID()}`\nawait memory.createThread({ threadId: randomUUID(), resourceId: firstReader, title: '阅读分享会' })\nawait memory.createThread({ threadId: randomUUID(), resourceId: firstReader, title: '周末展览' })\nawait memory.createThread({ threadId: randomUUID(), resourceId: secondReader, title: '阅读分享会' })\n\n// 应用用经过确认的归属标识查询会话列表。\nconst listed = await memory.listThreads({ filter: { resourceId: firstReader }, perPage: false })\nconsole.table(listed.threads.map(thread => ({ 会话: thread.title, 归属: thread.resourceId, 标识: thread.id })))\nconsole.log('这位教学用户应有两段会话：', listed.threads.length)"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/02-threads.js"
+        }
+      ]
+    },
+    {
+      "title": "归属范围还需要应用核实",
+      "body": "普通会话绑定归属后，不应改用另一位用户的 resource 继续读取。应用应从已核实的用户身份取得归属，校验传入的会话确实属于它。\n标识组织数据，授权逻辑决定谁能访问。RequestContext 可以传递应用核实后的条件，但用户在消息里写出某个 resourceId，并不会取得读取它的权限。",
+      "callouts": [
+        {
+          "type": "warning",
+          "body": "同一资源可以有多段历史，不代表每次调用都会加载所有会话。是否跨会话使用信息，还取决于工作记忆或语义召回的范围配置。"
+        }
+      ]
+    },
+    {
+      "title": "范围明确之后，再决定取多少历史",
+      "body": "先选对用户与会话，才能讨论本次需要带上多少消息。\n下一节通过消息历史窗口，观察存储里有的内容为何不一定出现在模型输入里。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "一位用户有“阅读分享会”和“周末展览”两段对话。想继续聊分享会，应复用哪两个标识？换到展览会话后，为什么不能假定会自动带上分享会的全部消息？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "同一个人，也会同时聊两件事",
+          "body": "同一位用户上午问阅读分享会，下午问周末展览。如果两段历史混在一起，“入口”“预约码”很容易指错活动。\n**会话（Thread）**组织一段对话；**归属（Resource）**标记它属于哪个用户或业务实体。同一归属可以拥有多段会话，每段会话的标识仍需独立。"
+        },
+        {
+          "title": "调用标识与存储字段对应起来",
+          "body": "调用 Agent 时使用 memory.thread 与 memory.resource；查询记忆 API 时，常见字段是 threadId 与 resourceId。它们对应同一组标识，只是所在接口不同。\nthreadId 标识会话，不宜拿“阅读分享会”这样的公共标题代替唯一标识。标题可以重复，标识必须区分不同记录。",
+          "table": {
+            "headers": [
+              "标识",
+              "活动助手里的含义",
+              "直接决定什么"
+            ],
+            "rows": [
+              [
+                "resource / resourceId",
+                "某位已确认的教学用户",
+                "资源范围的信息归属"
+              ],
+              [
+                "thread / threadId",
+                "这位用户的一段活动对话",
+                "本次使用哪段消息历史"
+              ],
+              [
+                "Agent id",
+                "同一套助手配置",
+                "不能代替用户与会话标识"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "先看本地数据怎样分组",
+          "body": "本例不调用模型，直接创建三段会话：第一位用户有两段，第二位用户有一段。再按第一位用户的 resourceId 列出会话，应得到两条记录。\n这个列表可以支撑聊天侧栏。应用打开其中一段时，还要确认当前用户有权访问对应归属，再读取消息。",
+          "codeBlocks": [
+            {
+              "label": "src/02-threads.ts",
+              "language": "typescript",
+              "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 只使用本地存储观察会话归属，不调用模型。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'thread-storage', url: 'file:./02-threads.db' }),\n  options: { semanticRecall: false, generateTitle: false }\n})\n\n// 两位教学用户有不同归属，同一用户可以拥有多段会话。\nconst firstReader = `reader-${randomUUID()}`\n// 第二位教学用户的标识独立生成。\nconst secondReader = `reader-${randomUUID()}`\nawait memory.createThread({ threadId: randomUUID(), resourceId: firstReader, title: '阅读分享会' })\nawait memory.createThread({ threadId: randomUUID(), resourceId: firstReader, title: '周末展览' })\nawait memory.createThread({ threadId: randomUUID(), resourceId: secondReader, title: '阅读分享会' })\n\n// 应用用经过确认的归属标识查询会话列表。\nconst listed = await memory.listThreads({ filter: { resourceId: firstReader }, perPage: false })\nconsole.table(listed.threads.map(thread => ({ 会话: thread.title, 归属: thread.resourceId, 标识: thread.id })))\nconsole.log('这位教学用户应有两段会话：', listed.threads.length)"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/02-threads.ts"
+            }
+          ]
+        },
+        {
+          "title": "归属范围还需要应用核实",
+          "body": "普通会话绑定归属后，不应改用另一位用户的 resource 继续读取。应用应从已核实的用户身份取得归属，校验传入的会话确实属于它。\n标识组织数据，授权逻辑决定谁能访问。RequestContext 可以传递应用核实后的条件，但用户在消息里写出某个 resourceId，并不会取得读取它的权限。",
+          "callouts": [
+            {
+              "type": "warning",
+              "body": "同一资源可以有多段历史，不代表每次调用都会加载所有会话。是否跨会话使用信息，还取决于工作记忆或语义召回的范围配置。"
+            }
+          ]
+        },
+        {
+          "title": "范围明确之后，再决定取多少历史",
+          "body": "先选对用户与会话，才能讨论本次需要带上多少消息。\n下一节通过消息历史窗口，观察存储里有的内容为何不一定出现在模型输入里。"
+        }
+      ]
+    }
+  }
+}

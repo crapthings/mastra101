@@ -100,5 +100,80 @@ export const chapters = [
       { id: 'agent-code-mode', path: '/agents/code-mode' },
       { id: 'agent-review', path: '/agents/review' }
     ]
+  },
+  {
+    id: 'memory',
+    lessons: [
+      { id: 'memory-config', path: '/memory' },
+      { id: 'memory-identity', path: '/memory/threads' },
+      { id: 'memory-history', path: '/memory/history' },
+      { id: 'memory-working', path: '/memory/working' },
+      { id: 'memory-recall', path: '/memory/recall' },
+      { id: 'memory-context', path: '/memory/context' },
+      { id: 'memory-observation', path: '/memory/observational' },
+      { id: 'memory-storage', path: '/memory/storage' },
+      { id: 'memory-verification', path: '/memory/review' }
+    ]
+  },
+  {
+    id: 'storage',
+    lessons: [
+      { id: 'storage-persistence', path: '/storage' },
+      { id: 'storage-scope', path: '/storage/scope' },
+      { id: 'storage-domains', path: '/storage/domains' },
+      { id: 'storage-adapters', path: '/storage/adapters' },
+      { id: 'storage-vector', path: '/storage/vector' },
+      { id: 'storage-composite', path: '/storage/composite' },
+      { id: 'storage-retention', path: '/storage/retention' }
+    ]
+  },
+  {
+    id: 'workflows',
+    lessons: [
+      { id: 'workflow-basics', path: '/workflows' },
+      { id: 'workflow-schemas', path: '/workflows/schemas' },
+      { id: 'workflow-sequence', path: '/workflows/sequential' },
+      { id: 'workflow-branch', path: '/workflows/branching' },
+      { id: 'workflow-parallel', path: '/workflows/parallel' },
+      { id: 'workflow-resume', path: '/workflows/resume' },
+      { id: 'workflow-errors', path: '/workflows/errors' },
+      { id: 'workflow-agents', path: '/workflows/agents' }
+    ]
+  },
+  {
+    id: 'skills',
+    lessons: [
+      { id: 'skill-responsibility', path: '/skills' },
+      { id: 'skill-definition', path: '/skills/definition' },
+      { id: 'skill-loading', path: '/skills/loading' },
+      { id: 'skill-files', path: '/skills/files' },
+      { id: 'skill-resources', path: '/skills/resources' },
+      { id: 'skill-dynamic', path: '/skills/dynamic' },
+      { id: 'skill-verification', path: '/skills/review' }
+    ]
+  },
+  {
+    id: 'workspace',
+    lessons: [
+      { id: 'workspace-config', path: '/workspace' },
+      { id: 'workspace-paths', path: '/workspace/paths' },
+      { id: 'workspace-files', path: '/workspace/files' },
+      { id: 'workspace-search', path: '/workspace/search' },
+      { id: 'workspace-skills', path: '/workspace/skills' },
+      { id: 'workspace-scope', path: '/workspace/scope' },
+      { id: 'workspace-artifacts', path: '/workspace/artifacts' }
+    ]
+  },
+  {
+    id: 'sandbox',
+    lessons: [
+      { id: 'sandbox-runtime', path: '/sandbox' },
+      { id: 'sandbox-results', path: '/sandbox/results' },
+      { id: 'sandbox-environment', path: '/sandbox/environment' },
+      { id: 'sandbox-code', path: '/sandbox/code' },
+      { id: 'sandbox-processes', path: '/sandbox/processes' },
+      { id: 'sandbox-isolation', path: '/sandbox/isolation' },
+      { id: 'sandbox-lifecycle', path: '/sandbox/lifecycle' }
+    ]
   }
 ]

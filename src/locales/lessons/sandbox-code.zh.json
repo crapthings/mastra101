@@ -1,0 +1,70 @@
+{
+  "title": "代码与产物（Code & Artifacts）",
+  "lead": "让代码完成确定性处理，再用原始数据核对输出文件。",
+  "sections": [
+    {
+      "title": "统计工作交给代码执行",
+      "body": "报名列表有两条有效、一条已取消，总容量 20。按这份规则，有效人数应为 2，剩余名额应为 18。\n本例把数据写成 JSON，通过 Node 执行固定统计代码，再保存 summary.json。模型没有参与计算，也没有替代实际执行。"
+    },
+    {
+      "title": "先看命令结果，再读回文件",
+      "body": "executeCommand 返回成功后，程序读取输出文件，核对有效人数、容量与剩余名额。stdout 中出现“已写入”只是日志，文件的实际内容才是下一步要交接的对象。\n当以后改由模型生成处理代码时，同样需要检查输入、执行过程和产物，而不能仅凭代码看起来合理就接受结果。",
+      "codeBlocks": [
+        {
+          "label": "src/04-code-artifact.js",
+          "language": "javascript",
+          "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { readFile, writeFile } from 'node:fs/promises'\n\n// 只执行本例提供的固定代码，输出文件写在本节工作目录。\nconst sandbox = new LocalSandbox({ workingDirectory: resolve('lab/04-code') })\ntry {\n  await sandbox.start()\n  await writeFile(resolve(sandbox.workingDirectory, 'registrations.json'), JSON.stringify([{ status: '有效' }, { status: '有效' }, { status: '已取消' }]))\n  const script = [\n    'const {readFile,writeFile}=await import(\"node:fs/promises\")',\n    'const records=JSON.parse(await readFile(\"registrations.json\",\"utf8\"))',\n    'const valid=records.filter(record=>record.status===\"有效\").length',\n    'await writeFile(\"summary.json\",JSON.stringify({valid,capacity:20,remaining:20-valid}))',\n    'console.log(\"教学汇总文件已写入\")'\n  ].join('\\n')\n  const result = await sandbox.executeCommand(process.execPath, ['--input-type=module', '-e', script])\n  console.dir(result)\n  if (result.success) console.log('实际产物：', JSON.parse(await readFile(resolve(sandbox.workingDirectory, 'summary.json'), 'utf8')))\n} finally {\n  await sandbox.destroy()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/04-code-artifact.js"
+        }
+      ]
+    },
+    {
+      "title": "生成方式与执行方式分开",
+      "body": "本章使用固定脚本，便于先建立可核对的标准。技能里的脚本、用户提供的代码和模型生成的代码，都需要适合的执行边界；将它们读成文本不会自动完成任务。\n运行结果也要保持来源：本例只统计教学文件，不能据此声称已经更新真实报名系统。"
+    },
+    {
+      "title": "处理时间变长后，需要控制进程",
+      "body": "脚本并不总会迅速结束。下一节观察命令超时与后台进程的启动、停止和退出，避免把“已经启动”误当成“已经完成”。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "summary.json 仍是上次内容，日志却显示已写入。你会怎样核对执行位置与产物？人数算成 3 时，又该检查哪条过滤规则？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "统计工作交给代码执行",
+          "body": "报名列表有两条有效、一条已取消，总容量 20。按这份规则，有效人数应为 2，剩余名额应为 18。\n本例把数据写成 JSON，通过 Node 执行固定统计代码，再保存 summary.tson。模型没有参与计算，也没有替代实际执行。"
+        },
+        {
+          "title": "先看命令结果，再读回文件",
+          "body": "executeCommand 返回成功后，程序读取输出文件，核对有效人数、容量与剩余名额。stdout 中出现“已写入”只是日志，文件的实际内容才是下一步要交接的对象。\n当以后改由模型生成处理代码时，同样需要检查输入、执行过程和产物，而不能仅凭代码看起来合理就接受结果。",
+          "codeBlocks": [
+            {
+              "label": "src/04-code-artifact.ts",
+              "language": "typescript",
+              "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { readFile, writeFile } from 'node:fs/promises'\n\n// 只执行本例提供的固定代码，输出文件写在本节工作目录。\nconst sandbox = new LocalSandbox({ workingDirectory: resolve('lab/04-code') })\ntry {\n  await sandbox.start()\n  await writeFile(resolve(sandbox.workingDirectory, 'registrations.json'), JSON.stringify([{ status: '有效' }, { status: '有效' }, { status: '已取消' }]))\n  const script = [\n    'const {readFile,writeFile}=await import(\"node:fs/promises\")',\n    'const records=JSON.parse(await readFile(\"registrations.json\",\"utf8\"))',\n    'const valid=records.filter(record=>record.status===\"有效\").length',\n    'await writeFile(\"summary.json\",JSON.stringify({valid,capacity:20,remaining:20-valid}))',\n    'console.log(\"教学汇总文件已写入\")'\n  ].join('\\n')\n  const result = await sandbox.executeCommand(process.execPath, ['--input-type=module', '-e', script])\n  console.dir(result)\n  if (result.success) console.log('实际产物：', JSON.parse(await readFile(resolve(sandbox.workingDirectory, 'summary.json'), 'utf8')))\n} finally {\n  await sandbox.destroy()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/04-code-artifact.ts"
+            }
+          ]
+        },
+        {
+          "title": "生成方式与执行方式分开",
+          "body": "本章使用固定脚本，便于先建立可核对的标准。技能里的脚本、用户提供的代码和模型生成的代码，都需要适合的执行边界；将它们读成文本不会自动完成任务。\n运行结果也要保持来源：本例只统计教学文件，不能据此声称已经更新真实报名系统。"
+        },
+        {
+          "title": "处理时间变长后，需要控制进程",
+          "body": "脚本并不总会迅速结束。下一节观察命令超时与后台进程的启动、停止和退出，避免把“已经启动”误当成“已经完成”。"
+        }
+      ]
+    }
+  }
+}

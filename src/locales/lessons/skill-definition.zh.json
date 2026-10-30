@@ -1,0 +1,70 @@
+{
+  "title": "技能定义（Skill Definition）",
+  "lead": "给方法一个稳定名称，用简短描述说明何时使用，再用正文写清怎样处理。",
+  "sections": [
+    {
+      "title": "先让人和模型知道何时需要它",
+      "body": "技能需要 **name**、**description** 与任务说明。name 是稳定标识，description 提供选择依据，instructions 解释采用这项方法后要做什么。\n“处理任何事情”无法帮助选择；“活动资料已明确时，整理出发前准备清单”则同时交代任务与使用条件。"
+    },
+    {
+      "title": "把规则写成可观察的动作",
+      "body": "按证件、携带物与入场安排分组，未知内容另列待确认。这样的规则能与输入和结果逐项对照，也方便后续修改。\n保持一份方法的职责集中。依赖查询工具时说明要取得哪些依据，但不要让技能文字冒充已执行的查询或用户授权。"
+    },
+    {
+      "title": "校验名称与技能文件结构",
+      "body": "本例先建立内联清单技能，再通过 **validateSkillContent()** 校验两份文件文本。合法样本的名称与目录一致，错误样本只改名称，用来观察校验原因。\n这项校验检查文件约定。规则是否清楚、是否帮助完成任务，要留到运行时观察。",
+      "codeBlocks": [
+        {
+          "label": "src/02-definition.js",
+          "language": "javascript",
+          "code": "import { createSkill, validateSkillContent } from '@mastra/core/skills'\n\n// name 作为稳定标识，description 说明何时使用，instructions 提供具体方法。\nconst skill = createSkill({\n  name: 'departure-checklist', description: '活动资料已明确时，整理出发前准备清单。',\n  instructions: '按证件、携带物、入场安排分组。缺少资料时标注待确认，不补造规定。'\n})\nconsole.dir({ name: skill.name, description: skill.description, instructions: skill.instructions })\n// 在保存技能文件前检查目录名与元数据是否匹配。\nconst good = '---\\nname: departure-checklist\\ndescription: 整理活动出发清单。\\n---\\n按已有材料列清单，未知事项待确认。'\n// 错误样本只修改名称，用来观察目录名不匹配。\nconst bad = good.replace('name: departure-checklist', 'name: different-name')\nconsole.dir({ 正常: validateSkillContent({ content: good, directoryName: 'departure-checklist' }), 名称不匹配: validateSkillContent({ content: bad, directoryName: 'departure-checklist' }) }, { depth: null })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/02-definition.js"
+        }
+      ]
+    },
+    {
+      "title": "定义好以后，还要知道怎样加载",
+      "body": "清楚的描述让技能容易被发现，具体规则则需要在任务相关时读入。\n下一节把“目录里有”“本次读过”和“实际遵循了”分开观察。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "技能校验通过，description 却写“什么任务都能做”。怎样改写，才能让人和模型都判断出它何时适用？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先让人和模型知道何时需要它",
+          "body": "技能需要 **name**、**description** 与任务说明。name 是稳定标识，description 提供选择依据，instructions 解释采用这项方法后要做什么。\n“处理任何事情”无法帮助选择；“活动资料已明确时，整理出发前准备清单”则同时交代任务与使用条件。"
+        },
+        {
+          "title": "把规则写成可观察的动作",
+          "body": "按证件、携带物与入场安排分组，未知内容另列待确认。这样的规则能与输入和结果逐项对照，也方便后续修改。\n保持一份方法的职责集中。依赖查询工具时说明要取得哪些依据，但不要让技能文字冒充已执行的查询或用户授权。"
+        },
+        {
+          "title": "校验名称与技能文件结构",
+          "body": "本例先建立内联清单技能，再通过 **validateSkillContent()** 校验两份文件文本。合法样本的名称与目录一致，错误样本只改名称，用来观察校验原因。\n这项校验检查文件约定。规则是否清楚、是否帮助完成任务，要留到运行时观察。",
+          "codeBlocks": [
+            {
+              "label": "src/02-definition.ts",
+              "language": "typescript",
+              "code": "import { createSkill, validateSkillContent } from '@mastra/core/skills'\n\n// name 作为稳定标识，description 说明何时使用，instructions 提供具体方法。\nconst skill = createSkill({\n  name: 'departure-checklist', description: '活动资料已明确时，整理出发前准备清单。',\n  instructions: '按证件、携带物、入场安排分组。缺少资料时标注待确认，不补造规定。'\n})\nconsole.dir({ name: skill.name, description: skill.description, instructions: skill.instructions })\n// 在保存技能文件前检查目录名与元数据是否匹配。\nconst good = '---\\nname: departure-checklist\\ndescription: 整理活动出发清单。\\n---\\n按已有材料列清单，未知事项待确认。'\n// 错误样本只修改名称，用来观察目录名不匹配。\nconst bad = good.replace('name: departure-checklist', 'name: different-name')\nconsole.dir({ 正常: validateSkillContent({ content: good, directoryName: 'departure-checklist' }), 名称不匹配: validateSkillContent({ content: bad, directoryName: 'departure-checklist' }) }, { depth: null })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/02-definition.ts"
+            }
+          ]
+        },
+        {
+          "title": "定义好以后，还要知道怎样加载",
+          "body": "清楚的描述让技能容易被发现，具体规则则需要在任务相关时读入。\n下一节把“目录里有”“本次读过”和“实际遵循了”分开观察。"
+        }
+      ]
+    }
+  }
+}

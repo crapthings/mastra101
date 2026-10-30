@@ -1,0 +1,70 @@
+{
+  "title": "动态技能（Dynamic Skills）",
+  "lead": "让应用条件决定可用方法，分清技能范围与实际操作权限。",
+  "sections": [
+    {
+      "title": "同一个 Agent，也会服务不同任务",
+      "body": "资料核对需要逐项找事实与缺口，提醒文案更关注表达简短。应用可以把已确认的任务类型放进 RequestContext，再提供相应技能。\n**动态 skills** 使用函数返回技能集合。这是应用配置的变化；它不把用户消息中的任意要求自动变成可信配置。"
+    },
+    {
+      "title": "用独立请求上下文观察两份目录",
+      "body": "示例对两个教学任务分别创建 RequestContext，解析有限的任务类型，再通过 listSkills({ requestContext }) 观察可用技能。\n每次使用新的上下文对象，让任务条件与本次请求对应。技能解析函数在列出元数据时也可能运行，因此适合只做必要的配置选择。",
+      "codeBlocks": [
+        {
+          "label": "src/06-dynamic.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { createSkill } from '@mastra/core/skills'\nimport { RequestContext } from '@mastra/core/request-context'\nimport { z } from 'zod'\n\n// 核对资料的方法只在应用确认的任务类型匹配时提供。\nconst review = createSkill({ name: 'activity-review', description: '核对活动资料与未知项。', instructions: '按原文核对时间与地点，列出缺口。' })\n// 提醒任务使用另一份方法。\nconst reminder = createSkill({ name: 'short-reminder', description: '编写简短活动提醒。', instructions: '只使用已确认资料，不声称已经发送。' })\n// 应用条件决定可用技能，技能本身不赋予执行权限。\nconst agent = new Agent({\n  id: 'dynamic-skills', name: '活动助手', model: 'vercel/openai/gpt-6.1-sol',\n  skills: ({ requestContext }) => z.enum(['资料核对', '提醒文案']).parse(requestContext.get('task')) === '资料核对' ? [review] : [reminder]\n})\nfor (const task of ['资料核对', '提醒文案']) {\n  const requestContext = new RequestContext()\n  requestContext.set('task', task)\n  console.log(task, (await agent.listSkills({ requestContext })).map(skill => skill.name))\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/06-dynamic.js"
+        }
+      ]
+    },
+    {
+      "title": "提供方法，不等于批准动作",
+      "body": "提供提醒技能，只说明 Agent 可以读取编写提醒的方法。发送通知仍需要实际工具、应用权限与必要的确认。\n同理，移除技能不等于撤销所有工具权限。方法集合与执行能力要分别配置，保持职责清楚。"
+    },
+    {
+      "title": "最后用同一组资料核对改动",
+      "body": "技能会随着需求修改。变更以后，应比较规则是否更容易被选中、读取和正确使用。\n最后一节用有地点与缺地点两组资料，形成可重复的核对路径。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "资料核对与提醒文案分别应提供哪项技能？切换技能集合后，为什么仍需单独配置查询或发送工具？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "同一个 Agent，也会服务不同任务",
+          "body": "资料核对需要逐项找事实与缺口，提醒文案更关注表达简短。应用可以把已确认的任务类型放进 RequestContext，再提供相应技能。\n**动态 skills** 使用函数返回技能集合。这是应用配置的变化；它不把用户消息中的任意要求自动变成可信配置。"
+        },
+        {
+          "title": "用独立请求上下文观察两份目录",
+          "body": "示例对两个教学任务分别创建 RequestContext，解析有限的任务类型，再通过 listSkills({ requestContext }) 观察可用技能。\n每次使用新的上下文对象，让任务条件与本次请求对应。技能解析函数在列出元数据时也可能运行，因此适合只做必要的配置选择。",
+          "codeBlocks": [
+            {
+              "label": "src/06-dynamic.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { createSkill } from '@mastra/core/skills'\nimport { RequestContext } from '@mastra/core/request-context'\nimport { z } from 'zod'\n\n// 核对资料的方法只在应用确认的任务类型匹配时提供。\nconst review = createSkill({ name: 'activity-review', description: '核对活动资料与未知项。', instructions: '按原文核对时间与地点，列出缺口。' })\n// 提醒任务使用另一份方法。\nconst reminder = createSkill({ name: 'short-reminder', description: '编写简短活动提醒。', instructions: '只使用已确认资料，不声称已经发送。' })\n// 应用条件决定可用技能，技能本身不赋予执行权限。\nconst agent = new Agent({\n  id: 'dynamic-skills', name: '活动助手', model: 'vercel/openai/gpt-6.1-sol',\n  skills: ({ requestContext }) => z.enum(['资料核对', '提醒文案']).parse(requestContext.get('task')) === '资料核对' ? [review] : [reminder]\n})\nfor (const task of ['资料核对', '提醒文案']) {\n  const requestContext = new RequestContext()\n  requestContext.set('task', task)\n  console.log(task, (await agent.listSkills({ requestContext })).map(skill => skill.name))\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/06-dynamic.ts"
+            }
+          ]
+        },
+        {
+          "title": "提供方法，不等于批准动作",
+          "body": "提供提醒技能，只说明 Agent 可以读取编写提醒的方法。发送通知仍需要实际工具、应用权限与必要的确认。\n同理，移除技能不等于撤销所有工具权限。方法集合与执行能力要分别配置，保持职责清楚。"
+        },
+        {
+          "title": "最后用同一组资料核对改动",
+          "body": "技能会随着需求修改。变更以后，应比较规则是否更容易被选中、读取和正确使用。\n最后一节用有地点与缺地点两组资料，形成可重复的核对路径。"
+        }
+      ]
+    }
+  }
+}

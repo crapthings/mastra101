@@ -1,0 +1,130 @@
+{
+  "title": "暂停与恢复（Suspend & Resume）",
+  "lead": "保存运行快照，等待补充或确认，再从明确的步骤恢复。",
+  "sections": [
+    {
+      "title": "缺少资料时，先把等待保存下来",
+      "body": "用户还不知道地点，流程不能继续制作最终清单。步骤可以通过 **suspend()** 返回等待原因，并把这次执行标记为 suspended。\n**suspendSchema** 描述向外提供的等待信息，**resumeSchema** 描述恢复时必须补回的数据。suspendPayload 可以用于展示需要用户处理的事项。"
+    },
+    {
+      "title": "恢复的是同一份运行，不是重新 start",
+      "body": "**resume()** 会重新进入暂停的步骤，并提供 **resumeData**。它不是从原来 JavaScript 语句的下一行接着执行，也不是另开一个任务从头开始。\n暂停前后的步骤要据此安排：资料检查可以再次执行，保存清单等写入则放到明确确认之后。用户拒绝时应作为一种有效决定处理，不能因为 false 就再次被当成“尚未回答”。"
+    },
+    {
+      "title": "快照、runId 与流程定义一起找回来",
+      "body": "示例把工作流注册到 Mastra，使用 LibSQLStore 保存快照。另一个进程通过相同数据库与流程定义，结合 **runId** 找回运行，再调用 createRun({ runId }) 取得恢复入口。\n**getWorkflowRunById()** 读取已保存状态，**createWorkflowStateReader()** 帮助识别当前暂停步骤。本例会先核对这次命令是否对应正在等待的步骤，避免尚缺地点时直接确认保存。"
+    },
+    {
+      "title": "分三次运行，看到两个不同的等待",
+      "body": "先“开始”，流程因缺少地点暂停；再“补充 南门”，流程制作清单后等待确认；最后执行“确认”才写入教学文件，也可以用“拒绝”结束。\n06-pending.json 只保存这份教学运行的标识，真正的快照在数据库中。每次“开始”会新建运行并覆盖这个指针文件；本例用于观察单个任务，不代替多用户运行列表。",
+      "codeBlocks": [
+        {
+          "label": "src/06-suspend-resume.js",
+          "language": "javascript",
+          "code": "import { createStep, createWorkflow, createWorkflowStateReader } from '@mastra/core/workflows'\nimport { z } from 'zod'\nimport { Mastra } from '@mastra/core'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { readFile, writeFile } from 'node:fs/promises'\n\n// 起始资料允许缺少地点，先通过暂停索取补充。\nconst initialSchema = z.object({ title: z.string(), venue: z.string().optional() })\n// 补充完成后，后续步骤要求地点存在。\nconst completeSchema = z.object({ title: z.string(), venue: z.string().min(1) })\n// 清单在进入确认步骤前就有了明确内容。\nconst checklistSchema = z.object({ title: z.string(), venue: z.string(), items: z.array(z.string()) })\n// 用户决定是交接数据的一部分，false 表示明确拒绝。\nconst approvedSchema = checklistSchema.extend({ approved: z.boolean() })\n// 最终结果如实区分保存与拒绝。\nconst resultSchema = z.object({ status: z.enum(['已保存', '已拒绝']), file: z.string().nullable() })\n// resume 会重新进入此步骤，所以只在这里检查输入与补充数据。\nconst complete = createStep({\n  id: 'complete-details', inputSchema: initialSchema, outputSchema: completeSchema,\n  suspendSchema: z.object({ reason: z.string() }), resumeSchema: z.object({ venue: z.string().trim().min(1) }),\n  execute: async ({ inputData, resumeData, suspend }) => {\n    const venue = resumeData?.venue || inputData.venue\n    if (!venue) return await suspend({ reason: '请补充主办方确认的入场地点。' })\n    return { title: inputData.title, venue }\n  }\n})\n// 在资料齐全以后才制作清单。\nconst prepare = createStep({\n  id: 'prepare-checklist', inputSchema: completeSchema, outputSchema: checklistSchema,\n  execute: async ({ inputData }) => ({ ...inputData, items: [`从${inputData.venue}入场`, '带好预约码'] })\n})\n// 先暂停展示具体清单，恢复时明确处理批准和拒绝。\nconst confirm = createStep({\n  id: 'confirm-checklist', inputSchema: checklistSchema, outputSchema: approvedSchema,\n  suspendSchema: checklistSchema, resumeSchema: z.object({ approved: z.boolean() }),\n  execute: async ({ inputData, resumeData, suspend }) => {\n    if (!resumeData) return await suspend(inputData)\n    return { ...inputData, approved: resumeData.approved }\n  }\n})\n// 仅在明确批准后写入或覆盖本地教学文件。\nconst save = createStep({\n  id: 'save-checklist', inputSchema: approvedSchema, outputSchema: resultSchema,\n  execute: async ({ inputData }) => {\n    if (!inputData.approved) return { status: '已拒绝', file: null }\n    await writeFile('06-confirmed.json', JSON.stringify({ title: inputData.title, venue: inputData.venue, items: inputData.items }, null, 2))\n    return { status: '已保存', file: '06-confirmed.json' }\n  }\n})\n// 同一份流程定义用于开始、补充与确认三个独立进程。\nconst workflow = createWorkflow({ id: 'activity-confirmation', inputSchema: initialSchema, outputSchema: resultSchema })\n  .then(complete).then(prepare).then(confirm).then(save).commit()\n// 快照写入本节数据库，供另一个进程按 runId 恢复。\nconst mastra = new Mastra({ workflows: { activity: workflow }, storage: new LibSQLStore({ id: 'workflow-storage', url: 'file:./06-workflows.db' }) })\n// 通过实例取得注册的工作流，使存储配置参与运行。\nconst registered = mastra.getWorkflow('activity')\n// 命令参数代表这次用户明确发起的操作。\nconst mode = z.enum(['开始', '补充', '确认', '拒绝']).parse(process.argv[2] || '开始')\nif (mode === '开始') {\n  const run = await registered.createRun()\n  const result = await run.start({ inputData: { title: '阅读分享会' } })\n  if (result.status === 'suspended') await writeFile('06-pending.json', JSON.stringify({ runId: run.runId }))\n  console.log('运行标识：', run.runId)\n  console.dir(result, { depth: null })\n} else {\n  const pending = z.object({ runId: z.string().min(1) }).parse(JSON.parse(await readFile('06-pending.json', 'utf8')))\n  const stored = await registered.getWorkflowRunById(pending.runId)\n  if (stored?.status !== 'suspended') throw new Error('这次运行不在等待恢复，不能重复确认。')\n  const suspended = createWorkflowStateReader(stored).getSuspendedStep()\n  const expectedStep = mode === '补充' ? 'complete-details' : 'confirm-checklist'\n  if (suspended?.stepId !== expectedStep) throw new Error('当前等待的步骤与命令不一致，请先按提示补充或确认。')\n  console.log('本次待恢复步骤：', suspended.stepId)\n  console.dir(suspended.suspendPayload, { depth: null })\n  const run = await registered.createRun({ runId: pending.runId })\n  const result = mode === '补充'\n    ? await run.resume({ step: 'complete-details', resumeData: { venue: z.string().trim().min(1).parse(process.argv[3]) } })\n    : await run.resume({ step: 'confirm-checklist', resumeData: { approved: mode === '确认' } })\n  console.dir(result, { depth: null })\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/06-suspend-resume.js 开始"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/06-suspend-resume.js 补充 南门"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/06-suspend-resume.js 确认"
+        }
+      ]
+    },
+    {
+      "title": "确认与写入分别核对",
+      "body": "批准后检查 save-checklist 的输出，再核对 06-confirmed.json 的内容；拒绝路径应返回“已拒绝”且不发生本次写入。旧文件如果已经存在，拒绝不会删除它。\n真实应用还要校验当前用户是否有权恢复这次运行，并确认执行结果。跨进程恢复依赖存储，读取不到快照时，应核对数据库位置、运行标识与兼容的流程定义。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "暂停表示执行正在等待，恢复表示再次进入相应步骤。批准只是执行条件满足，实际写入是否成功仍要检查。"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：暂停与恢复",
+          "href": "https://mastra.ai/docs/workflows/suspend-and-resume"
+        }
+      ]
+    },
+    {
+      "title": "等待之外，还可能遇到失败",
+      "body": "缺少资料与等待确认都有预期的恢复方式。查询服务故障、结构不符合约定等失败，则需要另一套判断。\n下一节区分运行状态、步骤重试与业务上的提前结束。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "开始后当前步骤还在等地点，能否直接执行确认命令？恢复时暂停步骤会再次执行，为什么不宜在 suspend 之前放置不可重复的写入？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "缺少资料时，先把等待保存下来",
+          "body": "用户还不知道地点，流程不能继续制作最终清单。步骤可以通过 **suspend()** 返回等待原因，并把这次执行标记为 suspended。\n**suspendSchema** 描述向外提供的等待信息，**resumeSchema** 描述恢复时必须补回的数据。suspendPayload 可以用于展示需要用户处理的事项。"
+        },
+        {
+          "title": "恢复的是同一份运行，不是重新 start",
+          "body": "**resume()** 会重新进入暂停的步骤，并提供 **resumeData**。它不是从原来 JavaScript 语句的下一行接着执行，也不是另开一个任务从头开始。\n暂停前后的步骤要据此安排：资料检查可以再次执行，保存清单等写入则放到明确确认之后。用户拒绝时应作为一种有效决定处理，不能因为 false 就再次被当成“尚未回答”。"
+        },
+        {
+          "title": "快照、runId 与流程定义一起找回来",
+          "body": "示例把工作流注册到 Mastra，使用 LibSQLStore 保存快照。另一个进程通过相同数据库与流程定义，结合 **runId** 找回运行，再调用 createRun({ runId }) 取得恢复入口。\n**getWorkflowRunById()** 读取已保存状态，**createWorkflowStateReader()** 帮助识别当前暂停步骤。本例会先核对这次命令是否对应正在等待的步骤，避免尚缺地点时直接确认保存。"
+        },
+        {
+          "title": "分三次运行，看到两个不同的等待",
+          "body": "先“开始”，流程因缺少地点暂停；再“补充 南门”，流程制作清单后等待确认；最后执行“确认”才写入教学文件，也可以用“拒绝”结束。\n06-pending.tson 只保存这份教学运行的标识，真正的快照在数据库中。每次“开始”会新建运行并覆盖这个指针文件；本例用于观察单个任务，不代替多用户运行列表。",
+          "codeBlocks": [
+            {
+              "label": "src/06-suspend-resume.ts",
+              "language": "typescript",
+              "code": "import { createStep, createWorkflow, createWorkflowStateReader } from '@mastra/core/workflows'\nimport { z } from 'zod'\nimport { Mastra } from '@mastra/core'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { readFile, writeFile } from 'node:fs/promises'\n\n// 起始资料允许缺少地点，先通过暂停索取补充。\nconst initialSchema = z.object({ title: z.string(), venue: z.string().optional() })\n// 补充完成后，后续步骤要求地点存在。\nconst completeSchema = z.object({ title: z.string(), venue: z.string().min(1) })\n// 清单在进入确认步骤前就有了明确内容。\nconst checklistSchema = z.object({ title: z.string(), venue: z.string(), items: z.array(z.string()) })\n// 用户决定是交接数据的一部分，false 表示明确拒绝。\nconst approvedSchema = checklistSchema.extend({ approved: z.boolean() })\n// 最终结果如实区分保存与拒绝。\nconst resultSchema = z.object({ status: z.enum(['已保存', '已拒绝']), file: z.string().nullable() })\n// resume 会重新进入此步骤，所以只在这里检查输入与补充数据。\nconst complete = createStep({\n  id: 'complete-details', inputSchema: initialSchema, outputSchema: completeSchema,\n  suspendSchema: z.object({ reason: z.string() }), resumeSchema: z.object({ venue: z.string().trim().min(1) }),\n  execute: async ({ inputData, resumeData, suspend }) => {\n    const venue = resumeData?.venue || inputData.venue\n    if (!venue) return await suspend({ reason: '请补充主办方确认的入场地点。' })\n    return { title: inputData.title, venue }\n  }\n})\n// 在资料齐全以后才制作清单。\nconst prepare = createStep({\n  id: 'prepare-checklist', inputSchema: completeSchema, outputSchema: checklistSchema,\n  execute: async ({ inputData }) => ({ ...inputData, items: [`从${inputData.venue}入场`, '带好预约码'] })\n})\n// 先暂停展示具体清单，恢复时明确处理批准和拒绝。\nconst confirm = createStep({\n  id: 'confirm-checklist', inputSchema: checklistSchema, outputSchema: approvedSchema,\n  suspendSchema: checklistSchema, resumeSchema: z.object({ approved: z.boolean() }),\n  execute: async ({ inputData, resumeData, suspend }) => {\n    if (!resumeData) return await suspend(inputData)\n    return { ...inputData, approved: resumeData.approved }\n  }\n})\n// 仅在明确批准后写入或覆盖本地教学文件。\nconst save = createStep({\n  id: 'save-checklist', inputSchema: approvedSchema, outputSchema: resultSchema,\n  execute: async ({ inputData }) => {\n    if (!inputData.approved) return { status: '已拒绝', file: null }\n    await writeFile('06-confirmed.json', JSON.stringify({ title: inputData.title, venue: inputData.venue, items: inputData.items }, null, 2))\n    return { status: '已保存', file: '06-confirmed.json' }\n  }\n})\n// 同一份流程定义用于开始、补充与确认三个独立进程。\nconst workflow = createWorkflow({ id: 'activity-confirmation', inputSchema: initialSchema, outputSchema: resultSchema })\n  .then(complete).then(prepare).then(confirm).then(save).commit()\n// 快照写入本节数据库，供另一个进程按 runId 恢复。\nconst mastra = new Mastra({ workflows: { activity: workflow }, storage: new LibSQLStore({ id: 'workflow-storage', url: 'file:./06-workflows.db' }) })\n// 通过实例取得注册的工作流，使存储配置参与运行。\nconst registered = mastra.getWorkflow('activity')\n// 命令参数代表这次用户明确发起的操作。\nconst mode = z.enum(['开始', '补充', '确认', '拒绝']).parse(process.argv[2] || '开始')\nif (mode === '开始') {\n  const run = await registered.createRun()\n  const result = await run.start({ inputData: { title: '阅读分享会' } })\n  if (result.status === 'suspended') await writeFile('06-pending.json', JSON.stringify({ runId: run.runId }))\n  console.log('运行标识：', run.runId)\n  console.dir(result, { depth: null })\n} else {\n  const pending = z.object({ runId: z.string().min(1) }).parse(JSON.parse(await readFile('06-pending.json', 'utf8')))\n  const stored = await registered.getWorkflowRunById(pending.runId)\n  if (stored?.status !== 'suspended') throw new Error('这次运行不在等待恢复，不能重复确认。')\n  const suspended = createWorkflowStateReader(stored).getSuspendedStep()\n  const expectedStep = mode === '补充' ? 'complete-details' : 'confirm-checklist'\n  if (suspended?.stepId !== expectedStep) throw new Error('当前等待的步骤与命令不一致，请先按提示补充或确认。')\n  console.log('本次待恢复步骤：', suspended.stepId)\n  console.dir(suspended.suspendPayload, { depth: null })\n  const run = await registered.createRun({ runId: pending.runId })\n  const result = mode === '补充'\n    ? await run.resume({ step: 'complete-details', resumeData: { venue: z.string().trim().min(1).parse(process.argv[3]) } })\n    : await run.resume({ step: 'confirm-checklist', resumeData: { approved: mode === '确认' } })\n  console.dir(result, { depth: null })\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/06-suspend-resume.ts 开始"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/06-suspend-resume.ts 补充 南门"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/06-suspend-resume.ts 确认"
+            }
+          ]
+        },
+        {
+          "title": "确认与写入分别核对",
+          "body": "批准后检查 save-checklist 的输出，再核对 06-confirmed.tson 的内容；拒绝路径应返回“已拒绝”且不发生本次写入。旧文件如果已经存在，拒绝不会删除它。\n真实应用还要校验当前用户是否有权恢复这次运行，并确认执行结果。跨进程恢复依赖存储，读取不到快照时，应核对数据库位置、运行标识与兼容的流程定义。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "暂停表示执行正在等待，恢复表示再次进入相应步骤。批准只是执行条件满足，实际写入是否成功仍要检查。"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：暂停与恢复",
+              "href": "https://mastra.ai/docs/workflows/suspend-and-resume"
+            }
+          ]
+        },
+        {
+          "title": "等待之外，还可能遇到失败",
+          "body": "缺少资料与等待确认都有预期的恢复方式。查询服务故障、结构不符合约定等失败，则需要另一套判断。\n下一节区分运行状态、步骤重试与业务上的提前结束。"
+        }
+      ]
+    }
+  }
+}

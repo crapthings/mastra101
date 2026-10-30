@@ -1,0 +1,15 @@
+{
+  "title": "文件接口、执行位置与系统隔离分开配置",
+  "caption": "左侧文件接口有自己的范围限制，右侧命令默认使用宿主权限。原生 isolation 需要显式配置并验证，且策略因平台而异；工作目录本身不等于系统隔离。",
+  "fs": "LocalFilesystem",
+  "fsDetail": "basePath / readOnly",
+  "cmd": "LocalSandbox",
+  "cmdDetail": "workingDirectory / cwd",
+  "files": "约束相应文件接口",
+  "filesDetail": "路径范围与允许的操作",
+  "host": "默认宿主执行",
+  "hostDetail": "工作目录用于定位文件",
+  "policy": "isolation + nativeSandbox",
+  "policyDetail": "显式选择并验证系统策略",
+  "note": "不能用左侧配置推断右侧权限"
+}

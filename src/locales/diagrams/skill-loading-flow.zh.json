@@ -1,0 +1,12 @@
+{
+  "title": "先发现方法，再按需读取",
+  "caption": "名称和用途用于发现；skill 带回完整说明；支持文件在需要时通过 skill_read 读取。加载记录与最终结果分别核对，读取说明不会自动执行其中的操作。",
+  "metadata": "名称与用途",
+  "metadataDetail": "决定哪项方法适合当前任务",
+  "load": "skill：加载完整说明",
+  "loadDetail": "规则 + 支持文件列表",
+  "read": "skill_read：按需读细节",
+  "readDetail": "可选：参考资料与模板",
+  "review": "依据方法处理并核对结果",
+  "reviewDetail": "与本次任务资料逐项对照"
+}

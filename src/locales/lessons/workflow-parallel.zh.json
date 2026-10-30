@@ -1,0 +1,78 @@
+{
+  "title": "并行与遍历（Parallel & Foreach）",
+  "lead": "区分同一份资料上的不同工作，与多份资料上的同一种处理。",
+  "sections": [
+    {
+      "title": "独立的工作，可以一起准备",
+      "body": "入场提示和携带要求都依赖已提供的活动资料，彼此没有先后依赖。可以通过 **.parallel()** 组织不同步骤，等它们都完成后，再把结果交给合并步骤。\n每项结果以步骤 id 为键。本例使用 entrance.notice 与 materials.items，合成一份字符串数组。"
+    },
+    {
+      "title": "逐项处理，用 foreach 表达重复工作",
+      "body": "清单已经有了多项内容，现在要对每一项加上“出发前核对”的前缀。这是同一个步骤处理数组里的不同元素，可以使用 **.foreach()**。\n单项步骤的 inputSchema 描述一个元素；foreach 后面的步骤接收处理结果的数组。**concurrency: 2** 限制同时处理的项数，适合把并发数量与服务能力一起考虑。"
+    },
+    {
+      "title": "先合并不同工作，再处理每个条目",
+      "body": "脚本先运行 parallel 流程，拿到“南门入场、预约码、纸质笔记本”三项，再把数组作为另一份 foreach 流程的输入。\n核对两类形状：parallel 合并前是按步骤 id 分组的对象，foreach 后是单项结果组成的数组。结果交给下一步时，都需要与其输入约定一致。",
+      "codeBlocks": [
+        {
+          "label": "src/05-parallel-foreach.js",
+          "language": "javascript",
+          "code": "import { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { z } from 'zod'\n\n// 两项独立检查读取同一份活动资料。\nconst activitySchema = z.object({ title: z.string(), venue: z.string() })\n// 第一个步骤整理入场提示。\nconst entrance = createStep({\n  id: 'entrance', inputSchema: activitySchema, outputSchema: z.object({ notice: z.string() }),\n  execute: async ({ inputData }) => ({ notice: `从${inputData.venue}入场` })\n})\n// 第二个步骤整理固定的教学携带要求。\nconst materials = createStep({\n  id: 'materials', inputSchema: activitySchema, outputSchema: z.object({ items: z.array(z.string()) }),\n  execute: async () => ({ items: ['预约码', '纸质笔记本'] })\n})\n// 合并步骤按上游步骤 id 读取各自结果。\nconst merge = createStep({\n  id: 'merge', inputSchema: z.object({ entrance: z.object({ notice: z.string() }), materials: z.object({ items: z.array(z.string()) }) }),\n  outputSchema: z.array(z.string()),\n  execute: async ({ inputData }) => [inputData.entrance.notice, ...inputData.materials.items]\n})\n// parallel 组织不同工作，都完成后才进入合并步骤。\nconst parallelWorkflow = createWorkflow({ id: 'activity-parallel', inputSchema: activitySchema, outputSchema: z.array(z.string()) })\n  .parallel([entrance, materials]).then(merge).commit()\n// foreach 使用同一种处理处理数组里的每一项。\nconst item = createStep({\n  id: 'prepare-item', inputSchema: z.string(), outputSchema: z.string(),\n  execute: async ({ inputData }) => `出发前核对：${inputData}`\n})\n// 数组处理完成后，交付全部结果与数量。\nconst summarize = createStep({\n  id: 'summarize', inputSchema: z.array(z.string()), outputSchema: z.object({ items: z.array(z.string()), count: z.number() }),\n  execute: async ({ inputData }) => ({ items: inputData, count: inputData.length })\n})\n// 显式限制并发项数，实际项目可据接口或模型服务能力调整。\nconst foreachWorkflow = createWorkflow({ id: 'activity-foreach', inputSchema: z.array(z.string()), outputSchema: z.object({ items: z.array(z.string()), count: z.number() }) })\n  .foreach(item, { concurrency: 2 }).then(summarize).commit()\n// 先执行独立检查，取得数组后再执行逐项处理。\nconst firstRun = await parallelWorkflow.createRun()\n// 只有第一份流程成功，才把其产物交给第二份流程。\nconst first = await firstRun.start({ inputData: { title: '阅读分享会', venue: '南门' } })\nconsole.dir(first, { depth: null })\nif (first.status === 'success') {\n  const secondRun = await foreachWorkflow.createRun()\n  console.dir(await secondRun.start({ inputData: first.result }), { depth: null })\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/05-parallel-foreach.js"
+        }
+      ]
+    },
+    {
+      "title": "并行不改变数据依赖与业务责任",
+      "body": "必须先查到地点才能制作入口提示，就仍然存在顺序依赖。并行也不会自动解决重复写入、接口限额或步骤失败后的补偿。\n本例只做本地转换，便于先观察数据形状。实际接入外部接口后，还要按具体失败情况决定如何处理已完成的工作。"
+    },
+    {
+      "title": "有些等待，应该保留状态而不是一直占着进程",
+      "body": "前面的例子都能在一次调用中完成。如果需要用户补充地点，或等用户看过清单再确认，就应把等待明确表达出来。\n下一节让流程暂停，并在新进程中继续同一次运行。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "同一份资料需要生成入场提示和携带要求，应优先考虑 parallel 还是 foreach？对十份清单逐项执行同一种检查，又应怎样描述每项输入与整体输出？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "独立的工作，可以一起准备",
+          "body": "入场提示和携带要求都依赖已提供的活动资料，彼此没有先后依赖。可以通过 **.parallel()** 组织不同步骤，等它们都完成后，再把结果交给合并步骤。\n每项结果以步骤 id 为键。本例使用 entrance.notice 与 materials.items，合成一份字符串数组。"
+        },
+        {
+          "title": "逐项处理，用 foreach 表达重复工作",
+          "body": "清单已经有了多项内容，现在要对每一项加上“出发前核对”的前缀。这是同一个步骤处理数组里的不同元素，可以使用 **.foreach()**。\n单项步骤的 inputSchema 描述一个元素；foreach 后面的步骤接收处理结果的数组。**concurrency: 2** 限制同时处理的项数，适合把并发数量与服务能力一起考虑。"
+        },
+        {
+          "title": "先合并不同工作，再处理每个条目",
+          "body": "脚本先运行 parallel 流程，拿到“南门入场、预约码、纸质笔记本”三项，再把数组作为另一份 foreach 流程的输入。\n核对两类形状：parallel 合并前是按步骤 id 分组的对象，foreach 后是单项结果组成的数组。结果交给下一步时，都需要与其输入约定一致。",
+          "codeBlocks": [
+            {
+              "label": "src/05-parallel-foreach.ts",
+              "language": "typescript",
+              "code": "import { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { z } from 'zod'\n\n// 两项独立检查读取同一份活动资料。\nconst activitySchema = z.object({ title: z.string(), venue: z.string() })\n// 第一个步骤整理入场提示。\nconst entrance = createStep({\n  id: 'entrance', inputSchema: activitySchema, outputSchema: z.object({ notice: z.string() }),\n  execute: async ({ inputData }) => ({ notice: `从${inputData.venue}入场` })\n})\n// 第二个步骤整理固定的教学携带要求。\nconst materials = createStep({\n  id: 'materials', inputSchema: activitySchema, outputSchema: z.object({ items: z.array(z.string()) }),\n  execute: async () => ({ items: ['预约码', '纸质笔记本'] })\n})\n// 合并步骤按上游步骤 id 读取各自结果。\nconst merge = createStep({\n  id: 'merge', inputSchema: z.object({ entrance: z.object({ notice: z.string() }), materials: z.object({ items: z.array(z.string()) }) }),\n  outputSchema: z.array(z.string()),\n  execute: async ({ inputData }) => [inputData.entrance.notice, ...inputData.materials.items]\n})\n// parallel 组织不同工作，都完成后才进入合并步骤。\nconst parallelWorkflow = createWorkflow({ id: 'activity-parallel', inputSchema: activitySchema, outputSchema: z.array(z.string()) })\n  .parallel([entrance, materials]).then(merge).commit()\n// foreach 使用同一种处理处理数组里的每一项。\nconst item = createStep({\n  id: 'prepare-item', inputSchema: z.string(), outputSchema: z.string(),\n  execute: async ({ inputData }) => `出发前核对：${inputData}`\n})\n// 数组处理完成后，交付全部结果与数量。\nconst summarize = createStep({\n  id: 'summarize', inputSchema: z.array(z.string()), outputSchema: z.object({ items: z.array(z.string()), count: z.number() }),\n  execute: async ({ inputData }) => ({ items: inputData, count: inputData.length })\n})\n// 显式限制并发项数，实际项目可据接口或模型服务能力调整。\nconst foreachWorkflow = createWorkflow({ id: 'activity-foreach', inputSchema: z.array(z.string()), outputSchema: z.object({ items: z.array(z.string()), count: z.number() }) })\n  .foreach(item, { concurrency: 2 }).then(summarize).commit()\n// 先执行独立检查，取得数组后再执行逐项处理。\nconst firstRun = await parallelWorkflow.createRun()\n// 只有第一份流程成功，才把其产物交给第二份流程。\nconst first = await firstRun.start({ inputData: { title: '阅读分享会', venue: '南门' } })\nconsole.dir(first, { depth: null })\nif (first.status === 'success') {\n  const secondRun = await foreachWorkflow.createRun()\n  console.dir(await secondRun.start({ inputData: first.result }), { depth: null })\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/05-parallel-foreach.ts"
+            }
+          ]
+        },
+        {
+          "title": "并行不改变数据依赖与业务责任",
+          "body": "必须先查到地点才能制作入口提示，就仍然存在顺序依赖。并行也不会自动解决重复写入、接口限额或步骤失败后的补偿。\n本例只做本地转换，便于先观察数据形状。实际接入外部接口后，还要按具体失败情况决定如何处理已完成的工作。"
+        },
+        {
+          "title": "有些等待，应该保留状态而不是一直占着进程",
+          "body": "前面的例子都能在一次调用中完成。如果需要用户补充地点，或等用户看过清单再确认，就应把等待明确表达出来。\n下一节让流程暂停，并在新进程中继续同一次运行。"
+        }
+      ]
+    }
+  }
+}

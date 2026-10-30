@@ -1,0 +1,80 @@
+{
+  "title": "产物与持久化（Artifacts & Persistence）",
+  "lead": "让生成结果有明确位置和内容依据，区分文件保留、用户确认与运行记录。",
+  "sections": [
+    {
+      "title": "一段回答之外，还需要可用的文件",
+      "body": "活动清单可能需要交给后续程序或供用户下载。只在聊天里说“已生成”，不足以定位产物；应保留路径、来源与实际文件内容。\n本例写入 Markdown 清单，再用一份**产物清单（manifest）**记录文件路径、资料来源、待确认状态和内容摘要值。后续程序据此找到文件并核对内容。"
+    },
+    {
+      "title": "退出后再读取，核对文件和摘要",
+      "body": "按顺序在同一目录执行写入与读取。第二次启动会重新创建 Workspace，再读取 manifest 与清单，计算摘要是否一致。\n这里的**摘要值（SHA-256）**根据文件字节计算，用来检查内容是否变化。它与前面讨论的文字摘要不同；数值一致也不能证明活动资料真实或用户已经确认。",
+      "codeBlocks": [
+        {
+          "label": "src/07-artifacts.js",
+          "language": "javascript",
+          "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { createHash } from 'node:crypto'\n\n// 两次进程使用同一文件位置，用于核对产物是否保留。\nconst workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: resolve('lab/07-artifacts') }) })\n// 写入与读取分开运行，避免把进程内对象当成文件持久化。\nconst mode = process.argv[2] || '读取'\nif (!['写入', '读取'].includes(mode)) throw new Error('请使用“写入”或“读取”。')\nawait workspace.init()\ntry {\n  if (mode === '写入') {\n    const content = '# 活动准备清单\\n\\n- 南门入场\\n- 带好预约码\\n'\n    await workspace.filesystem.writeFile('output/checklist.md', content)\n    await workspace.filesystem.writeFile('output/manifest.json', JSON.stringify({\n      path: 'output/checklist.md', source: '已确认教学资料', status: '已生成，待确认',\n      sha256: createHash('sha256').update(content).digest('hex')\n    }, null, 2))\n  }\n  const manifest = JSON.parse(await workspace.filesystem.readFile('output/manifest.json', { encoding: 'utf8' }))\n  const content = await workspace.filesystem.readFile(manifest.path, { encoding: 'utf8' })\n  console.dir({ manifest, content, matches: createHash('sha256').update(content).digest('hex') === manifest.sha256 })\n} finally {\n  await workspace.destroy()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/07-artifacts.js 写入"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/07-artifacts.js 读取"
+        }
+      ]
+    },
+    {
+      "title": "回收对象与删除文件分别判断",
+      "body": "本例使用 LocalFilesystem，**destroy()** 不自动删除普通文件，所以下一个进程仍可读取产物。其他提供方的保留与删除行为，需要按各自生命周期检查。\n若需要清除一位用户的相关内容，还要结合已启用的数据库记录、搜索索引与文件副本确认范围。"
+    },
+    {
+      "title": "下一步让程序真正处理材料",
+      "body": "工作区现在能提供资料位置、共享方法与产物路径。需要统计报名、转换文件或运行专门的处理库时，还要有真正执行代码的环境。\n下一章介绍 Sandbox，从固定命令开始，再看超时、进程、隔离与回收。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "第二个进程读回清单，SHA-256 摘要值也一致。这证明了什么？产物状态为何仍应保留为“待确认”？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "一段回答之外，还需要可用的文件",
+          "body": "活动清单可能需要交给后续程序或供用户下载。只在聊天里说“已生成”，不足以定位产物；应保留路径、来源与实际文件内容。\n本例写入 Markdown 清单，再用一份**产物清单（manifest）**记录文件路径、资料来源、待确认状态和内容摘要值。后续程序据此找到文件并核对内容。"
+        },
+        {
+          "title": "退出后再读取，核对文件和摘要",
+          "body": "按顺序在同一目录执行写入与读取。第二次启动会重新创建 Workspace，再读取 manifest 与清单，计算摘要是否一致。\n这里的**摘要值（SHA-256）**根据文件字节计算，用来检查内容是否变化。它与前面讨论的文字摘要不同；数值一致也不能证明活动资料真实或用户已经确认。",
+          "codeBlocks": [
+            {
+              "label": "src/07-artifacts.ts",
+              "language": "typescript",
+              "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { createHash } from 'node:crypto'\n\n// 两次进程使用同一文件位置，用于核对产物是否保留。\nconst workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: resolve('lab/07-artifacts') }) })\n// 写入与读取分开运行，避免把进程内对象当成文件持久化。\nconst mode = process.argv[2] || '读取'\nif (!['写入', '读取'].includes(mode)) throw new Error('请使用“写入”或“读取”。')\nawait workspace.init()\ntry {\n  if (mode === '写入') {\n    const content = '# 活动准备清单\\n\\n- 南门入场\\n- 带好预约码\\n'\n    await workspace.filesystem.writeFile('output/checklist.md', content)\n    await workspace.filesystem.writeFile('output/manifest.json', JSON.stringify({\n      path: 'output/checklist.md', source: '已确认教学资料', status: '已生成，待确认',\n      sha256: createHash('sha256').update(content).digest('hex')\n    }, null, 2))\n  }\n  const manifest = JSON.parse(await workspace.filesystem.readFile('output/manifest.json', { encoding: 'utf8' }))\n  const content = await workspace.filesystem.readFile(manifest.path, { encoding: 'utf8' })\n  console.dir({ manifest, content, matches: createHash('sha256').update(content).digest('hex') === manifest.sha256 })\n} finally {\n  await workspace.destroy()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/07-artifacts.ts 写入"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/07-artifacts.ts 读取"
+            }
+          ]
+        },
+        {
+          "title": "回收对象与删除文件分别判断",
+          "body": "本例使用 LocalFilesystem，**destroy()** 不自动删除普通文件，所以下一个进程仍可读取产物。其他提供方的保留与删除行为，需要按各自生命周期检查。\n若需要清除一位用户的相关内容，还要结合已启用的数据库记录、搜索索引与文件副本确认范围。"
+        },
+        {
+          "title": "下一步让程序真正处理材料",
+          "body": "工作区现在能提供资料位置、共享方法与产物路径。需要统计报名、转换文件或运行专门的处理库时，还要有真正执行代码的环境。\n下一章介绍 Sandbox，从固定命令开始，再看超时、进程、隔离与回收。"
+        }
+      ]
+    }
+  }
+}

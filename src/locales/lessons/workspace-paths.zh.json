@@ -1,0 +1,70 @@
+{
+  "title": "文件系统与路径（Filesystem & Paths）",
+  "lead": "区分文件接口里的相对路径、宿主绝对路径与配置根，核对实际读到哪份材料。",
+  "sections": [
+    {
+      "title": "一个路径，需要放到它的接口里理解",
+      "body": "本例把 **basePath** 设置为宿主上的 lab/02-paths。调用 LocalFilesystem 时，docs/notice.txt 这样的相对路径从这个配置目录解析。\n宿主绝对路径则指向具体文件位置，仍须在允许范围中。不要把 /docs/notice.txt 自动理解成“配置目录下的 docs”，它可能被当成另一个宿主位置。"
+    },
+    {
+      "title": "用两种写法读取同一文件",
+      "body": "脚本先写入 docs/notice.txt，再分别通过相对路径和范围内的绝对路径读取。两次应得到同一份南门更正。\n最后尝试 ../outside.txt，检查默认路径范围是否拒绝越界。它验证的是文件接口的约束，不能替代沙箱命令的系统权限。",
+      "codeBlocks": [
+        {
+          "label": "src/02-paths.js",
+          "language": "javascript",
+          "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// basePath 是应用宿主上的目录，文件操作中的路径相对这个范围解析。\nconst filesystem = new LocalFilesystem({ basePath: resolve('lab/02-paths') })\nawait filesystem.init()\nawait filesystem.writeFile('docs/notice.txt', '地点更正：阅读分享会改从南门入场。')\nconsole.log('相对路径读取：', await filesystem.readFile('docs/notice.txt', { encoding: 'utf8' }))\nconsole.log('范围内绝对路径读取：', await filesystem.readFile(resolve('lab/02-paths/docs/notice.txt'), { encoding: 'utf8' }))\ntry {\n  await filesystem.readFile('../outside.txt', { encoding: 'utf8' })\n} catch (error) {\n  console.log('越过配置范围的路径被拒绝：', error instanceof Error ? error.message : error)\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/02-paths.js"
+        }
+      ]
+    },
+    {
+      "title": "多个文件来源，还需要明确挂载前缀",
+      "body": "项目可能把活动资料、模板和归档放在不同提供方。Workspace 可以通过 **mounts** 或 **CompositeFilesystem** 按路径前缀组织多个文件系统。\n这些路径还要由相应接口解析。配置时，filesystem 与 mounts 二选一。前者直接指定文件系统，后者按挂载前缀组合来源；命令环境能否读取这些文件，还取决于实际挂载支持。"
+    },
+    {
+      "title": "路径选对以后，再考虑怎样改文件",
+      "body": "知道文件位于哪里，才能判断一次写入影响的是草稿、原始通知还是其他用户的数据。\n下一节观察读回、覆盖与只读接口，明确每种操作的结果。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "把 docs/notice.txt 改成 /docs/notice.txt，为何可能指向另一位置？应怎样证明两种写法实际读取了同一文件？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "一个路径，需要放到它的接口里理解",
+          "body": "本例把 **basePath** 设置为宿主上的 lab/02-paths。调用 LocalFilesystem 时，docs/notice.txt 这样的相对路径从这个配置目录解析。\n宿主绝对路径则指向具体文件位置，仍须在允许范围中。不要把 /docs/notice.txt 自动理解成“配置目录下的 docs”，它可能被当成另一个宿主位置。"
+        },
+        {
+          "title": "用两种写法读取同一文件",
+          "body": "脚本先写入 docs/notice.txt，再分别通过相对路径和范围内的绝对路径读取。两次应得到同一份南门更正。\n最后尝试 ../outside.txt，检查默认路径范围是否拒绝越界。它验证的是文件接口的约束，不能替代沙箱命令的系统权限。",
+          "codeBlocks": [
+            {
+              "label": "src/02-paths.ts",
+              "language": "typescript",
+              "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// basePath 是应用宿主上的目录，文件操作中的路径相对这个范围解析。\nconst filesystem = new LocalFilesystem({ basePath: resolve('lab/02-paths') })\nawait filesystem.init()\nawait filesystem.writeFile('docs/notice.txt', '地点更正：阅读分享会改从南门入场。')\nconsole.log('相对路径读取：', await filesystem.readFile('docs/notice.txt', { encoding: 'utf8' }))\nconsole.log('范围内绝对路径读取：', await filesystem.readFile(resolve('lab/02-paths/docs/notice.txt'), { encoding: 'utf8' }))\ntry {\n  await filesystem.readFile('../outside.txt', { encoding: 'utf8' })\n} catch (error) {\n  console.log('越过配置范围的路径被拒绝：', error instanceof Error ? error.message : error)\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/02-paths.ts"
+            }
+          ]
+        },
+        {
+          "title": "多个文件来源，还需要明确挂载前缀",
+          "body": "项目可能把活动资料、模板和归档放在不同提供方。Workspace 可以通过 **mounts** 或 **CompositeFilesystem** 按路径前缀组织多个文件系统。\n这些路径还要由相应接口解析。配置时，filesystem 与 mounts 二选一。前者直接指定文件系统，后者按挂载前缀组合来源；命令环境能否读取这些文件，还取决于实际挂载支持。"
+        },
+        {
+          "title": "路径选对以后，再考虑怎样改文件",
+          "body": "知道文件位于哪里，才能判断一次写入影响的是草稿、原始通知还是其他用户的数据。\n下一节观察读回、覆盖与只读接口，明确每种操作的结果。"
+        }
+      ]
+    }
+  }
+}

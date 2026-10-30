@@ -1,0 +1,17 @@
+{
+  "title": "不同工作一起做，同一工作逐项做",
+  "caption": "上半部是 parallel：同一份输入交给不同步骤，完成后按步骤 id 合并。下半部是 foreach：数组各项使用同一个步骤，结果组成数组，再统一汇总；本例最多并发处理两项。",
+  "input": "同一份活动资料",
+  "entrance": "entrance：整理入场提示",
+  "materials": "materials：整理携带要求",
+  "merge": "合并为三项清单",
+  "mergeDetail": "入场提示、预约码、纸质笔记本",
+  "foreach": "foreach · 并发上限 2",
+  "one": "入场提示",
+  "two": "预约码",
+  "three": "纸质笔记本",
+  "same": "加上核对前缀",
+  "result": "汇总结果数组",
+  "resultDetail": "三项结果 + count: 3",
+  "queued": "同样处理，等待空位"
+}

@@ -1,0 +1,138 @@
+{
+  "title": "存储适配器（Storage Adapters）",
+  "lead": "先确保进程连接同一数据位置，再按项目需要选择后端。",
+  "sections": [
+    {
+      "title": "接口相似，后端的运行条件不同",
+      "body": "**存储适配器（Storage Adapter）**把 Mastra 的领域操作连接到具体后端。更换适配器时，应用仍然围绕会话、消息或快照操作，但连接方式、部署条件和支持领域可能不同。\n本地 LibSQL 文件便于开始，不需要先维护独立数据库服务。项目进入多进程或多机器运行后，还要考虑数据共享、并发访问、连接管理与备份恢复。"
+    },
+    {
+      "title": "先把相对路径变成可核对的位置",
+      "body": "file:./local.db 按当前工作目录解析。应用与 Studio 从不同目录启动时，同一段相对路径可能指向不同文件。\n本例使用 **resolve()** 和 **pathToFileURL()** 得到绝对文件 URL，打印连接位置，再初始化存储。同一台机器上的进程用这个位置核对文件，可以减少工作目录造成的歧义。\n绝对路径仍然指向当前机器的文件。部署到另一台机器后，即使路径文字相同，也不会自动访问原来的文件；跨机器共享需要相应的共享或服务端后端。",
+      "codeBlocks": [
+        {
+          "label": "src/04-adapter.js",
+          "language": "javascript",
+          "code": "import { LibSQLStore } from '@mastra/libsql'\nimport { resolve } from 'node:path'\nimport { pathToFileURL } from 'node:url'\n\n// 先把相对路径解析为绝对文件位置，便于不同进程核对同一个数据库。\nconst databasePath = resolve(process.argv[2] || './04-adapter.db')\n// 文件 URL 由路径转换，避免空格等字符被手工拼接错误。\nconst databaseUrl = pathToFileURL(databasePath).href\n// id 标识适配器，url 才决定这个本地数据库的实际位置。\nconst storage = new LibSQLStore({ id: 'local-adapter', url: databaseUrl })\nawait storage.init()\nconsole.log('数据库绝对路径：', databasePath)\nconsole.log('实际连接位置：', databaseUrl)\nconsole.log('初始化后 memory 接口可用：', Boolean(await storage.getStore('memory')))"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/04-adapter.js"
+        }
+      ]
+    },
+    {
+      "title": "按数据使用方式选，而不只按名字选",
+      "body": "继续使用文件数据库，还是连接服务端数据库，应结合运行方式与领域需求判断。下面列出选择时的几个问题；具体适配器支持范围仍以相应版本文档为准。",
+      "table": {
+        "headers": [
+          "项目情况",
+          "先核对什么"
+        ],
+        "rows": [
+          [
+            "单机教学或本地开发",
+            "文件路径、写入权限与备份位置"
+          ],
+          [
+            "多个进程或多台机器",
+            "共享后端、并发写入与连接管理"
+          ],
+          [
+            "消息与运行状态持续更新",
+            "事务行为、查询方式与领域支持"
+          ],
+          [
+            "大量追踪或分析记录",
+            "写入量、查询聚合与保留策略"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "连接到新库，不会自动搬迁旧数据",
+      "body": "换一份连接配置后，程序开始读取新后端。原来数据库中的消息、资源与快照不会自动跟着移动。\n迁移时应核对标识、记录关系与读取结果，再切换应用使用的位置。存储 id 也不能替代数据库迁移或备份恢复。"
+    },
+    {
+      "title": "原始记录之外，还有检索表示",
+      "body": "08 的语义召回还配置了 vector。它与保存消息的 storage 可以使用相同数据库服务，却承担不同的操作。\n下一节把原文存储与向量索引分开观察。",
+      "links": [
+        {
+          "label": "Mastra：支持的存储后端",
+          "href": "https://mastra.ai/docs/storage#supported-providers"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "同一台机器上，应用与 Studio 使用相同的相对数据库路径，为什么仍可能读到不同数据？如果部署到另一台机器，仅改成绝对路径能否解决共享问题？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "接口相似，后端的运行条件不同",
+          "body": "**存储适配器（Storage Adapter）**把 Mastra 的领域操作连接到具体后端。更换适配器时，应用仍然围绕会话、消息或快照操作，但连接方式、部署条件和支持领域可能不同。\n本地 LibSQL 文件便于开始，不需要先维护独立数据库服务。项目进入多进程或多机器运行后，还要考虑数据共享、并发访问、连接管理与备份恢复。"
+        },
+        {
+          "title": "先把相对路径变成可核对的位置",
+          "body": "file:./local.db 按当前工作目录解析。应用与 Studio 从不同目录启动时，同一段相对路径可能指向不同文件。\n本例使用 **resolve()** 和 **pathToFileURL()** 得到绝对文件 URL，打印连接位置，再初始化存储。同一台机器上的进程用这个位置核对文件，可以减少工作目录造成的歧义。\n绝对路径仍然指向当前机器的文件。部署到另一台机器后，即使路径文字相同，也不会自动访问原来的文件；跨机器共享需要相应的共享或服务端后端。",
+          "codeBlocks": [
+            {
+              "label": "src/04-adapter.ts",
+              "language": "typescript",
+              "code": "import { LibSQLStore } from '@mastra/libsql'\nimport { resolve } from 'node:path'\nimport { pathToFileURL } from 'node:url'\n\n// 先把相对路径解析为绝对文件位置，便于不同进程核对同一个数据库。\nconst databasePath = resolve(process.argv[2] || './04-adapter.db')\n// 文件 URL 由路径转换，避免空格等字符被手工拼接错误。\nconst databaseUrl = pathToFileURL(databasePath).href\n// id 标识适配器，url 才决定这个本地数据库的实际位置。\nconst storage = new LibSQLStore({ id: 'local-adapter', url: databaseUrl })\nawait storage.init()\nconsole.log('数据库绝对路径：', databasePath)\nconsole.log('实际连接位置：', databaseUrl)\nconsole.log('初始化后 memory 接口可用：', Boolean(await storage.getStore('memory')))"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/04-adapter.ts"
+            }
+          ]
+        },
+        {
+          "title": "按数据使用方式选，而不只按名字选",
+          "body": "继续使用文件数据库，还是连接服务端数据库，应结合运行方式与领域需求判断。下面列出选择时的几个问题；具体适配器支持范围仍以相应版本文档为准。",
+          "table": {
+            "headers": [
+              "项目情况",
+              "先核对什么"
+            ],
+            "rows": [
+              [
+                "单机教学或本地开发",
+                "文件路径、写入权限与备份位置"
+              ],
+              [
+                "多个进程或多台机器",
+                "共享后端、并发写入与连接管理"
+              ],
+              [
+                "消息与运行状态持续更新",
+                "事务行为、查询方式与领域支持"
+              ],
+              [
+                "大量追踪或分析记录",
+                "写入量、查询聚合与保留策略"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "连接到新库，不会自动搬迁旧数据",
+          "body": "换一份连接配置后，程序开始读取新后端。原来数据库中的消息、资源与快照不会自动跟着移动。\n迁移时应核对标识、记录关系与读取结果，再切换应用使用的位置。存储 id 也不能替代数据库迁移或备份恢复。"
+        },
+        {
+          "title": "原始记录之外，还有检索表示",
+          "body": "08 的语义召回还配置了 vector。它与保存消息的 storage 可以使用相同数据库服务，却承担不同的操作。\n下一节把原文存储与向量索引分开观察。",
+          "links": [
+            {
+              "label": "Mastra：支持的存储后端",
+              "href": "https://mastra.ai/docs/storage#supported-providers"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

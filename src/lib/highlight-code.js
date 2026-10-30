@@ -3,6 +3,7 @@ import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 
 // Limit browser chunks to the grammars actually used by the tutorial.
 const grammars = {
+  markdown: () => import('shiki/langs/markdown.mjs'),
   javascript: () => import('shiki/langs/javascript.mjs'),
   typescript: () => import('shiki/langs/typescript.mjs'),
   json: () => import('shiki/langs/json.mjs'),

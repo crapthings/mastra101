@@ -1,0 +1,102 @@
+{
+  "title": "工作记忆（Working Memory）",
+  "lead": "将已确认的偏好维护成简短资料，明确它在哪些会话间共享。",
+  "sections": [
+    {
+      "title": "有些信息需要一直放在手边",
+      "body": "用户说“以后提醒简短一点，重点列出入场材料”。这是一项可反复使用的偏好，没必要每次从许多聊天记录里重新寻找。\n**工作记忆（Working Memory）**保存当前仍有用的资料，例如表达偏好、长期目标和待办状态。它维护的是一份可更新的内容，消息历史则保留对话过程。"
+    },
+    {
+      "title": "先定义记什么，再决定共享范围",
+      "body": "通过 workingMemory.enabled 开启，使用 **template** 给出需要维护的栏目。也可以使用 schema 约定结构；两种方式选其一。模板本身只是栏目说明，不能保证模型一定写入正确内容。\n**scope: 'resource'** 让同一资源的其他会话可以使用这些资料；**scope: 'thread'** 则限于当前会话。提醒风格适合在资源范围共享，某次活动的临时准备事项则可以留在会话范围。"
+    },
+    {
+      "title": "先确认写入，再到新会话读取",
+      "body": "示例要求助手保存明确偏好，随后直接读取 **getWorkingMemory()**，检查实际内容。再换一个 thread，保留相同 resource，询问提醒应怎样写。\n默认的工作记忆更新方式会向 Agent 提供更新工具，模型需要实际调用才会保存。这里 maxSteps: 3 给更新与回答留出空间；若存储仍为空，应检查工具记录，而非仅凭“我记住了”判断写入。",
+      "codeBlocks": [
+        {
+          "label": "src/04-working-memory.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 以资源为范围维护简短偏好，同一资源的其他会话也可以读取。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'working-storage', url: 'file:./04-working-memory.db' }),\n  options: {\n    lastMessages: 4, semanticRecall: false, generateTitle: false,\n    workingMemory: { enabled: true, scope: 'resource', template: '# 活动偏好\\n- 提醒风格：\\n- 需要关注的事项：' }\n  }\n})\n\n// 明确让助手通过记忆工具维护已确认偏好，用户纠正时更新。\nconst agent = new Agent({\n  id: 'activity-working', name: '活动偏好助手', model: 'vercel/openai/gpt-6.1-sol', memory,\n  instructions: '用中文回答。用户明确提供或修改长期偏好时，使用工作记忆更新工具保存。只记明确提供的偏好，不把单次活动时间当成永久偏好。'\n})\n\n// 两段新会话归属相同，用来区分历史共享和偏好共享。\nconst resource = randomUUID()\n// 第一段会话用于记录偏好。\nconst firstThread = randomUUID()\nawait agent.generate('以后活动提醒请简短一点，重点列出入场材料。请保存这个偏好。', {\n  memory: { resource, thread: firstThread }, maxSteps: 3, abortSignal: AbortSignal.timeout(60_000)\n})\nconsole.log('实际保存的偏好：', await memory.getWorkingMemory({ resourceId: resource, threadId: firstThread }))\n\n// 新会话读取同一资源的工作记忆，不复制上一段完整聊天。\nconst result = await agent.generate('我希望活动提醒怎样写？', {\n  memory: { resource, thread: randomUUID() }, maxSteps: 3, abortSignal: AbortSignal.timeout(60_000)\n})\nconsole.log(result.text)"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/04-working-memory.js"
+        }
+      ]
+    },
+    {
+      "title": "保留明确事实，也允许用户纠正",
+      "body": "系统提示词应说明哪些信息可以记录、何时更新。用户改成“以后请详细说明”，应核对工作记忆是否更新，同时保留必要的来源与生效条件。\n不要把一次活动的预约状态当成永久偏好。写进记忆的内容可能过期，也不能替代实时查询或业务数据库。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "工作记忆是一份可维护的当前资料。评估它时，不仅检查是否记下，还要检查是否应该保留、能否纠正、在哪个范围使用。"
+        }
+      ]
+    },
+    {
+      "title": "简短资料装不下全部往事",
+      "body": "偏好可以整理成几行，但上次聊过的具体入口、候选安排和比较依据，未必都适合写入同一份资料。\n下一节通过语义召回，在需要时找回相关旧消息。",
+      "links": [
+        {
+          "label": "Mastra：工作记忆",
+          "href": "https://mastra.ai/docs/memory/working-memory"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "助手说“已记住简短提醒的偏好”，实际工作记忆却为空。应检查哪个动作？若新会话使用另一个 resource，相同的偏好是否还应该出现？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "有些信息需要一直放在手边",
+          "body": "用户说“以后提醒简短一点，重点列出入场材料”。这是一项可反复使用的偏好，没必要每次从许多聊天记录里重新寻找。\n**工作记忆（Working Memory）**保存当前仍有用的资料，例如表达偏好、长期目标和待办状态。它维护的是一份可更新的内容，消息历史则保留对话过程。"
+        },
+        {
+          "title": "先定义记什么，再决定共享范围",
+          "body": "通过 workingMemory.enabled 开启，使用 **template** 给出需要维护的栏目。也可以使用 schema 约定结构；两种方式选其一。模板本身只是栏目说明，不能保证模型一定写入正确内容。\n**scope: 'resource'** 让同一资源的其他会话可以使用这些资料；**scope: 'thread'** 则限于当前会话。提醒风格适合在资源范围共享，某次活动的临时准备事项则可以留在会话范围。"
+        },
+        {
+          "title": "先确认写入，再到新会话读取",
+          "body": "示例要求助手保存明确偏好，随后直接读取 **getWorkingMemory()**，检查实际内容。再换一个 thread，保留相同 resource，询问提醒应怎样写。\n默认的工作记忆更新方式会向 Agent 提供更新工具，模型需要实际调用才会保存。这里 maxSteps: 3 给更新与回答留出空间；若存储仍为空，应检查工具记录，而非仅凭“我记住了”判断写入。",
+          "codeBlocks": [
+            {
+              "label": "src/04-working-memory.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 以资源为范围维护简短偏好，同一资源的其他会话也可以读取。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'working-storage', url: 'file:./04-working-memory.db' }),\n  options: {\n    lastMessages: 4, semanticRecall: false, generateTitle: false,\n    workingMemory: { enabled: true, scope: 'resource', template: '# 活动偏好\\n- 提醒风格：\\n- 需要关注的事项：' }\n  }\n})\n\n// 明确让助手通过记忆工具维护已确认偏好，用户纠正时更新。\nconst agent = new Agent({\n  id: 'activity-working', name: '活动偏好助手', model: 'vercel/openai/gpt-6.1-sol', memory,\n  instructions: '用中文回答。用户明确提供或修改长期偏好时，使用工作记忆更新工具保存。只记明确提供的偏好，不把单次活动时间当成永久偏好。'\n})\n\n// 两段新会话归属相同，用来区分历史共享和偏好共享。\nconst resource = randomUUID()\n// 第一段会话用于记录偏好。\nconst firstThread = randomUUID()\nawait agent.generate('以后活动提醒请简短一点，重点列出入场材料。请保存这个偏好。', {\n  memory: { resource, thread: firstThread }, maxSteps: 3, abortSignal: AbortSignal.timeout(60_000)\n})\nconsole.log('实际保存的偏好：', await memory.getWorkingMemory({ resourceId: resource, threadId: firstThread }))\n\n// 新会话读取同一资源的工作记忆，不复制上一段完整聊天。\nconst result = await agent.generate('我希望活动提醒怎样写？', {\n  memory: { resource, thread: randomUUID() }, maxSteps: 3, abortSignal: AbortSignal.timeout(60_000)\n})\nconsole.log(result.text)"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/04-working-memory.ts"
+            }
+          ]
+        },
+        {
+          "title": "保留明确事实，也允许用户纠正",
+          "body": "系统提示词应说明哪些信息可以记录、何时更新。用户改成“以后请详细说明”，应核对工作记忆是否更新，同时保留必要的来源与生效条件。\n不要把一次活动的预约状态当成永久偏好。写进记忆的内容可能过期，也不能替代实时查询或业务数据库。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "工作记忆是一份可维护的当前资料。评估它时，不仅检查是否记下，还要检查是否应该保留、能否纠正、在哪个范围使用。"
+            }
+          ]
+        },
+        {
+          "title": "简短资料装不下全部往事",
+          "body": "偏好可以整理成几行，但上次聊过的具体入口、候选安排和比较依据，未必都适合写入同一份资料。\n下一节通过语义召回，在需要时找回相关旧消息。",
+          "links": [
+            {
+              "label": "Mastra：工作记忆",
+              "href": "https://mastra.ai/docs/memory/working-memory"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

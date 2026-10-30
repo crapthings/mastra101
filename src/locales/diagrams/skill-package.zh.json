@@ -1,0 +1,12 @@
+{
+  "title": "入口写方法，支持文件放细节",
+  "caption": "SKILL.md 提供元数据和任务方法，references 与 assets 按需使用。scripts 是可选材料；读到脚本不表示已经运行，执行环境在 13 章展开。",
+  "entry": "SKILL.md",
+  "entryDetail": "name / description + 任务方法",
+  "refs": "references/",
+  "refsDetail": "检查项、依据与细节",
+  "assets": "assets/",
+  "assetsDetail": "结果模板与可复用材料",
+  "scripts": "scripts/",
+  "scriptsDetail": "可选：需要另行执行"
+}

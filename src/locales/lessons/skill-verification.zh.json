@@ -1,0 +1,70 @@
+{
+  "title": "技能核对（Skill Verification）",
+  "lead": "沿选择、读取与交付检查方法是否真正帮助任务完成。",
+  "sections": [
+    {
+      "title": "先提出能用结果回答的问题",
+      "body": "技能增加了说明，不会自动保证质量。验证时先明确预期：有地点就如实保留，没有地点就列为待确认，未提供个人预约记录就不宣称已预约。\n这些预期能对应输入与结果，而不是只检查回答里有没有“遵循技能”几个字。"
+    },
+    {
+      "title": "用两组资料对照同一种方法",
+      "body": "本例每次运行一项新任务，不配置对话记忆，避免前一个场景的地点混进后一组资料。两次都要求先通过 skill 加载 activity-review，再处理材料。\n入口会调用模型。核对工具请求、加载结果与最终回答，保留正常与缺失资料两条路径。",
+      "codeBlocks": [
+        {
+          "label": "src/07-verification.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { createSkill } from '@mastra/core/skills'\n\n// 规则要求保留原文的条件和缺口，而不是一律生成完整安排。\nconst review = createSkill({ name: 'activity-review', description: '核对活动资料和待确认事项。', instructions: '按已确认、待确认两组整理；只使用原文。未知地点写待确认，未提供个人预约记录时不宣称已预约。' })\n// 输出执行记录，便于区分技能已提供、已加载与结果符合规则。\nconst agent = new Agent({ id: 'skill-review', name: '活动核对助手', model: 'vercel/openai/gpt-6.1-sol', instructions: '用中文回答。先用 skill 工具加载 activity-review，再核对资料。', skills: [review] })\n// 两组小资料分别覆盖有地点与缺地点，不依赖会话历史。\nconst cases = ['主办方资料：周六两点开始，南门入场，需要预约，未提供个人预约记录。', '主办方资料：周六两点开始，地点未公布，需要预约，未提供个人预约记录。']\nfor (const material of cases) {\n  console.log('本次资料：', material)\n  const result = await agent.generate(material, {\n    maxSteps: 4, abortSignal: AbortSignal.timeout(60_000),\n    onStepFinish: ({ toolCalls, toolResults }) => console.dir({ toolCalls, toolResults }, { depth: null })\n  })\n  console.log(result.text || '没有最终文本，请检查结束原因。')\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/07-verification.js"
+        }
+      ]
+    },
+    {
+      "title": "定位偏差，再修改相应环节",
+      "body": "选错方法，先检查 description 与任务范围；没有读规则，检查技能是否提供及实际加载记录；读过但仍处理错误，再调整规则、参考资料与结果检查。\n关键业务顺序仍适合由工作流组织。方法文字可以指导理解，实际查询或写入则需要工具执行与结果依据。"
+    },
+    {
+      "title": "下一步给方法提供真实的材料位置",
+      "body": "活动规则与模板现在已经可以放进文件。再往下，助手需要找到主办方资料、搜索更正通知，并把清单产物保存到明确位置。\n下一章通过工作区与文件系统组织这些材料，先完成文件访问，再进入命令执行。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "缺少地点的资料被补写了入口。你会沿哪些加载记录定位问题？修改后，用哪组已有资料检查是否影响了正常处理？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先提出能用结果回答的问题",
+          "body": "技能增加了说明，不会自动保证质量。验证时先明确预期：有地点就如实保留，没有地点就列为待确认，未提供个人预约记录就不宣称已预约。\n这些预期能对应输入与结果，而不是只检查回答里有没有“遵循技能”几个字。"
+        },
+        {
+          "title": "用两组资料对照同一种方法",
+          "body": "本例每次运行一项新任务，不配置对话记忆，避免前一个场景的地点混进后一组资料。两次都要求先通过 skill 加载 activity-review，再处理材料。\n入口会调用模型。核对工具请求、加载结果与最终回答，保留正常与缺失资料两条路径。",
+          "codeBlocks": [
+            {
+              "label": "src/07-verification.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { createSkill } from '@mastra/core/skills'\n\n// 规则要求保留原文的条件和缺口，而不是一律生成完整安排。\nconst review = createSkill({ name: 'activity-review', description: '核对活动资料和待确认事项。', instructions: '按已确认、待确认两组整理；只使用原文。未知地点写待确认，未提供个人预约记录时不宣称已预约。' })\n// 输出执行记录，便于区分技能已提供、已加载与结果符合规则。\nconst agent = new Agent({ id: 'skill-review', name: '活动核对助手', model: 'vercel/openai/gpt-6.1-sol', instructions: '用中文回答。先用 skill 工具加载 activity-review，再核对资料。', skills: [review] })\n// 两组小资料分别覆盖有地点与缺地点，不依赖会话历史。\nconst cases = ['主办方资料：周六两点开始，南门入场，需要预约，未提供个人预约记录。', '主办方资料：周六两点开始，地点未公布，需要预约，未提供个人预约记录。']\nfor (const material of cases) {\n  console.log('本次资料：', material)\n  const result = await agent.generate(material, {\n    maxSteps: 4, abortSignal: AbortSignal.timeout(60_000),\n    onStepFinish: ({ toolCalls, toolResults }) => console.dir({ toolCalls, toolResults }, { depth: null })\n  })\n  console.log(result.text || '没有最终文本，请检查结束原因。')\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/07-verification.ts"
+            }
+          ]
+        },
+        {
+          "title": "定位偏差，再修改相应环节",
+          "body": "选错方法，先检查 description 与任务范围；没有读规则，检查技能是否提供及实际加载记录；读过但仍处理错误，再调整规则、参考资料与结果检查。\n关键业务顺序仍适合由工作流组织。方法文字可以指导理解，实际查询或写入则需要工具执行与结果依据。"
+        },
+        {
+          "title": "下一步给方法提供真实的材料位置",
+          "body": "活动规则与模板现在已经可以放进文件。再往下，助手需要找到主办方资料、搜索更正通知，并把清单产物保存到明确位置。\n下一章通过工作区与文件系统组织这些材料，先完成文件访问，再进入命令执行。"
+        }
+      ]
+    }
+  }
+}

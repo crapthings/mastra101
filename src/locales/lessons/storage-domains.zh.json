@@ -1,0 +1,146 @@
+{
+  "title": "存储领域（Storage Domains）",
+  "lead": "按运行职责识别数据，理解领域接口与具体记录之间的关系。",
+  "sections": [
+    {
+      "title": "保存消息，与保存执行进度不同",
+      "body": "消息记录“说过什么”，工作流快照记录“执行到哪里”，追踪记录帮助定位“运行时发生了什么”。它们可以共用后端，但读写方式与保留要求不同。\nMastra 用 **存储领域（Storage Domains）**组织这些职责。领域是框架的一组数据接口，不等于一张数据库表；例如 memory 领域还包含会话、消息与资源等多类记录。"
+    },
+    {
+      "title": "先认清几类常用数据",
+      "body": "先看与已有课程和下一章直接相关的几类领域，再对应它们保存的记录与用途。",
+      "table": {
+        "headers": [
+          "领域",
+          "保存的内容",
+          "用于回答什么问题"
+        ],
+        "rows": [
+          [
+            "memory",
+            "会话、消息、资源与工作记忆",
+            "之前说了什么，资料属于谁"
+          ],
+          [
+            "workflows",
+            "工作流运行快照",
+            "流程停在哪里，恢复需要什么"
+          ],
+          [
+            "observability",
+            "配置范围内的追踪与运行记录",
+            "调用发生在哪一步"
+          ],
+          [
+            "scores",
+            "评分结果",
+            "某次输出的评分是什么"
+          ],
+          [
+            "datasets / experiments",
+            "评估数据集与实验记录",
+            "用哪些样本比较了哪次改动"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "通过 getStore 取得领域接口",
+      "body": "示例显式调用 **init()** 完成初始化，再通过 **getStore()** 取得领域接口。memory 领域保存并读回一条会话；workflows 和 scores 只检查接口是否可用。\nMemory.createThread() 是面向记忆操作的便捷方法；**memoryDomain.saveThread()** 则接收准备好的会话记录，直接交给存储。两者所处层次不同，使用时应按对应接口准备参数。",
+      "codeBlocks": [
+        {
+          "label": "src/03-domains.js",
+          "language": "javascript",
+          "code": "import { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 一个存储适配器提供多个数据领域，初始化由脚本显式完成。\nconst storage = new LibSQLStore({ id: 'domain-storage', url: 'file:./03-domains.db' })\nawait storage.init()\n\n// 按领域取得接口，不把所有运行数据当成同一种记录。\nconst memoryDomain = await storage.getStore('memory')\n// 工作流领域用于保存工作流运行状态，本例只检查接口是否提供。\nconst workflowDomain = await storage.getStore('workflows')\n// 评分领域保存评估结果，本例尚未配置评分器。\nconst scoreDomain = await storage.getStore('scores')\nconsole.dir({ memory: Boolean(memoryDomain), workflows: Boolean(workflowDomain), scores: Boolean(scoreDomain) })\n\n// 直接使用 memory 领域保存一条教学会话，区别于上层 Memory 的便捷接口。\nconst thread = {\n  id: randomUUID(), resourceId: 'demo-reader', title: '按领域保存的活动会话',\n  createdAt: new Date(), updatedAt: new Date(), metadata: {}\n}\nawait memoryDomain.saveThread({ thread })\nconsole.dir(await memoryDomain.getThreadById({ threadId: thread.id }), { depth: null })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/03-domains.js"
+        }
+      ]
+    },
+    {
+      "title": "有存储接口，还要启用相应功能",
+      "body": "存储准备好领域接口，相应功能才有地方写入数据。流程记录需要实际的工作流运行，评分记录需要相应评估过程，追踪数据也需要配置采集与写入。\n遇到空记录时，沿这条链检查：功能是否启用、运行是否发生、写入是否到达当前后端。"
+    },
+    {
+      "title": "下一步再选择合适的后端",
+      "body": "知道项目需要哪些领域后，才好判断适配器是否适用。\n下一节从本地路径出发，说明连接配置与后端选择需要核对什么。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "存储能提供 workflows 和 scores 接口，数据库里却没有流程记录或评分。能据此断定存储失败吗？还需要确认哪些实际运行与功能配置？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "保存消息，与保存执行进度不同",
+          "body": "消息记录“说过什么”，工作流快照记录“执行到哪里”，追踪记录帮助定位“运行时发生了什么”。它们可以共用后端，但读写方式与保留要求不同。\nMastra 用 **存储领域（Storage Domains）**组织这些职责。领域是框架的一组数据接口，不等于一张数据库表；例如 memory 领域还包含会话、消息与资源等多类记录。"
+        },
+        {
+          "title": "先认清几类常用数据",
+          "body": "先看与已有课程和下一章直接相关的几类领域，再对应它们保存的记录与用途。",
+          "table": {
+            "headers": [
+              "领域",
+              "保存的内容",
+              "用于回答什么问题"
+            ],
+            "rows": [
+              [
+                "memory",
+                "会话、消息、资源与工作记忆",
+                "之前说了什么，资料属于谁"
+              ],
+              [
+                "workflows",
+                "工作流运行快照",
+                "流程停在哪里，恢复需要什么"
+              ],
+              [
+                "observability",
+                "配置范围内的追踪与运行记录",
+                "调用发生在哪一步"
+              ],
+              [
+                "scores",
+                "评分结果",
+                "某次输出的评分是什么"
+              ],
+              [
+                "datasets / experiments",
+                "评估数据集与实验记录",
+                "用哪些样本比较了哪次改动"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "通过 getStore 取得领域接口",
+          "body": "示例显式调用 **init()** 完成初始化，再通过 **getStore()** 取得领域接口。memory 领域保存并读回一条会话；workflows 和 scores 只检查接口是否可用。\nMemory.createThread() 是面向记忆操作的便捷方法；**memoryDomain.saveThread()** 则接收准备好的会话记录，直接交给存储。两者所处层次不同，使用时应按对应接口准备参数。",
+          "codeBlocks": [
+            {
+              "label": "src/03-domains.ts",
+              "language": "typescript",
+              "code": "import { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 一个存储适配器提供多个数据领域，初始化由脚本显式完成。\nconst storage = new LibSQLStore({ id: 'domain-storage', url: 'file:./03-domains.db' })\nawait storage.init()\n\n// 按领域取得接口，不把所有运行数据当成同一种记录。\nconst memoryDomain = await storage.getStore('memory')\n// 工作流领域用于保存工作流运行状态，本例只检查接口是否提供。\nconst workflowDomain = await storage.getStore('workflows')\n// 评分领域保存评估结果，本例尚未配置评分器。\nconst scoreDomain = await storage.getStore('scores')\nconsole.dir({ memory: Boolean(memoryDomain), workflows: Boolean(workflowDomain), scores: Boolean(scoreDomain) })\n\n// 直接使用 memory 领域保存一条教学会话，区别于上层 Memory 的便捷接口。\nconst thread = {\n  id: randomUUID(), resourceId: 'demo-reader', title: '按领域保存的活动会话',\n  createdAt: new Date(), updatedAt: new Date(), metadata: {}\n}\nawait memoryDomain.saveThread({ thread })\nconsole.dir(await memoryDomain.getThreadById({ threadId: thread.id }), { depth: null })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/03-domains.ts"
+            }
+          ]
+        },
+        {
+          "title": "有存储接口，还要启用相应功能",
+          "body": "存储准备好领域接口，相应功能才有地方写入数据。流程记录需要实际的工作流运行，评分记录需要相应评估过程，追踪数据也需要配置采集与写入。\n遇到空记录时，沿这条链检查：功能是否启用、运行是否发生、写入是否到达当前后端。"
+        },
+        {
+          "title": "下一步再选择合适的后端",
+          "body": "知道项目需要哪些领域后，才好判断适配器是否适用。\n下一节从本地路径出发，说明连接配置与后端选择需要核对什么。"
+        }
+      ]
+    }
+  }
+}

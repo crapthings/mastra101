@@ -1,0 +1,142 @@
+{
+  "title": "记忆核对（Memory Verification）",
+  "lead": "检查记忆能否被正确读取、修正和清除，再决定能否用于后续任务。",
+  "sections": [
+    {
+      "title": "能复述，不等于记忆已经可靠",
+      "body": "用户先说提醒详细一点，后来改为简短。旧消息应保留当时的表述，当前偏好则应该反映新的确认。\n检查记忆时，需要区分历史原文与当前资料。一次回答正确可能来自近期历史、工作记忆或召回结果；先确定依据，才能定位改错了哪里。"
+    },
+    {
+      "title": "把更正写入明确的位置",
+      "body": "本例只调用本地 API：先保存一条旧消息，再通过 **updateWorkingMemory()** 写入并修正偏好，最后使用 getWorkingMemory() 核对内容。\n这是应用已取得明确确认后的程序更新，区别于让模型自行选择是否调用更新工具。工作记忆变成“简短”后，旧消息仍保留“详细”，因为修改当前偏好没有改写原始历史。",
+      "codeBlocks": [
+        {
+          "label": "src/09-review.js",
+          "language": "javascript",
+          "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 用本地记忆 API 核对修改与删除的范围，不调用模型。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'review-storage', url: 'file:./09-review.db' }),\n  options: { semanticRecall: false, workingMemory: { enabled: true, scope: 'resource', template: '# 活动偏好\\n- 提醒风格：' } }\n})\n\n// 每次运行使用新资源，避免改动其他教学记录。\nconst resourceId = randomUUID()\n// 创建一段归属于该教学用户的会话。\nconst thread = await memory.createThread({ threadId: randomUUID(), resourceId, title: '偏好核对' })\nawait memory.saveMessages({ messages: [{\n  id: randomUUID(), threadId: thread.id, resourceId, role: 'user', createdAt: new Date(),\n  content: { format: 2, parts: [{ type: 'text', text: '活动提醒请详细一点。' }] }\n}] })\nawait memory.updateWorkingMemory({ threadId: thread.id, resourceId, workingMemory: '# 活动偏好\\n- 提醒风格：详细' })\n// 应用已取得用户的新确认，用明确内容修正工作记忆。\nawait memory.updateWorkingMemory({ threadId: thread.id, resourceId, workingMemory: '# 活动偏好\\n- 提醒风格：简短' })\nconsole.log('当前偏好：', await memory.getWorkingMemory({ threadId: thread.id, resourceId }))\nconsole.log('旧消息仍保留：', (await memory.recall({ threadId: thread.id, resourceId, perPage: false })).messages.length)\n\n// 删除本次会话，核对资源范围的偏好并不会随之自动清除。\nawait memory.deleteThread(thread.id)\nconsole.log('删除后的会话：', await memory.getThreadById({ threadId: thread.id }))\nconsole.log('资源偏好仍需另行处理：', await memory.getWorkingMemory({ threadId: thread.id, resourceId }))"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/09-review.js"
+        }
+      ]
+    },
+    {
+      "title": "删除一段会话，清除了哪些信息",
+      "body": "**deleteThread()** 删除本次会话后，脚本再次检查会话与资源范围的偏好。会话应已不存在，而资源偏好仍需要单独处理。\n若提供“忘记我”的功能，还要明确资源资料、向量索引、观察记录及其他副本的处理范围。先列出实际启用的存储与记忆方式，再验证相应内容已经清除；只隐藏聊天侧栏不能算完成删除。"
+    },
+    {
+      "title": "按不同路径核对结果",
+      "body": "用相同的教学资料分别检查连续对话、新会话、新资源、用户更正与进程重启。每条路径都核对三个位置：存储里是什么、当前模型输入带了什么、最终结果使用了什么。\n下面是一份检查清单：本节脚本直接验证更正与删除，其余路径对应前面各节的独立示例。",
+      "table": {
+        "headers": [
+          "场景",
+          "核对重点"
+        ],
+        "rows": [
+          [
+            "同一会话继续问",
+            "相关资料是否进入本次模型输入"
+          ],
+          [
+            "同一资源开启新会话",
+            "仅配置允许共享的记忆跨会话出现"
+          ],
+          [
+            "更换资源",
+            "不会读取其他归属的资料"
+          ],
+          [
+            "用户更正",
+            "当前资料更新，旧依据可识别"
+          ],
+          [
+            "进程重启",
+            "存储位置和调用标识能接上历史"
+          ],
+          [
+            "要求删除",
+            "按实际启用的记忆范围核对清除结果"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "从记住资料，到管理保存它的系统",
+      "body": "活动助手已经能延续对话、使用偏好与找回资料。后续执行任务时，还要说明哪些事实来自旧消息、哪些已经更新、哪些需要重新查询。\n这些能力一直依靠本地数据库。换一台机器、让多个助手共享数据，或把记忆与审批状态放在不同后端时，该怎样配置？下一章深入存储，先把这些数据怎样保存和读取讲清楚，再继续组织工作流。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "用户把提醒风格改为简短，工作记忆已更新，但旧消息仍写详细。这一定是更新失败吗？如果用户要求删除所有相关信息，仅删除当前会话是否足够？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "能复述，不等于记忆已经可靠",
+          "body": "用户先说提醒详细一点，后来改为简短。旧消息应保留当时的表述，当前偏好则应该反映新的确认。\n检查记忆时，需要区分历史原文与当前资料。一次回答正确可能来自近期历史、工作记忆或召回结果；先确定依据，才能定位改错了哪里。"
+        },
+        {
+          "title": "把更正写入明确的位置",
+          "body": "本例只调用本地 API：先保存一条旧消息，再通过 **updateWorkingMemory()** 写入并修正偏好，最后使用 getWorkingMemory() 核对内容。\n这是应用已取得明确确认后的程序更新，区别于让模型自行选择是否调用更新工具。工作记忆变成“简短”后，旧消息仍保留“详细”，因为修改当前偏好没有改写原始历史。",
+          "codeBlocks": [
+            {
+              "label": "src/09-review.ts",
+              "language": "typescript",
+              "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 用本地记忆 API 核对修改与删除的范围，不调用模型。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'review-storage', url: 'file:./09-review.db' }),\n  options: { semanticRecall: false, workingMemory: { enabled: true, scope: 'resource', template: '# 活动偏好\\n- 提醒风格：' } }\n})\n\n// 每次运行使用新资源，避免改动其他教学记录。\nconst resourceId = randomUUID()\n// 创建一段归属于该教学用户的会话。\nconst thread = await memory.createThread({ threadId: randomUUID(), resourceId, title: '偏好核对' })\nawait memory.saveMessages({ messages: [{\n  id: randomUUID(), threadId: thread.id, resourceId, role: 'user', createdAt: new Date(),\n  content: { format: 2, parts: [{ type: 'text', text: '活动提醒请详细一点。' }] }\n}] })\nawait memory.updateWorkingMemory({ threadId: thread.id, resourceId, workingMemory: '# 活动偏好\\n- 提醒风格：详细' })\n// 应用已取得用户的新确认，用明确内容修正工作记忆。\nawait memory.updateWorkingMemory({ threadId: thread.id, resourceId, workingMemory: '# 活动偏好\\n- 提醒风格：简短' })\nconsole.log('当前偏好：', await memory.getWorkingMemory({ threadId: thread.id, resourceId }))\nconsole.log('旧消息仍保留：', (await memory.recall({ threadId: thread.id, resourceId, perPage: false })).messages.length)\n\n// 删除本次会话，核对资源范围的偏好并不会随之自动清除。\nawait memory.deleteThread(thread.id)\nconsole.log('删除后的会话：', await memory.getThreadById({ threadId: thread.id }))\nconsole.log('资源偏好仍需另行处理：', await memory.getWorkingMemory({ threadId: thread.id, resourceId }))"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/09-review.ts"
+            }
+          ]
+        },
+        {
+          "title": "删除一段会话，清除了哪些信息",
+          "body": "**deleteThread()** 删除本次会话后，脚本再次检查会话与资源范围的偏好。会话应已不存在，而资源偏好仍需要单独处理。\n若提供“忘记我”的功能，还要明确资源资料、向量索引、观察记录及其他副本的处理范围。先列出实际启用的存储与记忆方式，再验证相应内容已经清除；只隐藏聊天侧栏不能算完成删除。"
+        },
+        {
+          "title": "按不同路径核对结果",
+          "body": "用相同的教学资料分别检查连续对话、新会话、新资源、用户更正与进程重启。每条路径都核对三个位置：存储里是什么、当前模型输入带了什么、最终结果使用了什么。\n下面是一份检查清单：本节脚本直接验证更正与删除，其余路径对应前面各节的独立示例。",
+          "table": {
+            "headers": [
+              "场景",
+              "核对重点"
+            ],
+            "rows": [
+              [
+                "同一会话继续问",
+                "相关资料是否进入本次模型输入"
+              ],
+              [
+                "同一资源开启新会话",
+                "仅配置允许共享的记忆跨会话出现"
+              ],
+              [
+                "更换资源",
+                "不会读取其他归属的资料"
+              ],
+              [
+                "用户更正",
+                "当前资料更新，旧依据可识别"
+              ],
+              [
+                "进程重启",
+                "存储位置和调用标识能接上历史"
+              ],
+              [
+                "要求删除",
+                "按实际启用的记忆范围核对清除结果"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "从记住资料，到管理保存它的系统",
+          "body": "活动助手已经能延续对话、使用偏好与找回资料。后续执行任务时，还要说明哪些事实来自旧消息、哪些已经更新、哪些需要重新查询。\n这些能力一直依靠本地数据库。换一台机器、让多个助手共享数据，或把记忆与审批状态放在不同后端时，该怎样配置？下一章深入存储，先把这些数据怎样保存和读取讲清楚，再继续组织工作流。"
+        }
+      ]
+    }
+  }
+}

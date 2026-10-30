@@ -1,0 +1,14 @@
+{
+  "title": "同一运行，先等资料，再等确认",
+  "caption": "两个暂停点都通过存储保存运行快照。新进程使用相同 runId 恢复对应步骤；确认条件满足后才写文件，拒绝则结束为未保存。",
+  "details": "等待补充地点",
+  "detailsDetail": "complete-details · suspended",
+  "resumeDetails": "补充 南门：resume",
+  "resumeDetailsDetail": "同一 runId，重新进入资料核对步骤",
+  "confirm": "制作清单后，等待用户确认",
+  "confirmDetail": "confirm-checklist · suspended",
+  "resumeConfirm": "确认或拒绝：resume",
+  "resumeConfirmDetail": "同一 runId，重新进入确认步骤",
+  "saved": "批准：保存本地清单",
+  "declined": "拒绝：结束且本次不写入"
+}

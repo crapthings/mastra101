@@ -1,0 +1,70 @@
+{
+  "title": "进程与超时（Processes & Timeouts）",
+  "lead": "为命令设置等待范围，并明确管理持续运行的进程。",
+  "sections": [
+    {
+      "title": "等待时间与业务完成条件不同",
+      "body": "命令可能卡住，也可能只是需要较长处理时间。**timeout** 限制本次等待范围，超时结果应与正常完成分开处理。\n超时或取消不会自动撤销已经写入的文件，也不能证明外部请求没有生效。后续处理应先核对实际进度与产物。"
+    },
+    {
+      "title": "比较命令超时与后台进程回收",
+      "body": "本例先运行一个延迟输出的固定命令，设置 100 毫秒超时，观察 **timedOut**、success 和 exitCode。\n随后通过 **processes.spawn()** 启动固定后台进程，读取句柄与进程列表，再调用 kill 并等待 **handle.wait()** 返回。finally 中再 destroy，避免示例把进程遗留在宿主上。",
+      "codeBlocks": [
+        {
+          "label": "src/05-processes.js",
+          "language": "javascript",
+          "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// 短超时只作用于这次命令，后台进程则显式启动与停止。\nconst sandbox = new LocalSandbox({ workingDirectory: resolve('lab/05-processes'), timeout: 5000 })\ntry {\n  await sandbox.start()\n  const timed = await sandbox.executeCommand(process.execPath, ['-e', 'setTimeout(()=>console.log(\"过晚的教学输出\"),1500)'], { timeout: 100 })\n  console.dir({ timedOut: timed.timedOut, success: timed.success, exitCode: timed.exitCode })\n  // 固定的后台教学进程不访问网络，停止后等待其真正退出。\n  const handle = await sandbox.processes.spawn('node -e \"setInterval(() => {}, 1000)\"')\n  console.log('后台进程标识：', handle.pid)\n  console.log('运行中进程数：', (await sandbox.processes.list()).length)\n  await sandbox.processes.kill(handle.pid)\n  console.dir(await handle.wait())\n} finally {\n  await sandbox.destroy()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/05-processes.js"
+        }
+      ]
+    },
+    {
+      "title": "后台进程需要自己的结束安排",
+      "body": "spawn 返回句柄，说明进程已启动，后续仍需观察输出与退出。命令默认超时也不应直接套用于独立后台进程的生命周期。\n对长任务，应明确何时停止、怎样取得最终结果、停止失败怎样处理。输出被截断时，还要检查保留上限与是否有完整文件产物。"
+    },
+    {
+      "title": "控制进程之外，还要控制它能做什么",
+      "body": "执行时间有上限，不等于文件和网络访问已被隔离。\n下一节单独配置原生隔离，并用受控场景验证一项实际限制。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "命令超时前已经写入部分文件。重试前需要确认什么？若另有后台进程仍在运行，应怎样停止并确认退出？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "等待时间与业务完成条件不同",
+          "body": "命令可能卡住，也可能只是需要较长处理时间。**timeout** 限制本次等待范围，超时结果应与正常完成分开处理。\n超时或取消不会自动撤销已经写入的文件，也不能证明外部请求没有生效。后续处理应先核对实际进度与产物。"
+        },
+        {
+          "title": "比较命令超时与后台进程回收",
+          "body": "本例先运行一个延迟输出的固定命令，设置 100 毫秒超时，观察 **timedOut**、success 和 exitCode。\n随后通过 **processes.spawn()** 启动固定后台进程，读取句柄与进程列表，再调用 kill 并等待 **handle.wait()** 返回。finally 中再 destroy，避免示例把进程遗留在宿主上。",
+          "codeBlocks": [
+            {
+              "label": "src/05-processes.ts",
+              "language": "typescript",
+              "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// 短超时只作用于这次命令，后台进程则显式启动与停止。\nconst sandbox = new LocalSandbox({ workingDirectory: resolve('lab/05-processes'), timeout: 5000 })\ntry {\n  await sandbox.start()\n  const timed = await sandbox.executeCommand(process.execPath, ['-e', 'setTimeout(()=>console.log(\"过晚的教学输出\"),1500)'], { timeout: 100 })\n  console.dir({ timedOut: timed.timedOut, success: timed.success, exitCode: timed.exitCode })\n  // 固定的后台教学进程不访问网络，停止后等待其真正退出。\n  const handle = await sandbox.processes.spawn('node -e \"setInterval(() => {}, 1000)\"')\n  console.log('后台进程标识：', handle.pid)\n  console.log('运行中进程数：', (await sandbox.processes.list()).length)\n  await sandbox.processes.kill(handle.pid)\n  console.dir(await handle.wait())\n} finally {\n  await sandbox.destroy()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/05-processes.ts"
+            }
+          ]
+        },
+        {
+          "title": "后台进程需要自己的结束安排",
+          "body": "spawn 返回句柄，说明进程已启动，后续仍需观察输出与退出。命令默认超时也不应直接套用于独立后台进程的生命周期。\n对长任务，应明确何时停止、怎样取得最终结果、停止失败怎样处理。输出被截断时，还要检查保留上限与是否有完整文件产物。"
+        },
+        {
+          "title": "控制进程之外，还要控制它能做什么",
+          "body": "执行时间有上限，不等于文件和网络访问已被隔离。\n下一节单独配置原生隔离，并用受控场景验证一项实际限制。"
+        }
+      ]
+    }
+  }
+}

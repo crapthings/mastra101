@@ -1,0 +1,14 @@
+{
+  "title": "本例让两条条件互斥",
+  "caption": "branch 会执行全部条件成立的路径。本例用“地点存在”和“地点缺失”保证二选一，再把按步骤 id 组织的结果映射为统一业务结构。",
+  "input": "核对当前资料",
+  "inputDetail": "地点是否已提供",
+  "yes": "地点齐全",
+  "no": "缺少地点",
+  "ready": "ready 步骤",
+  "readyDetail": "可准备：核对地点与预约码",
+  "missing": "missing 步骤",
+  "missingDetail": "待补充：请用户提供地点",
+  "output": "map：统一交接结果",
+  "outputDetail": "status + items"
+}

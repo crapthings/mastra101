@@ -1,0 +1,92 @@
+{
+  "title": "条件分支（Branching）",
+  "lead": "根据资料决定执行路径，并把分支结果整理成下游可用的结构。",
+  "sections": [
+    {
+      "title": "资料齐全与缺少地点，结果含义不同",
+      "body": "有地点时可以准备清单；缺少地点时，应说明缺口，而不是根据常识补一个入口。\n**.branch()** 以条件与步骤的配对组织路径。条件读取当前输入，满足条件的步骤才执行。"
+    },
+    {
+      "title": "所有成立的条件都会参与执行",
+      "body": "branch 会检查分支条件，并执行所有条件成立的路径。它并不默认等同于只执行第一个匹配项的 if / else if。\n本例用“地点非空”和“地点缺失”两个互斥条件，保证只走其中一条。实际需要多条路径一起发生时，也应明确它们的交接方式。",
+      "callouts": [
+        {
+          "type": "warning",
+          "body": "希望二选一时，需要自己保证条件互斥；希望覆盖所有情况时，也要处理没有任何条件成立的路径。"
+        }
+      ]
+    },
+    {
+      "title": "用步骤 id 读取分支输出",
+      "body": "分支结果按执行步骤的 id 组织。本例从 ready 或 missing 读取结果，再通过 map 统一成 status 与 items，后续程序便不必到处判断分支键。\n分别运行完整与缺少地点两种资料。两次流程都可能正常结束，但业务状态分别是“可准备”与“待补充”。",
+      "codeBlocks": [
+        {
+          "label": "src/04-branching.js",
+          "language": "javascript",
+          "code": "import { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { z } from 'zod'\n\n// 地点可以缺失，让流程显式决定走哪条业务路径。\nconst activitySchema = z.object({ title: z.string().min(1), venue: z.string().optional() })\n// 两条路径各自产出同样的业务结果结构。\nconst decisionSchema = z.object({ status: z.enum(['可准备', '待补充']), items: z.array(z.string()) })\n// 完整资料进入清单准备路径。\nconst ready = createStep({\n  id: 'ready', inputSchema: activitySchema, outputSchema: decisionSchema,\n  execute: async ({ inputData }) => ({ status: '可准备', items: [`核对入场地点：${inputData.venue}`, '带好预约码'] })\n})\n// 缺少地点时返回明确缺口，正常结束这次判断。\nconst missing = createStep({\n  id: 'missing', inputSchema: activitySchema, outputSchema: decisionSchema,\n  execute: async () => ({ status: '待补充', items: ['请补充主办方确认的入场地点'] })\n})\n// 两个条件互斥，后续 map 把按步骤 id 分组的结果转换成统一结构。\nconst workflow = createWorkflow({ id: 'activity-branching', inputSchema: activitySchema, outputSchema: decisionSchema })\n  .branch([\n    [async ({ inputData }) => Boolean(inputData.venue?.trim()), ready],\n    [async ({ inputData }) => !inputData.venue?.trim(), missing]\n  ])\n  .map(async ({ inputData }) => decisionSchema.parse(inputData.ready || inputData.missing))\n  .commit()\n// 仅改变资料是否齐全，不改分支定义。\nconst mode = z.enum(['完整', '缺少地点']).parse(process.argv[2] || '完整')\n// 每次启动一份新的判断流程。\nconst run = await workflow.createRun()\nconsole.dir(await run.start({ inputData: { title: '阅读分享会', ...(mode === '完整' ? { venue: '南门' } : {}) } }), { depth: null })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/04-branching.js 完整"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/04-branching.js 缺少地点"
+        }
+      ]
+    },
+    {
+      "title": "业务缺口不必都变成异常",
+      "body": "缺少地点可以作为已识别的业务结果交给用户；外部查询抛出错误则属于另一种执行情况。先保留具体含义，后面才好决定补充资料还是处理故障。\n分支解决按条件执行哪些步骤；下一节看独立工作怎样一起处理。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "两条 branch 条件同时成立，会自动只选第一条吗？缺少地点时流程返回 success、业务状态为“待补充”，界面应该显示已准备完成还是等待补充？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "资料齐全与缺少地点，结果含义不同",
+          "body": "有地点时可以准备清单；缺少地点时，应说明缺口，而不是根据常识补一个入口。\n**.branch()** 以条件与步骤的配对组织路径。条件读取当前输入，满足条件的步骤才执行。"
+        },
+        {
+          "title": "所有成立的条件都会参与执行",
+          "body": "branch 会检查分支条件，并执行所有条件成立的路径。它并不默认等同于只执行第一个匹配项的 if / else if。\n本例用“地点非空”和“地点缺失”两个互斥条件，保证只走其中一条。实际需要多条路径一起发生时，也应明确它们的交接方式。",
+          "callouts": [
+            {
+              "type": "warning",
+              "body": "希望二选一时，需要自己保证条件互斥；希望覆盖所有情况时，也要处理没有任何条件成立的路径。"
+            }
+          ]
+        },
+        {
+          "title": "用步骤 id 读取分支输出",
+          "body": "分支结果按执行步骤的 id 组织。本例从 ready 或 missing 读取结果，再通过 map 统一成 status 与 items，后续程序便不必到处判断分支键。\n分别运行完整与缺少地点两种资料。两次流程都可能正常结束，但业务状态分别是“可准备”与“待补充”。",
+          "codeBlocks": [
+            {
+              "label": "src/04-branching.ts",
+              "language": "typescript",
+              "code": "import { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { z } from 'zod'\n\n// 地点可以缺失，让流程显式决定走哪条业务路径。\nconst activitySchema = z.object({ title: z.string().min(1), venue: z.string().optional() })\n// 两条路径各自产出同样的业务结果结构。\nconst decisionSchema = z.object({ status: z.enum(['可准备', '待补充']), items: z.array(z.string()) })\n// 完整资料进入清单准备路径。\nconst ready = createStep({\n  id: 'ready', inputSchema: activitySchema, outputSchema: decisionSchema,\n  execute: async ({ inputData }) => ({ status: '可准备', items: [`核对入场地点：${inputData.venue}`, '带好预约码'] })\n})\n// 缺少地点时返回明确缺口，正常结束这次判断。\nconst missing = createStep({\n  id: 'missing', inputSchema: activitySchema, outputSchema: decisionSchema,\n  execute: async () => ({ status: '待补充', items: ['请补充主办方确认的入场地点'] })\n})\n// 两个条件互斥，后续 map 把按步骤 id 分组的结果转换成统一结构。\nconst workflow = createWorkflow({ id: 'activity-branching', inputSchema: activitySchema, outputSchema: decisionSchema })\n  .branch([\n    [async ({ inputData }) => Boolean(inputData.venue?.trim()), ready],\n    [async ({ inputData }) => !inputData.venue?.trim(), missing]\n  ])\n  .map(async ({ inputData }) => decisionSchema.parse(inputData.ready || inputData.missing))\n  .commit()\n// 仅改变资料是否齐全，不改分支定义。\nconst mode = z.enum(['完整', '缺少地点']).parse(process.argv[2] || '完整')\n// 每次启动一份新的判断流程。\nconst run = await workflow.createRun()\nconsole.dir(await run.start({ inputData: { title: '阅读分享会', ...(mode === '完整' ? { venue: '南门' } : {}) } }), { depth: null })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/04-branching.ts 完整"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/04-branching.ts 缺少地点"
+            }
+          ]
+        },
+        {
+          "title": "业务缺口不必都变成异常",
+          "body": "缺少地点可以作为已识别的业务结果交给用户；外部查询抛出错误则属于另一种执行情况。先保留具体含义，后面才好决定补充资料还是处理故障。\n分支解决按条件执行哪些步骤；下一节看独立工作怎样一起处理。"
+        }
+      ]
+    }
+  }
+}

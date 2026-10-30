@@ -1,0 +1,13 @@
+{
+  "title": "策略不会自动变成清理任务",
+  "caption": "本例只清理 memory.messages 中超过 30 天的消息。先声明策略，再调用 prune，最后回查删除数与保留记录。其他表、后端和用户资料不会因此一并清除。",
+  "old": "45 天前的教学消息",
+  "new": "当前教学消息",
+  "policy": "retention：messages.maxAge = 30d",
+  "policyDetail": "按消息 createdAt 计算年龄，声明后等待执行",
+  "prune": "storage.prune()",
+  "pruneDetail": "按范围与工作量限制执行",
+  "removed": "过期消息被删除",
+  "kept": "新消息与会话仍保留",
+  "check": "回查结果，同时检查 deleted 与 done"
+}

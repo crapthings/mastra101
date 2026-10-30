@@ -1,0 +1,120 @@
+{
+  "title": "记忆配置（Memory）",
+  "lead": "让第二次调用接上第一次对话，分清模型能力与应用保存的历史。",
+  "sections": [
+    {
+      "title": "这次说的“那个活动”，指哪一个",
+      "body": "上一章的助手已经会查询预约、整理结果。用户接着问“那从哪个门进去”，如果应用只发送这一句话，模型就缺少“那”所指的活动。\n可以每次手动补上相关前文。对需要连续交谈的助手，**记忆（Memory）**把保存、取回和组织历史这几件事接进运行过程，让新的问题有机会接上之前的资料。"
+    },
+    {
+      "title": "记忆把资料重新放进上下文",
+      "body": "模型读取的是本次请求里的内容。Mastra 的记忆保存在应用的存储中，再按配置取出一部分，加入下一次模型调用的上下文。\n这不会修改模型权重。模型能接着回答，首先是因为这次又看到了相关资料；是否正确使用资料，还需要核对回答。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "保存历史、取回相关内容、根据内容回答，是三个相连但不同的环节。排查“没记住”时，先确定缺口在哪一个环节。"
+        }
+      ]
+    },
+    {
+      "title": "先接上两次调用",
+      "body": "下载本章示例，解压后进入 08-memory 文件夹，使用 Node.js 24 或更高版本。安装依赖，复制环境变量模板，填入前面使用的 Vercel 网关凭证。\n记忆需要可用的存储。本例在 **Memory** 上显式配置 **LibSQLStore**，把消息写入本地文件数据库，再将 Memory 挂到 Agent。也可以由 Mastra 实例提供共享存储，09 会进一步展开配置范围与后端选择。lastMessages: 8 选择最近八条历史，语义召回和标题生成先显式关闭。两次调用使用相同的 memory.resource 与 memory.thread，第二次只发送新问题。",
+      "download": {
+        "href": "/downloads/08-memory.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install\ncp .env.example .env"
+        },
+        {
+          "label": "src/01-memory.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 将会话历史存入本地数据库，只加载最近八条消息。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'memory-storage', url: 'file:./01-memory.db' }),\n  options: { lastMessages: 8, semanticRecall: false, generateTitle: false }\n})\n\n// 系统提示词要求依据已提供的信息回答，保留未知项。\nconst agent = new Agent({\n  id: 'activity-memory', name: '活动资料助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文回答，根据对话中的活动资料作答。资料没有说的就说明未知，不补写预约结果。',\n  memory\n})\n\n// 两次调用沿用相同的归属与会话标识，每次运行脚本使用新标识。\nconst identity = { resource: `reader-${randomUUID()}`, thread: `activity-${randomUUID()}` }\nconsole.log(await agent.generate('阅读分享会周六下午两点开始，东门入场。先记下这些资料。', {\n  memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000)\n}).then(result => result.text))\nconsole.log(await agent.generate('那我应该从哪个门进去？', {\n  memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000)\n}).then(result => result.text))\n\n// 回查存储，核对本次对话确实留下了消息。\nconst saved = await memory.recall({ threadId: identity.thread, resourceId: identity.resource, perPage: false })\nconsole.dir(saved.messages.map(message => ({ role: message.role, parts: message.content.parts })), { depth: null })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/01-memory.js"
+        }
+      ]
+    },
+    {
+      "title": "同时核对回答与存储",
+      "body": "第一条资料写明东门入场，第二次问题只问“哪个门”。先核对回答是否保留东门，再用脚本最后的 recall() 确认原资料已经保存。\n如果要判断这次回答是否真的使用了历史，还要查看相应模型调用的输入：保存记录证明数据在，模型输入证明数据被取回，最终回答则用于检查是否正确使用。仅凭猜中入口，无法区分这几个环节。\n本例每次启动都会生成新标识，同一次启动里的两次调用共享标识。下一次启动是一段新对话；跨进程继续使用，需要固定标识与持久存储，后面再展开。"
+    },
+    {
+      "title": "先确定把记忆交给谁",
+      "body": "现在两次调用可以连起来。接下来换一个活动或换一个用户，哪些历史应该继续出现？\n下一节区分会话与归属，用标识组织记忆的读取范围。",
+      "links": [
+        {
+          "label": "Mastra：记忆",
+          "href": "https://mastra.ai/docs/memory/overview"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "两次调用只有相同的 Agent id，第二次仍缺少前文。应怎样核对 Memory、存储与会话标识，找到断开的环节？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "这次说的“那个活动”，指哪一个",
+          "body": "上一章的助手已经会查询预约、整理结果。用户接着问“那从哪个门进去”，如果应用只发送这一句话，模型就缺少“那”所指的活动。\n可以每次手动补上相关前文。对需要连续交谈的助手，**记忆（Memory）**把保存、取回和组织历史这几件事接进运行过程，让新的问题有机会接上之前的资料。"
+        },
+        {
+          "title": "记忆把资料重新放进上下文",
+          "body": "模型读取的是本次请求里的内容。Mastra 的记忆保存在应用的存储中，再按配置取出一部分，加入下一次模型调用的上下文。\n这不会修改模型权重。模型能接着回答，首先是因为这次又看到了相关资料；是否正确使用资料，还需要核对回答。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "保存历史、取回相关内容、根据内容回答，是三个相连但不同的环节。排查“没记住”时，先确定缺口在哪一个环节。"
+            }
+          ]
+        },
+        {
+          "title": "先接上两次调用",
+          "body": "下载本章示例，解压后进入 08-memory-ts 文件夹，使用 Node.ts 24 或更高版本。安装依赖，复制环境变量模板，填入前面使用的 Vercel 网关凭证。\n记忆需要可用的存储。本例在 **Memory** 上显式配置 **LibSQLStore**，把消息写入本地文件数据库，再将 Memory 挂到 Agent。也可以由 Mastra 实例提供共享存储，09 会进一步展开配置范围与后端选择。lastMessages: 8 选择最近八条历史，语义召回和标题生成先显式关闭。两次调用使用相同的 memory.resource 与 memory.thread，第二次只发送新问题。",
+          "download": {
+            "href": "/downloads/08-memory-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install\ncp .env.example .env"
+            },
+            {
+              "label": "src/01-memory.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 将会话历史存入本地数据库，只加载最近八条消息。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'memory-storage', url: 'file:./01-memory.db' }),\n  options: { lastMessages: 8, semanticRecall: false, generateTitle: false }\n})\n\n// 系统提示词要求依据已提供的信息回答，保留未知项。\nconst agent = new Agent({\n  id: 'activity-memory', name: '活动资料助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文回答，根据对话中的活动资料作答。资料没有说的就说明未知，不补写预约结果。',\n  memory\n})\n\n// 两次调用沿用相同的归属与会话标识，每次运行脚本使用新标识。\nconst identity = { resource: `reader-${randomUUID()}`, thread: `activity-${randomUUID()}` }\nconsole.log(await agent.generate('阅读分享会周六下午两点开始，东门入场。先记下这些资料。', {\n  memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000)\n}).then(result => result.text))\nconsole.log(await agent.generate('那我应该从哪个门进去？', {\n  memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000)\n}).then(result => result.text))\n\n// 回查存储，核对本次对话确实留下了消息。\nconst saved = await memory.recall({ threadId: identity.thread, resourceId: identity.resource, perPage: false })\nconsole.dir(saved.messages.map(message => ({ role: message.role, parts: message.content.parts })), { depth: null })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/01-memory.ts"
+            }
+          ]
+        },
+        {
+          "title": "同时核对回答与存储",
+          "body": "第一条资料写明东门入场，第二次问题只问“哪个门”。先核对回答是否保留东门，再用脚本最后的 recall() 确认原资料已经保存。\n如果要判断这次回答是否真的使用了历史，还要查看相应模型调用的输入：保存记录证明数据在，模型输入证明数据被取回，最终回答则用于检查是否正确使用。仅凭猜中入口，无法区分这几个环节。\n本例每次启动都会生成新标识，同一次启动里的两次调用共享标识。下一次启动是一段新对话；跨进程继续使用，需要固定标识与持久存储，后面再展开。"
+        },
+        {
+          "title": "先确定把记忆交给谁",
+          "body": "现在两次调用可以连起来。接下来换一个活动或换一个用户，哪些历史应该继续出现？\n下一节区分会话与归属，用标识组织记忆的读取范围。",
+          "links": [
+            {
+              "label": "Mastra：记忆",
+              "href": "https://mastra.ai/docs/memory/overview"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

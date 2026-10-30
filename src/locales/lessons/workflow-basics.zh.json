@@ -1,0 +1,120 @@
+{
+  "title": "工作流与步骤（Workflow & Step）",
+  "lead": "把活动准备拆成明确步骤，让程序决定顺序，让每一步交付具体结果。",
+  "sections": [
+    {
+      "title": "这次任务，有些顺序必须遵守",
+      "body": "活动助手已经能读资料、查预约和保留信息。现在要生成一份准备清单：先核对地点，再整理携带要求，最后等待用户确认后保存。\n如果业务规定这些先后关系，就可以把它们直接写进程序。**工作流（Workflow）**组织明确的步骤与数据交接；需要理解与生成的部分，仍可在某一步调用 Agent。"
+    },
+    {
+      "title": "Step 描述工作，Workflow 连接步骤",
+      "body": "通过 **createStep()** 定义一个步骤：接收什么数据、执行什么工作、返回什么结果。**createWorkflow()** 再把步骤连接成流程。\n本章先用确定性的本地数据观察执行关系。第一版只有一个步骤，根据标题和地点制作清单，不调用模型，也不声称替用户完成预约。\n这里的 **Step** 是业务阶段，07 中 Agent 的 step 则围绕模型调用展开。一个“生成清单”步骤可以运行完整的 Agent，内部再经历多次模型调用。"
+    },
+    {
+      "title": "完成流程定义，再创建一次运行",
+      "body": "下载并解压本章示例，进入 10-workflows 文件夹，使用 Node.js 24 或更高版本安装依赖。\n**.then()** 连接步骤，**.commit()** 完成流程定义。定义准备好以后，通过 **createRun()** 创建一次运行，再调用 **start({ inputData })** 提交本次资料。\n同一份定义可以反复创建新运行。**runId** 标识其中一次执行，不等于工作流定义的 id；后面暂停恢复时，需要找回原来的运行。",
+      "download": {
+        "href": "/downloads/10-workflows.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install"
+        },
+        {
+          "label": "src/01-workflow.js",
+          "language": "javascript",
+          "code": "import { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { z } from 'zod'\n\n// 工作流输入只接受已有活动资料，不负责从外部查询事实。\nconst activitySchema = z.object({ title: z.string().min(1), venue: z.string().min(1) })\n// 最终交付物是一个有明确字段的准备清单。\nconst checklistSchema = z.object({ title: z.string(), items: z.array(z.string()) })\n// 一个步骤完成一项具体转换，不调用模型。\nconst prepare = createStep({\n  id: 'prepare-checklist', inputSchema: activitySchema, outputSchema: checklistSchema,\n  execute: async ({ inputData }) => ({ title: inputData.title, items: [`核对入场地点：${inputData.venue}`, '带好预约码'] })\n})\n// 先定义流程，再提交定义；此处尚未运行。\nconst workflow = createWorkflow({ id: 'first-activity-workflow', inputSchema: activitySchema, outputSchema: checklistSchema })\n  .then(prepare)\n  .commit()\n// 每次 createRun 创建一次新的运行。\nconst run = await workflow.createRun()\n// start 才把本次资料送入定义好的流程。\nconst result = await run.start({ inputData: { title: '阅读分享会', venue: '南门' } })\nconsole.log('运行标识：', run.runId)\nconsole.dir(result, { depth: null })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/01-workflow.js"
+        }
+      ]
+    },
+    {
+      "title": "先看运行状态，再读交付结果",
+      "body": "01—07 的示例都只处理本地教学数据，最后一节才需要网关凭证。\n本例返回 status: success 时，result.result 是清单，result.steps 保留步骤结果。流程状态说明执行情况，清单里的业务含义仍需单独核对：制作完成并不等于用户已经确认。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "工作流定义描述怎样做，runId 标识某次执行，最终业务字段说明做到了什么。三者分别承担不同职责。"
+        }
+      ]
+    },
+    {
+      "title": "下一步明确交接的数据",
+      "body": "一个步骤跑通以后，接下来要让多个步骤能可靠地交换结果。\n下一节通过输入输出约定，区分数据形状、实际校验与业务事实。",
+      "links": [
+        {
+          "label": "Mastra：工作流",
+          "href": "https://mastra.ai/docs/workflows/overview"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "一份“待用户确认”的清单随 success 返回。界面应显示什么状态？如果再发起一次独立任务，为什么要使用新的 runId？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "这次任务，有些顺序必须遵守",
+          "body": "活动助手已经能读资料、查预约和保留信息。现在要生成一份准备清单：先核对地点，再整理携带要求，最后等待用户确认后保存。\n如果业务规定这些先后关系，就可以把它们直接写进程序。**工作流（Workflow）**组织明确的步骤与数据交接；需要理解与生成的部分，仍可在某一步调用 Agent。"
+        },
+        {
+          "title": "Step 描述工作，Workflow 连接步骤",
+          "body": "通过 **createStep()** 定义一个步骤：接收什么数据、执行什么工作、返回什么结果。**createWorkflow()** 再把步骤连接成流程。\n本章先用确定性的本地数据观察执行关系。第一版只有一个步骤，根据标题和地点制作清单，不调用模型，也不声称替用户完成预约。\n这里的 **Step** 是业务阶段，07 中 Agent 的 step 则围绕模型调用展开。一个“生成清单”步骤可以运行完整的 Agent，内部再经历多次模型调用。"
+        },
+        {
+          "title": "完成流程定义，再创建一次运行",
+          "body": "下载并解压本章示例，进入 10-workflows-ts 文件夹，使用 Node.ts 24 或更高版本安装依赖。\n**.then()** 连接步骤，**.commit()** 完成流程定义。定义准备好以后，通过 **createRun()** 创建一次运行，再调用 **start({ inputData })** 提交本次资料。\n同一份定义可以反复创建新运行。**runId** 标识其中一次执行，不等于工作流定义的 id；后面暂停恢复时，需要找回原来的运行。",
+          "download": {
+            "href": "/downloads/10-workflows-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install"
+            },
+            {
+              "label": "src/01-workflow.ts",
+              "language": "typescript",
+              "code": "import { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { z } from 'zod'\n\n// 工作流输入只接受已有活动资料，不负责从外部查询事实。\nconst activitySchema = z.object({ title: z.string().min(1), venue: z.string().min(1) })\n// 最终交付物是一个有明确字段的准备清单。\nconst checklistSchema = z.object({ title: z.string(), items: z.array(z.string()) })\n// 一个步骤完成一项具体转换，不调用模型。\nconst prepare = createStep({\n  id: 'prepare-checklist', inputSchema: activitySchema, outputSchema: checklistSchema,\n  execute: async ({ inputData }) => ({ title: inputData.title, items: [`核对入场地点：${inputData.venue}`, '带好预约码'] })\n})\n// 先定义流程，再提交定义；此处尚未运行。\nconst workflow = createWorkflow({ id: 'first-activity-workflow', inputSchema: activitySchema, outputSchema: checklistSchema })\n  .then(prepare)\n  .commit()\n// 每次 createRun 创建一次新的运行。\nconst run = await workflow.createRun()\n// start 才把本次资料送入定义好的流程。\nconst result = await run.start({ inputData: { title: '阅读分享会', venue: '南门' } })\nconsole.log('运行标识：', run.runId)\nconsole.dir(result, { depth: null })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/01-workflow.ts"
+            }
+          ]
+        },
+        {
+          "title": "先看运行状态，再读交付结果",
+          "body": "01—07 的示例都只处理本地教学数据，最后一节才需要网关凭证。\n本例返回 status: success 时，result.result 是清单，result.steps 保留步骤结果。流程状态说明执行情况，清单里的业务含义仍需单独核对：制作完成并不等于用户已经确认。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "工作流定义描述怎样做，runId 标识某次执行，最终业务字段说明做到了什么。三者分别承担不同职责。"
+            }
+          ]
+        },
+        {
+          "title": "下一步明确交接的数据",
+          "body": "一个步骤跑通以后，接下来要让多个步骤能可靠地交换结果。\n下一节通过输入输出约定，区分数据形状、实际校验与业务事实。",
+          "links": [
+            {
+              "label": "Mastra：工作流",
+              "href": "https://mastra.ai/docs/workflows/overview"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

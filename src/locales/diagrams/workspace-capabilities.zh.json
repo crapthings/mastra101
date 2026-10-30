@@ -1,0 +1,15 @@
+{
+  "title": "工作区组织能力，文件系统连接材料",
+  "caption": "本章从 LocalFilesystem 开始，随后按需加入搜索与技能发现。配置文件能力即可读写资料；命令执行由下一章的 Sandbox 单独提供。",
+  "workspace": "Workspace",
+  "workspaceDetail": "组织本次可用能力",
+  "files": "Filesystem",
+  "filesDetail": "读写、目录与路径",
+  "search": "Search",
+  "searchDetail": "按需配置索引",
+  "skills": "Skills",
+  "skillsDetail": "按需发现方法",
+  "root": "LocalFilesystem 的 basePath",
+  "rootDetail": "实际宿主文件目录",
+  "note": "搜索与技能使用相关文件内容"
+}

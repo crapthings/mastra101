@@ -1,0 +1,78 @@
+{
+  "title": "顺序执行（Sequential Execution）",
+  "lead": "通过 then 和 map 组织连续处理，明确每一步实际拿到哪份数据。",
+  "sections": [
+    {
+      "title": "先核对资料，再制作清单",
+      "body": "本例把处理分成三件事：清理标题与地点两端的空白，制作清单，再包装成待用户确认的产物。\n通过 **.then()** 串联时，后一步等待前一步完成，再使用它的输出。前一步失败或暂停，后面依赖它的步骤就不能当作已经完成。"
+    },
+    {
+      "title": "字段名不同，用 map 做明确转换",
+      "body": "资料使用 title 与 venue，清单步骤使用 heading 与 entrance。交接处通过 **.map()** 明确转换，而不是让后一步继续猜字段。\nmap 适合转换名称、挑选字段和重新组织数据。需要反复使用、独立观察或设置重试的业务操作，则更适合定义成有明确 id 的步骤。",
+      "codeBlocks": [
+        {
+          "label": "src/03-sequential.js",
+          "language": "javascript",
+          "code": "import { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { z } from 'zod'\n\n// 资料核对步骤接收原标题与地点。\nconst activitySchema = z.object({ title: z.string().min(1), venue: z.string().min(1) })\n// 清单制作步骤使用自己的字段名，交接处需要映射。\nconst listInputSchema = z.object({ heading: z.string(), entrance: z.string() })\n// 清单内容保持结构化，方便后续交付。\nconst checklistSchema = z.object({ heading: z.string(), items: z.array(z.string()) })\n// 最终产物明确仍待用户确认。\nconst deliverySchema = z.object({ title: z.string(), items: z.array(z.string()), status: z.literal('待用户确认') })\n// 先完成确定性的空白清理与字段校验。\nconst normalize = createStep({\n  id: 'normalize-material', inputSchema: activitySchema, outputSchema: activitySchema,\n  execute: async ({ inputData }) => activitySchema.parse({ title: inputData.title.trim(), venue: inputData.venue.trim() })\n})\n// 根据核对后的地点制作清单。\nconst prepare = createStep({\n  id: 'make-checklist', inputSchema: listInputSchema, outputSchema: checklistSchema,\n  execute: async ({ inputData }) => ({ heading: inputData.heading, items: [`从${inputData.entrance}入场`, '带好预约码'] })\n})\n// 把步骤结果包装成可供界面展示的待确认产物。\nconst deliver = createStep({\n  id: 'deliver-checklist', inputSchema: checklistSchema, outputSchema: deliverySchema,\n  execute: async ({ inputData }) => ({ title: inputData.heading, items: inputData.items, status: '待用户确认' })\n})\n// map 在两步之间转换数据形状，then 按顺序连接步骤。\nconst workflow = createWorkflow({ id: 'activity-sequence', inputSchema: activitySchema, outputSchema: deliverySchema })\n  .then(normalize)\n  .map(async ({ inputData }) => ({ heading: inputData.title, entrance: inputData.venue }))\n  .then(prepare)\n  .then(deliver)\n  .commit()\n// 这次运行只生成待确认清单，没有保存或发送。\nconst run = await workflow.createRun()\nconsole.dir(await run.start({ inputData: { title: ' 阅读分享会 ', venue: ' 南门 ' } }), { depth: null })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/03-sequential.js"
+        }
+      ]
+    },
+    {
+      "title": "inputData 是上一个交接点的结果",
+      "body": "步骤的 **inputData** 通常来自前一个执行节点，包括 map 产生的结果，而不是始终等于工作流最初输入。\n需要查看早先某一步时，可以使用 **getStepResult()**；需要起始输入时，可以使用 **getInitData()**。如果资料是下一步执行所必需的，优先把它明确放在交接数据里，便于核对依赖关系。"
+    },
+    {
+      "title": "运行中共享状态，与记忆分开",
+      "body": "工作流还可以通过 **stateSchema**、**state** 与 **setState()** 维护本次运行的共享状态，例如累计计数。它与步骤输出承担不同职责，也不是 08 的跨会话记忆。\n本例先使用显式输入输出，保持依赖清楚。检查结果时，应看到空白被清理，清单保留南门，最后的业务状态仍是“待用户确认”。"
+    },
+    {
+      "title": "顺序明确之后，再处理不同情况",
+      "body": "如果地点尚未公布，制作清单之前需要走另一条路径。\n下一节让程序按资料是否齐全选择处理分支。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "normalize 返回 title 与 venue，下一步需要 heading 与 entrance。应在哪里转换？如果最后的交付步骤失败，前面已成功生成的清单是否就等于已经保存？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先核对资料，再制作清单",
+          "body": "本例把处理分成三件事：清理标题与地点两端的空白，制作清单，再包装成待用户确认的产物。\n通过 **.then()** 串联时，后一步等待前一步完成，再使用它的输出。前一步失败或暂停，后面依赖它的步骤就不能当作已经完成。"
+        },
+        {
+          "title": "字段名不同，用 map 做明确转换",
+          "body": "资料使用 title 与 venue，清单步骤使用 heading 与 entrance。交接处通过 **.map()** 明确转换，而不是让后一步继续猜字段。\nmap 适合转换名称、挑选字段和重新组织数据。需要反复使用、独立观察或设置重试的业务操作，则更适合定义成有明确 id 的步骤。",
+          "codeBlocks": [
+            {
+              "label": "src/03-sequential.ts",
+              "language": "typescript",
+              "code": "import { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { z } from 'zod'\n\n// 资料核对步骤接收原标题与地点。\nconst activitySchema = z.object({ title: z.string().min(1), venue: z.string().min(1) })\n// 清单制作步骤使用自己的字段名，交接处需要映射。\nconst listInputSchema = z.object({ heading: z.string(), entrance: z.string() })\n// 清单内容保持结构化，方便后续交付。\nconst checklistSchema = z.object({ heading: z.string(), items: z.array(z.string()) })\n// 最终产物明确仍待用户确认。\nconst deliverySchema = z.object({ title: z.string(), items: z.array(z.string()), status: z.literal('待用户确认') })\n// 先完成确定性的空白清理与字段校验。\nconst normalize = createStep({\n  id: 'normalize-material', inputSchema: activitySchema, outputSchema: activitySchema,\n  execute: async ({ inputData }) => activitySchema.parse({ title: inputData.title.trim(), venue: inputData.venue.trim() })\n})\n// 根据核对后的地点制作清单。\nconst prepare = createStep({\n  id: 'make-checklist', inputSchema: listInputSchema, outputSchema: checklistSchema,\n  execute: async ({ inputData }) => ({ heading: inputData.heading, items: [`从${inputData.entrance}入场`, '带好预约码'] })\n})\n// 把步骤结果包装成可供界面展示的待确认产物。\nconst deliver = createStep({\n  id: 'deliver-checklist', inputSchema: checklistSchema, outputSchema: deliverySchema,\n  execute: async ({ inputData }) => ({ title: inputData.heading, items: inputData.items, status: '待用户确认' })\n})\n// map 在两步之间转换数据形状，then 按顺序连接步骤。\nconst workflow = createWorkflow({ id: 'activity-sequence', inputSchema: activitySchema, outputSchema: deliverySchema })\n  .then(normalize)\n  .map(async ({ inputData }) => ({ heading: inputData.title, entrance: inputData.venue }))\n  .then(prepare)\n  .then(deliver)\n  .commit()\n// 这次运行只生成待确认清单，没有保存或发送。\nconst run = await workflow.createRun()\nconsole.dir(await run.start({ inputData: { title: ' 阅读分享会 ', venue: ' 南门 ' } }), { depth: null })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/03-sequential.ts"
+            }
+          ]
+        },
+        {
+          "title": "inputData 是上一个交接点的结果",
+          "body": "步骤的 **inputData** 通常来自前一个执行节点，包括 map 产生的结果，而不是始终等于工作流最初输入。\n需要查看早先某一步时，可以使用 **getStepResult()**；需要起始输入时，可以使用 **getInitData()**。如果资料是下一步执行所必需的，优先把它明确放在交接数据里，便于核对依赖关系。"
+        },
+        {
+          "title": "运行中共享状态，与记忆分开",
+          "body": "工作流还可以通过 **stateSchema**、**state** 与 **setState()** 维护本次运行的共享状态，例如累计计数。它与步骤输出承担不同职责，也不是 08 的跨会话记忆。\n本例先使用显式输入输出，保持依赖清楚。检查结果时，应看到空白被清理，清单保留南门，最后的业务状态仍是“待用户确认”。"
+        },
+        {
+          "title": "顺序明确之后，再处理不同情况",
+          "body": "如果地点尚未公布，制作清单之前需要走另一条路径。\n下一节让程序按资料是否齐全选择处理分支。"
+        }
+      ]
+    }
+  }
+}

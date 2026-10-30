@@ -1,0 +1,82 @@
+{
+  "title": "文件读写（File Operations）",
+  "lead": "把读取、覆盖和只读限制落实到具体文件，核对当前内容而不是只看成功提示。",
+  "sections": [
+    {
+      "title": "读到了旧内容，写入才有明确依据",
+      "body": "活动地点从待确认变成南门，需要更新准备草稿。先读回旧内容，再按已确认资料写入新内容，便于知道这次修改了什么。\n**readFile()** 读取内容，**writeFile()** 可以创建或覆盖文件。应用还要区分原始资料和可修改产物，避免把草稿整理误当成更改主办方原文。"
+    },
+    {
+      "title": "观察一次覆盖与一次被拒绝的写入",
+      "body": "本例先将“地点待确认”改成“南门入场”，直接读回确认变化。再用 **readOnly: true** 连接同一目录，读取仍可进行，写入应被拒绝。\n这里没有并发编辑，读后覆盖用于观察基本行为。实际多人修改时，还需要相应的版本或冲突处理，不能把一次写入成功当成没有覆盖他人改动。",
+      "codeBlocks": [
+        {
+          "label": "src/03-read-write.js",
+          "language": "javascript",
+          "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// 读写实例只操作本节教学目录。\nconst writable = new LocalFilesystem({ basePath: resolve('lab/03-files') })\nawait writable.init()\nawait writable.writeFile('draft.txt', '地点待确认。')\n// 先读回旧内容，再用明确内容覆盖本次草稿。\nconst before = await writable.readFile('draft.txt', { encoding: 'utf8' })\nawait writable.writeFile('draft.txt', '主办方已确认南门入场。')\nconsole.dir({ before, after: await writable.readFile('draft.txt', { encoding: 'utf8' }) })\n// 同一路径的只读接口可阅读资料，但不能通过该接口写入。\nconst readOnly = new LocalFilesystem({ basePath: resolve('lab/03-files'), readOnly: true })\nconsole.log('只读接口：', await readOnly.readFile('draft.txt', { encoding: 'utf8' }))\ntry {\n  await readOnly.writeFile('draft.txt', '不应写入的内容。')\n} catch (error) {\n  console.log('只读写入被拒绝：', error instanceof Error ? error.message : error)\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/03-read-write.js"
+        }
+      ]
+    },
+    {
+      "title": "只读接口与命令权限分开",
+      "body": "只读配置约束通过该文件系统接口发起的操作。若另外提供了拥有宿主写入权限的命令工具，文件工具的只读设置不会自动约束那条执行路径。\n因此应按需要提供能力：读取原始通知、维护草稿、执行脚本，各自配置相应范围，13 再看运行环境的权限边界。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "核对写入时，确认改的是目标文件、内容符合已确认资料，并且接口确实按配置拒绝不允许的操作。"
+        }
+      ]
+    },
+    {
+      "title": "材料变多以后，需要找到相关片段",
+      "body": "逐个打开文件适合少量材料。通知、FAQ 和更正记录增加后，需要通过搜索找相关内容。\n下一节把文件原文与搜索索引的更新分开观察。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "只读文件接口拒绝写入，但另一个命令工具仍能改文件。为什么两种结果可以同时成立？应分别检查哪处配置？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "读到了旧内容，写入才有明确依据",
+          "body": "活动地点从待确认变成南门，需要更新准备草稿。先读回旧内容，再按已确认资料写入新内容，便于知道这次修改了什么。\n**readFile()** 读取内容，**writeFile()** 可以创建或覆盖文件。应用还要区分原始资料和可修改产物，避免把草稿整理误当成更改主办方原文。"
+        },
+        {
+          "title": "观察一次覆盖与一次被拒绝的写入",
+          "body": "本例先将“地点待确认”改成“南门入场”，直接读回确认变化。再用 **readOnly: true** 连接同一目录，读取仍可进行，写入应被拒绝。\n这里没有并发编辑，读后覆盖用于观察基本行为。实际多人修改时，还需要相应的版本或冲突处理，不能把一次写入成功当成没有覆盖他人改动。",
+          "codeBlocks": [
+            {
+              "label": "src/03-read-write.ts",
+              "language": "typescript",
+              "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// 读写实例只操作本节教学目录。\nconst writable = new LocalFilesystem({ basePath: resolve('lab/03-files') })\nawait writable.init()\nawait writable.writeFile('draft.txt', '地点待确认。')\n// 先读回旧内容，再用明确内容覆盖本次草稿。\nconst before = await writable.readFile('draft.txt', { encoding: 'utf8' })\nawait writable.writeFile('draft.txt', '主办方已确认南门入场。')\nconsole.dir({ before, after: await writable.readFile('draft.txt', { encoding: 'utf8' }) })\n// 同一路径的只读接口可阅读资料，但不能通过该接口写入。\nconst readOnly = new LocalFilesystem({ basePath: resolve('lab/03-files'), readOnly: true })\nconsole.log('只读接口：', await readOnly.readFile('draft.txt', { encoding: 'utf8' }))\ntry {\n  await readOnly.writeFile('draft.txt', '不应写入的内容。')\n} catch (error) {\n  console.log('只读写入被拒绝：', error instanceof Error ? error.message : error)\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/03-read-write.ts"
+            }
+          ]
+        },
+        {
+          "title": "只读接口与命令权限分开",
+          "body": "只读配置约束通过该文件系统接口发起的操作。若另外提供了拥有宿主写入权限的命令工具，文件工具的只读设置不会自动约束那条执行路径。\n因此应按需要提供能力：读取原始通知、维护草稿、执行脚本，各自配置相应范围，13 再看运行环境的权限边界。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "核对写入时，确认改的是目标文件、内容符合已确认资料，并且接口确实按配置拒绝不允许的操作。"
+            }
+          ]
+        },
+        {
+          "title": "材料变多以后，需要找到相关片段",
+          "body": "逐个打开文件适合少量材料。通知、FAQ 和更正记录增加后，需要通过搜索找相关内容。\n下一节把文件原文与搜索索引的更新分开观察。"
+        }
+      ]
+    }
+  }
+}

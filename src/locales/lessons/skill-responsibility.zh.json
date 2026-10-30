@@ -1,0 +1,148 @@
+{
+  "title": "技能与职责（Skills & Instructions）",
+  "lead": "把具体任务的方法单独维护，让助手在需要时读取。",
+  "sections": [
+    {
+      "title": "同一个助手，做三件事有三套方法",
+      "body": "活动助手会核对资料、制作出发清单、编写提醒。它们共用“只依据已有资料”的原则，但具体检查项目和交付格式不同。\n**技能（Skill）**把一种任务的说明与支持材料组织在一起，供 Agent 在相关任务中发现和加载。换一种任务时，可以选择另一份方法，而不必把所有细节始终放进系统提示词。"
+    },
+    {
+      "title": "职责、方法与执行分别放在哪里",
+      "body": "**Agent.instructions** 是通用系统提示词，说明助手负责什么。**createSkill() 的 instructions** 是某项任务的具体方法；加载工具把它带进当前对话后，模型才据此处理资料。\n两处字段同名，作用位置不同。技能说明本身也是内容，需要模型理解与遵循，不会自动变成必须执行的程序步骤。",
+      "table": {
+        "headers": [
+          "能力",
+          "在活动助手中负责什么"
+        ],
+        "rows": [
+          [
+            "系统提示词",
+            "通用职责、事实依据与表达原则"
+          ],
+          [
+            "技能",
+            "核对活动或制作清单的具体方法"
+          ],
+          [
+            "工具",
+            "查询记录、读写文件等可执行操作"
+          ],
+          [
+            "工作流",
+            "业务必须遵守的步骤顺序与数据交接"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "先配置一个最小技能",
+      "body": "下载示例，解压后进入 11-skills 文件夹，使用 Node.js 24 或更高版本安装依赖。\n本例通过 skills 将内联技能挂给 Agent，再用 **listSkills()** 查看元数据、**getSkill()** 读取规则。先不调用模型，确认技能名称、用途和规则能被正确读取。",
+      "download": {
+        "href": "/downloads/11-skills.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install"
+        },
+        {
+          "label": "src/01-skills.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { createSkill } from '@mastra/core/skills'\n\n// 把一种具体任务的方法单独维护，避免全塞进 Agent 的通用职责。\nconst reviewSkill = createSkill({\n  name: 'activity-review', description: '用于核对活动时间、地点、预约要求和缺失信息。',\n  instructions: '先逐项提取原文明确内容，再列出待确认项；保留来源，不把预约要求写成已预约。'\n})\n// 系统提示词负责通用职责，skills 提供可发现的任务方法。\nconst agent = new Agent({\n  id: 'skill-intro', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文帮助用户处理活动资料。', skills: [reviewSkill]\n})\nconsole.table(await agent.listSkills())\nconsole.log('该技能的完整规则：', (await agent.getSkill('activity-review'))?.instructions)"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/01-skills.js"
+        }
+      ]
+    },
+    {
+      "title": "规则要能用结果检查",
+      "body": "“仔细处理”很难核对。“区分开始与入场时间、把未知地点列入待确认、不把预约要求当成已预约”则能对应具体偏差。\n下一节先把技能名称、用途和处理规则写清，再让 Agent 判断何时使用它。",
+      "links": [
+        {
+          "label": "Mastra：Agent 技能",
+          "href": "https://mastra.ai/docs/skills"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "把“仔细核对活动资料”改成两条能从结果检查的技能规则。哪些顺序若必须遵守，还应写进工作流？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "同一个助手，做三件事有三套方法",
+          "body": "活动助手会核对资料、制作出发清单、编写提醒。它们共用“只依据已有资料”的原则，但具体检查项目和交付格式不同。\n**技能（Skill）**把一种任务的说明与支持材料组织在一起，供 Agent 在相关任务中发现和加载。换一种任务时，可以选择另一份方法，而不必把所有细节始终放进系统提示词。"
+        },
+        {
+          "title": "职责、方法与执行分别放在哪里",
+          "body": "**Agent.instructions** 是通用系统提示词，说明助手负责什么。**createSkill() 的 instructions** 是某项任务的具体方法；加载工具把它带进当前对话后，模型才据此处理资料。\n两处字段同名，作用位置不同。技能说明本身也是内容，需要模型理解与遵循，不会自动变成必须执行的程序步骤。",
+          "table": {
+            "headers": [
+              "能力",
+              "在活动助手中负责什么"
+            ],
+            "rows": [
+              [
+                "系统提示词",
+                "通用职责、事实依据与表达原则"
+              ],
+              [
+                "技能",
+                "核对活动或制作清单的具体方法"
+              ],
+              [
+                "工具",
+                "查询记录、读写文件等可执行操作"
+              ],
+              [
+                "工作流",
+                "业务必须遵守的步骤顺序与数据交接"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "先配置一个最小技能",
+          "body": "下载示例，解压后进入 11-skills-ts 文件夹，使用 Node.ts 24 或更高版本安装依赖。\n本例通过 skills 将内联技能挂给 Agent，再用 **listSkills()** 查看元数据、**getSkill()** 读取规则。先不调用模型，确认技能名称、用途和规则能被正确读取。",
+          "download": {
+            "href": "/downloads/11-skills-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install"
+            },
+            {
+              "label": "src/01-skills.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { createSkill } from '@mastra/core/skills'\n\n// 把一种具体任务的方法单独维护，避免全塞进 Agent 的通用职责。\nconst reviewSkill = createSkill({\n  name: 'activity-review', description: '用于核对活动时间、地点、预约要求和缺失信息。',\n  instructions: '先逐项提取原文明确内容，再列出待确认项；保留来源，不把预约要求写成已预约。'\n})\n// 系统提示词负责通用职责，skills 提供可发现的任务方法。\nconst agent = new Agent({\n  id: 'skill-intro', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文帮助用户处理活动资料。', skills: [reviewSkill]\n})\nconsole.table(await agent.listSkills())\nconsole.log('该技能的完整规则：', (await agent.getSkill('activity-review'))?.instructions)"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/01-skills.ts"
+            }
+          ]
+        },
+        {
+          "title": "规则要能用结果检查",
+          "body": "“仔细处理”很难核对。“区分开始与入场时间、把未知地点列入待确认、不把预约要求当成已预约”则能对应具体偏差。\n下一节先把技能名称、用途和处理规则写清，再让 Agent 判断何时使用它。",
+          "links": [
+            {
+              "label": "Mastra：Agent 技能",
+              "href": "https://mastra.ai/docs/skills"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "title": "生命周期（Lifecycle）",
+  "lead": "明确环境的创建、共享和销毁责任，同时单独核对文件的保留。",
+  "sections": [
+    {
+      "title": "静态环境与按请求解析，复用范围不同",
+      "body": "在 Workspace 上直接配置一个 Sandbox 实例，多次请求可以共用它。需要按用户或线程分别选择环境时，可以使用 **沙箱解析函数（sandbox resolver）**。\n**sandboxCacheKey** 决定哪些请求复用同一份已解析环境。它是运行时复用规则，不会自动替代用户认证，也不是把活跃进程永久保存在数据库里。"
+    },
+    {
+      "title": "同一用户复用，不同用户分开",
+      "body": "本例只接受两位教学用户，根据归属返回不同工作目录。相同 reader 的新请求应得到同一个缓存实例，不同 reader 则使用不同实例。\n应用保存自己创建的实例引用，在 finally 中显式 destroy 并调用 **clearSandboxCache()**。resolver 返回的实例需要由应用安排回收，不能假定 workspace.destroy 会代为销毁它们。",
+      "codeBlocks": [
+        {
+          "label": "src/07-lifecycle.js",
+          "language": "javascript",
+          "code": "import { LocalSandbox, Workspace } from '@mastra/core/workspace'\nimport { RequestContext } from '@mastra/core/request-context'\nimport { resolve } from 'node:path'\nimport { writeFile, readFile } from 'node:fs/promises'\nimport { z } from 'zod'\n\n// 应用记录自己创建的运行环境，负责在任务结束时回收。\nconst owned = new Map()\n// 相同归属跨请求复用环境，不同归属分别创建。\nconst workspace = new Workspace({\n  sandbox: async ({ requestContext }) => {\n    const reader = z.enum(['reader-a', 'reader-b']).parse(requestContext.get('reader'))\n    const sandbox = new LocalSandbox({ workingDirectory: resolve('lab/07-lifecycle', reader) })\n    await sandbox.start()\n    owned.set(reader, sandbox)\n    return sandbox\n  },\n  sandboxCacheKey: ({ requestContext }) => z.enum(['reader-a', 'reader-b']).parse(requestContext.get('reader'))\n})\n// 每次建立新的请求上下文，归属由应用给出。\nfunction contextFor (reader) {\n  const context = new RequestContext()\n  context.set('reader', reader)\n  return context\n}\ntry {\n  const first = await workspace.resolveSandbox({ requestContext: contextFor('reader-a') })\n  const same = await workspace.resolveSandbox({ requestContext: contextFor('reader-a') })\n  const other = await workspace.resolveSandbox({ requestContext: contextFor('reader-b') })\n  console.dir({ sameReaderReuses: first === same, differentReaderSeparates: first !== other, created: owned.size })\n  await writeFile(resolve(first.workingDirectory, 'output.txt'), '第一位教学用户的本地产物。')\n} finally {\n  for (const [reader, sandbox] of owned) {\n    await sandbox.destroy()\n    workspace.clearSandboxCache(reader)\n  }\n  await workspace.destroy()\n}\nconsole.log('本地产物仍在：', await readFile(resolve('lab/07-lifecycle/reader-a/output.txt'), 'utf8'))"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/07-lifecycle.js"
+        }
+      ]
+    },
+    {
+      "title": "进程结束与文件消失，也要分别核对",
+      "body": "示例结束后重新读取本地产物，说明 LocalSandbox 的普通文件没有随环境对象销毁而自动删除。其他后端可能使用临时磁盘，停止后是否保留需按实际提供方检查。\n需要持久文件时，可以使用适合的 Filesystem、支持的挂载，或明确转存产物。文件工具看得到的提供方，也只有在命令环境成功挂载后，才能按对应路径被命令读取。"
+    },
+    {
+      "title": "把方法、材料与执行连成一条任务",
+      "body": "技能提供处理方法，工作区组织文件与搜索，沙箱提供程序执行。实际任务可以由工作流串联：先找资料、加载方法、运行必要处理，再检查产物、等待确认并保存。\n每次增加能力，继续核对它能接触什么、执行发生在哪里、结果依据是什么，以及结束后留下了哪些记录与文件。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "同一用户的两次请求复用了一个环境，任务结束后由谁回收？环境销毁与 output.txt 是否保留，为什么要分别检查？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "静态环境与按请求解析，复用范围不同",
+          "body": "在 Workspace 上直接配置一个 Sandbox 实例，多次请求可以共用它。需要按用户或线程分别选择环境时，可以使用 **沙箱解析函数（sandbox resolver）**。\n**sandboxCacheKey** 决定哪些请求复用同一份已解析环境。它是运行时复用规则，不会自动替代用户认证，也不是把活跃进程永久保存在数据库里。"
+        },
+        {
+          "title": "同一用户复用，不同用户分开",
+          "body": "本例只接受两位教学用户，根据归属返回不同工作目录。相同 reader 的新请求应得到同一个缓存实例，不同 reader 则使用不同实例。\n应用保存自己创建的实例引用，在 finally 中显式 destroy 并调用 **clearSandboxCache()**。resolver 返回的实例需要由应用安排回收，不能假定 workspace.destroy 会代为销毁它们。",
+          "codeBlocks": [
+            {
+              "label": "src/07-lifecycle.ts",
+              "language": "typescript",
+              "code": "import { LocalSandbox, Workspace } from '@mastra/core/workspace'\nimport { RequestContext } from '@mastra/core/request-context'\nimport { resolve } from 'node:path'\nimport { writeFile, readFile } from 'node:fs/promises'\nimport { z } from 'zod'\n\n// 应用记录自己创建的运行环境，负责在任务结束时回收。\nconst owned = new Map()\n// 相同归属跨请求复用环境，不同归属分别创建。\nconst workspace = new Workspace({\n  sandbox: async ({ requestContext }) => {\n    const reader = z.enum(['reader-a', 'reader-b']).parse(requestContext.get('reader'))\n    const sandbox = new LocalSandbox({ workingDirectory: resolve('lab/07-lifecycle', reader) })\n    await sandbox.start()\n    owned.set(reader, sandbox)\n    return sandbox\n  },\n  sandboxCacheKey: ({ requestContext }) => z.enum(['reader-a', 'reader-b']).parse(requestContext.get('reader'))\n})\n// 每次建立新的请求上下文，归属由应用给出。\nfunction contextFor (reader) {\n  const context = new RequestContext()\n  context.set('reader', reader)\n  return context\n}\ntry {\n  const first = await workspace.resolveSandbox({ requestContext: contextFor('reader-a') })\n  const same = await workspace.resolveSandbox({ requestContext: contextFor('reader-a') })\n  const other = await workspace.resolveSandbox({ requestContext: contextFor('reader-b') })\n  console.dir({ sameReaderReuses: first === same, differentReaderSeparates: first !== other, created: owned.size })\n  await writeFile(resolve(first.workingDirectory, 'output.txt'), '第一位教学用户的本地产物。')\n} finally {\n  for (const [reader, sandbox] of owned) {\n    await sandbox.destroy()\n    workspace.clearSandboxCache(reader)\n  }\n  await workspace.destroy()\n}\nconsole.log('本地产物仍在：', await readFile(resolve('lab/07-lifecycle/reader-a/output.txt'), 'utf8'))"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/07-lifecycle.ts"
+            }
+          ]
+        },
+        {
+          "title": "进程结束与文件消失，也要分别核对",
+          "body": "示例结束后重新读取本地产物，说明 LocalSandbox 的普通文件没有随环境对象销毁而自动删除。其他后端可能使用临时磁盘，停止后是否保留需按实际提供方检查。\n需要持久文件时，可以使用适合的 Filesystem、支持的挂载，或明确转存产物。文件工具看得到的提供方，也只有在命令环境成功挂载后，才能按对应路径被命令读取。"
+        },
+        {
+          "title": "把方法、材料与执行连成一条任务",
+          "body": "技能提供处理方法，工作区组织文件与搜索，沙箱提供程序执行。实际任务可以由工作流串联：先找资料、加载方法、运行必要处理，再检查产物、等待确认并保存。\n每次增加能力，继续核对它能接触什么、执行发生在哪里、结果依据是什么，以及结束后留下了哪些记录与文件。"
+        }
+      ]
+    }
+  }
+}

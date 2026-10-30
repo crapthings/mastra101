@@ -1,0 +1,90 @@
+{
+  "title": "观察记忆（Observational Memory）",
+  "lead": "把较长的对话整理成观察记录，同时保留时间、条件与更正关系。",
+  "sections": [
+    {
+      "title": "一直保留原始聊天，会越来越重",
+      "body": "活动从初步安排聊到最终确认，中间出现许多重复解释。继续带上每一句话会占空间，只保留最后几条又可能丢掉早先的重要决定。\n**观察记忆（Observational Memory）**在对话增长时把过程整理成较紧凑的观察记录，让后续请求使用观察与尚未整理的新消息。观察处理需要额外模型调用，应一起考虑费用与等待时间。"
+    },
+    {
+      "title": "Observer 与 Reflector 分别整理什么",
+      "body": "**Observer** 从待处理对话中提取观察，关注事件、事实与变化；观察记录继续增长后，**Reflector** 再整理这些观察。\n“原通知东门，后更正为南门”应保留更正关系，而不是压成“可以从东门或南门进”。压缩是否忠实，需要用原始记录核对；记录变短本身不是质量标准。"
+    },
+    {
+      "title": "先显式配置，再观察长对话",
+      "body": "通过 **observationalMemory** 开启，并显式指定观察模型。本例仍使用 vercel/openai/gpt-6.1-sol，存储使用本地 LibSQL。\n示例将观察阈值设为 1000 Token，并关闭异步缓冲，便于先理解达到条件后再处理的路径。它不是所有项目都应采用的配置；实际项目还要考虑延迟、费用和处理进度。",
+      "codeBlocks": [
+        {
+          "label": "src/07-observational.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 显式指定观察模型，较长对话达到条件后整理成观察记录。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'observation-storage', url: 'file:./07-observational.db' }),\n  options: {\n    semanticRecall: false, generateTitle: false,\n    observationalMemory: {\n      model: 'vercel/openai/gpt-6.1-sol',\n      observation: { messageTokens: 1000, bufferTokens: false }\n    }\n  }\n})\n\n// 活动助手读取可用上下文，观察过程由记忆配置安排。\nconst agent = new Agent({\n  id: 'activity-observation', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol', memory,\n  instructions: '用中文核对资料，保留更新顺序和来源。后续明确更正应覆盖旧安排，未知信息仍待确认。'\n})\n\n// 此短对话只跑通配置，达到阈值的长对话才会触发观察。\nconst identity = { resource: randomUUID(), thread: randomUUID() }\nawait agent.generate('主办方原先通知东门入场，刚刚更正为南门入场。请以更正通知为准。', {\n  memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000)\n})\n// 核对更正是否保留，不能仅凭回答正确就断定观察已经发生。\nconst result = await agent.generate('现在应该走哪个入口？', {\n  memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000)\n})\nconsole.log(result.text)\nconsole.log('观察阈值为 1000 Token；请在长对话中结合调用记录检查是否实际触发。')"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/07-observational.js"
+        }
+      ]
+    },
+    {
+      "title": "先确认触发，再核对整理结果",
+      "body": "脚本里的短对话用于跑通配置，通常达不到观察阈值。第二次能回答南门，可能只是读到了原始历史。\n验证时按两个阶段看：先从调用记录确认 Observer 是否处理过对话，再对照原文核对观察是否保留“东门被南门替代”。只有两者都明确，才能判断整理机制是否按预期工作。\n观察记录也需要压缩时，再检查 Reflector 的输入与输出。不要把配置中开启了一项能力，直接当成该项能力已经参与这次回答。"
+    },
+    {
+      "title": "整理好的内容，也需要继续保存",
+      "body": "观察改变了上下文的组织方式，消息、偏好与观察记录仍依赖对应存储。程序退出后能否继续，不取决于进程里是否还留着 Memory 对象。\n下一节用两次独立进程，核对存储与归属标识怎样让对话延续。",
+      "links": [
+        {
+          "label": "Mastra：观察记忆",
+          "href": "https://mastra.ai/docs/memory/observational-memory"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "短对话回答正确，能否证明 Observer 已经工作？若观察把“后来更正为南门”压缩成“东门或南门”，应该检查输入、观察记录还是表达语气？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "一直保留原始聊天，会越来越重",
+          "body": "活动从初步安排聊到最终确认，中间出现许多重复解释。继续带上每一句话会占空间，只保留最后几条又可能丢掉早先的重要决定。\n**观察记忆（Observational Memory）**在对话增长时把过程整理成较紧凑的观察记录，让后续请求使用观察与尚未整理的新消息。观察处理需要额外模型调用，应一起考虑费用与等待时间。"
+        },
+        {
+          "title": "Observer 与 Reflector 分别整理什么",
+          "body": "**Observer** 从待处理对话中提取观察，关注事件、事实与变化；观察记录继续增长后，**Reflector** 再整理这些观察。\n“原通知东门，后更正为南门”应保留更正关系，而不是压成“可以从东门或南门进”。压缩是否忠实，需要用原始记录核对；记录变短本身不是质量标准。"
+        },
+        {
+          "title": "先显式配置，再观察长对话",
+          "body": "通过 **observationalMemory** 开启，并显式指定观察模型。本例仍使用 vercel/openai/gpt-6.1-sol，存储使用本地 LibSQL。\n示例将观察阈值设为 1000 Token，并关闭异步缓冲，便于先理解达到条件后再处理的路径。它不是所有项目都应采用的配置；实际项目还要考虑延迟、费用和处理进度。",
+          "codeBlocks": [
+            {
+              "label": "src/07-observational.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 显式指定观察模型，较长对话达到条件后整理成观察记录。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'observation-storage', url: 'file:./07-observational.db' }),\n  options: {\n    semanticRecall: false, generateTitle: false,\n    observationalMemory: {\n      model: 'vercel/openai/gpt-6.1-sol',\n      observation: { messageTokens: 1000, bufferTokens: false }\n    }\n  }\n})\n\n// 活动助手读取可用上下文，观察过程由记忆配置安排。\nconst agent = new Agent({\n  id: 'activity-observation', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol', memory,\n  instructions: '用中文核对资料，保留更新顺序和来源。后续明确更正应覆盖旧安排，未知信息仍待确认。'\n})\n\n// 此短对话只跑通配置，达到阈值的长对话才会触发观察。\nconst identity = { resource: randomUUID(), thread: randomUUID() }\nawait agent.generate('主办方原先通知东门入场，刚刚更正为南门入场。请以更正通知为准。', {\n  memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000)\n})\n// 核对更正是否保留，不能仅凭回答正确就断定观察已经发生。\nconst result = await agent.generate('现在应该走哪个入口？', {\n  memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000)\n})\nconsole.log(result.text)\nconsole.log('观察阈值为 1000 Token；请在长对话中结合调用记录检查是否实际触发。')"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/07-observational.ts"
+            }
+          ]
+        },
+        {
+          "title": "先确认触发，再核对整理结果",
+          "body": "脚本里的短对话用于跑通配置，通常达不到观察阈值。第二次能回答南门，可能只是读到了原始历史。\n验证时按两个阶段看：先从调用记录确认 Observer 是否处理过对话，再对照原文核对观察是否保留“东门被南门替代”。只有两者都明确，才能判断整理机制是否按预期工作。\n观察记录也需要压缩时，再检查 Reflector 的输入与输出。不要把配置中开启了一项能力，直接当成该项能力已经参与这次回答。"
+        },
+        {
+          "title": "整理好的内容，也需要继续保存",
+          "body": "观察改变了上下文的组织方式，消息、偏好与观察记录仍依赖对应存储。程序退出后能否继续，不取决于进程里是否还留着 Memory 对象。\n下一节用两次独立进程，核对存储与归属标识怎样让对话延续。",
+          "links": [
+            {
+              "label": "Mastra：观察记忆",
+              "href": "https://mastra.ai/docs/memory/observational-memory"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

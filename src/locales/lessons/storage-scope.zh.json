@@ -1,0 +1,78 @@
+{
+  "title": "配置范围（Configuration Scope）",
+  "lead": "把实例级共享存储与 Memory 单独配置分开，核对每份数据的落点。",
+  "sections": [
+    {
+      "title": "多个助手，哪些数据使用同一套存储",
+      "body": "一个活动项目可能有资料助手和提醒助手。多数运行数据可以使用同一个后端，但也可能希望某个助手的记忆单独保存。\n**实例级存储**配置在 Mastra 上，为注册到该实例的相关能力提供共享后端；**Memory 级存储**直接配置在 Memory 上，明确该记忆使用的后端。"
+    },
+    {
+      "title": "单独覆盖只作用于对应记忆",
+      "body": "Memory 显式指定 storage 时，这份记忆使用自己的后端；没有单独指定时，可以从所属 Mastra 实例取得共享存储。局部覆盖只改变对应记忆的读写位置，实例上的其他能力继续使用各自配置。\n示例通过 **mastra.getAgentById()** 取得注册后的助手，再通过 **getMemory()** 访问记忆，把配置来源与后续操作连在一起。"
+    },
+    {
+      "title": "写两条记录，分别到两个后端核对",
+      "body": "示例注册两个 Agent，一个继承实例存储，另一个指定独立存储。随后只通过记忆 API 创建会话，不调用模型。\n读回结果应显示：共享会话在共享后端，独立会话在独立后端，共享后端中没有本次创建的独立会话。脚本中的三个布尔值分别检查这三件事。",
+      "codeBlocks": [
+        {
+          "label": "src/02-scope.js",
+          "language": "javascript",
+          "code": "import { Mastra } from '@mastra/core'\nimport { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 为同一实例上的运行数据提供默认存储。\nconst shared = new LibSQLStore({ id: 'shared-storage', url: 'file:./02-shared.db' })\n// 一个助手的记忆改用独立数据库，其他配置不受这个覆盖影响。\nconst privateStore = new LibSQLStore({ id: 'private-memory-storage', url: 'file:./02-private.db' })\n// 这个助手的记忆从 Mastra 实例取得存储。\nconst sharedAgent = new Agent({\n  id: 'shared-activity', name: '共享存储助手', model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文核对活动资料。',\n  memory: new Memory({ options: { semanticRecall: false, generateTitle: false } })\n})\n// 这个助手通过 Memory 配置独立的存储，不发起模型调用。\nconst privateAgent = new Agent({\n  id: 'private-activity', name: '独立记忆存储助手', model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文核对活动资料。',\n  memory: new Memory({ storage: privateStore, options: { semanticRecall: false, generateTitle: false } })\n})\n// 注册后通过实例取得助手，使共享配置参与初始化。\nconst mastra = new Mastra({ storage: shared, agents: { sharedAgent, privateAgent } })\n// 从注册后的助手取得记忆，不根据文件名猜配置是否生效。\nconst firstMemory = await mastra.getAgentById('shared-activity').getMemory()\n// 第二份记忆应使用显式配置的独立存储。\nconst secondMemory = await mastra.getAgentById('private-activity').getMemory()\nif (!firstMemory || !secondMemory) throw new Error('助手没有配置记忆。')\n\n// 使用唯一教学会话标识，便于对照两个后端的实际记录。\nconst sharedThread = randomUUID()\n// 独立记忆会话拥有不同标识。\nconst privateThread = randomUUID()\nawait firstMemory.createThread({ threadId: sharedThread, resourceId: 'demo-reader', title: '共享后端中的会话' })\nawait secondMemory.createThread({ threadId: privateThread, resourceId: 'demo-reader', title: '独立后端中的会话' })\n\n// 检查两个数据库的 memory 领域，核对配置覆盖的落点。\nconst sharedDomain = await shared.getStore('memory')\n// 直接访问独立后端，验证记录确实写到这里。\nconst privateDomain = await privateStore.getStore('memory')\nconsole.dir({\n  sharedHasShared: Boolean(await sharedDomain.getThreadById({ threadId: sharedThread })),\n  sharedHasPrivate: Boolean(await sharedDomain.getThreadById({ threadId: privateThread })),\n  privateHasPrivate: Boolean(await privateDomain.getThreadById({ threadId: privateThread }))\n})"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/02-scope.js"
+        }
+      ]
+    },
+    {
+      "title": "共享后端不等于共享所有记忆",
+      "body": "同一个数据库可以保存许多用户和会话。两个助手连接到它以后，仍要按 resource、thread 与记忆范围选择记录，并由应用核实访问权限。\n把两个问题分开看：配置范围决定“使用哪份存储”，记忆范围决定“从中取哪些资料”。"
+    },
+    {
+      "title": "同一后端里，还有不同种类的数据",
+      "body": "实例级存储不只服务于记忆。审批、工作流和运行记录也需要保存各自的状态。\n下一节认识存储领域，看看这些接口怎样分工。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "某个 Memory 显式连接独立数据库后，工作流快照是否也会自动转移过去？如果两个助手使用同一个数据库，是否就能自动读取对方的全部会话？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "多个助手，哪些数据使用同一套存储",
+          "body": "一个活动项目可能有资料助手和提醒助手。多数运行数据可以使用同一个后端，但也可能希望某个助手的记忆单独保存。\n**实例级存储**配置在 Mastra 上，为注册到该实例的相关能力提供共享后端；**Memory 级存储**直接配置在 Memory 上，明确该记忆使用的后端。"
+        },
+        {
+          "title": "单独覆盖只作用于对应记忆",
+          "body": "Memory 显式指定 storage 时，这份记忆使用自己的后端；没有单独指定时，可以从所属 Mastra 实例取得共享存储。局部覆盖只改变对应记忆的读写位置，实例上的其他能力继续使用各自配置。\n示例通过 **mastra.getAgentById()** 取得注册后的助手，再通过 **getMemory()** 访问记忆，把配置来源与后续操作连在一起。"
+        },
+        {
+          "title": "写两条记录，分别到两个后端核对",
+          "body": "示例注册两个 Agent，一个继承实例存储，另一个指定独立存储。随后只通过记忆 API 创建会话，不调用模型。\n读回结果应显示：共享会话在共享后端，独立会话在独立后端，共享后端中没有本次创建的独立会话。脚本中的三个布尔值分别检查这三件事。",
+          "codeBlocks": [
+            {
+              "label": "src/02-scope.ts",
+              "language": "typescript",
+              "code": "import { Mastra } from '@mastra/core'\nimport { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 为同一实例上的运行数据提供默认存储。\nconst shared = new LibSQLStore({ id: 'shared-storage', url: 'file:./02-shared.db' })\n// 一个助手的记忆改用独立数据库，其他配置不受这个覆盖影响。\nconst privateStore = new LibSQLStore({ id: 'private-memory-storage', url: 'file:./02-private.db' })\n// 这个助手的记忆从 Mastra 实例取得存储。\nconst sharedAgent = new Agent({\n  id: 'shared-activity', name: '共享存储助手', model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文核对活动资料。',\n  memory: new Memory({ options: { semanticRecall: false, generateTitle: false } })\n})\n// 这个助手通过 Memory 配置独立的存储，不发起模型调用。\nconst privateAgent = new Agent({\n  id: 'private-activity', name: '独立记忆存储助手', model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文核对活动资料。',\n  memory: new Memory({ storage: privateStore, options: { semanticRecall: false, generateTitle: false } })\n})\n// 注册后通过实例取得助手，使共享配置参与初始化。\nconst mastra = new Mastra({ storage: shared, agents: { sharedAgent, privateAgent } })\n// 从注册后的助手取得记忆，不根据文件名猜配置是否生效。\nconst firstMemory = await mastra.getAgentById('shared-activity').getMemory()\n// 第二份记忆应使用显式配置的独立存储。\nconst secondMemory = await mastra.getAgentById('private-activity').getMemory()\nif (!firstMemory || !secondMemory) throw new Error('助手没有配置记忆。')\n\n// 使用唯一教学会话标识，便于对照两个后端的实际记录。\nconst sharedThread = randomUUID()\n// 独立记忆会话拥有不同标识。\nconst privateThread = randomUUID()\nawait firstMemory.createThread({ threadId: sharedThread, resourceId: 'demo-reader', title: '共享后端中的会话' })\nawait secondMemory.createThread({ threadId: privateThread, resourceId: 'demo-reader', title: '独立后端中的会话' })\n\n// 检查两个数据库的 memory 领域，核对配置覆盖的落点。\nconst sharedDomain = await shared.getStore('memory')\n// 直接访问独立后端，验证记录确实写到这里。\nconst privateDomain = await privateStore.getStore('memory')\nconsole.dir({\n  sharedHasShared: Boolean(await sharedDomain.getThreadById({ threadId: sharedThread })),\n  sharedHasPrivate: Boolean(await sharedDomain.getThreadById({ threadId: privateThread })),\n  privateHasPrivate: Boolean(await privateDomain.getThreadById({ threadId: privateThread }))\n})"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/02-scope.ts"
+            }
+          ]
+        },
+        {
+          "title": "共享后端不等于共享所有记忆",
+          "body": "同一个数据库可以保存许多用户和会话。两个助手连接到它以后，仍要按 resource、thread 与记忆范围选择记录，并由应用核实访问权限。\n把两个问题分开看：配置范围决定“使用哪份存储”，记忆范围决定“从中取哪些资料”。"
+        },
+        {
+          "title": "同一后端里，还有不同种类的数据",
+          "body": "实例级存储不只服务于记忆。审批、工作流和运行记录也需要保存各自的状态。\n下一节认识存储领域，看看这些接口怎样分工。"
+        }
+      ]
+    }
+  }
+}

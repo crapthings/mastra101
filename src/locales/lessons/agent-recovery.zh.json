@@ -76,7 +76,7 @@
     }
   ],
   "noteTitle": "本节检查",
-  "note": "运行“强制拦截”时，maxSteps 为 1、maxProcessorRetries 为 1，为什么仍可能出现两次模型生成？最终返回 tripwire 后，应用应向用户保留什么状态，能否把最后一次文本作为已完成结果交付？",
+  "note": "maxSteps: 1、maxProcessorRetries: 1，为什么仍可能生成两次？反馈重试耗尽并返回 tripwire 后，应怎样说明未完成的部分？",
   "codeVariants": {
     "ts": {
       "sections": [

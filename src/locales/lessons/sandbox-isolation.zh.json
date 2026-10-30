@@ -1,0 +1,94 @@
+{
+  "title": "隔离边界（Isolation Boundaries）",
+  "lead": "显式选择隔离后端，验证具体策略，并保留平台差异与未覆盖范围。",
+  "sections": [
+    {
+      "title": "目录、工具限制与系统隔离分别看",
+      "body": "工作目录帮助定位文件，只读文件接口约束相应 API；命令执行则可能拥有宿主进程的权限。它们不能互相替代。\nLocalSandbox 的 **isolation** 选择原生隔离后端：macOS 使用 Seatbelt，Linux 使用 Bubblewrap。也可以改用其他远程或容器 Sandbox 实现，但需要按对应提供方配置，不能直接套用本地选项。"
+    },
+    {
+      "title": "先检测能力，再运行受控场景",
+      "body": "**LocalSandbox.detectIsolation()** 返回当前机器可用的候选后端。程序再显式配置 isolation 与 **nativeSandbox.allowNetwork: false**。\n本例只开一个临时的 127.0.0.1 教学端点。宿主先确认服务可访问，再让原生隔离下的命令尝试连接，观察禁网配置是否参与实际执行。",
+      "codeBlocks": [
+        {
+          "label": "src/06-isolation.js",
+          "language": "javascript",
+          "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { createServer } from 'node:http'\n\n// 能力检测说明候选原生后端，不代表已经验证全部安全策略。\nconst detection = LocalSandbox.detectIsolation()\nconsole.dir(detection)\nif (!detection.available) {\n  console.log('本机没有可用原生隔离后端，本例不降级执行隔离演示。')\n} else {\n  // 只开放一个本机教学端点，用于观察禁网配置是否影响实际连接。\n  const server = createServer((request, response) => response.end('本机教学回执'))\n  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))\n  const address = server.address()\n  if (!address || typeof address === 'string') throw new Error('本地教学端点启动失败。')\n  const url = `http://127.0.0.1:${address.port}`\n  // 显式启用检测到的原生后端，并配置禁止网络。\n  let sandbox\n  try {\n    sandbox = new LocalSandbox({ workingDirectory: resolve('lab/06-isolation'), isolation: detection.backend, nativeSandbox: { allowNetwork: false } })\n    console.log('宿主本机端点：', await fetch(url).then(response => response.text()))\n    await sandbox.start()\n    const script = `fetch(${JSON.stringify(url)}).then(response=>response.text()).then(text=>console.log(text)).catch(error=>{console.error(\"教学连接未完成：\",error.message);process.exitCode=2})`\n    const result = await sandbox.executeCommand(process.execPath, ['-e', script], { timeout: 5000 })\n    console.dir({ success: result.success, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr })\n  } catch (error) {\n    console.error('原生隔离演示未完成，不改用无隔离执行：', error instanceof Error ? error.message : error)\n  } finally {\n    await sandbox?.destroy()\n    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))\n  }\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/06-isolation.js"
+        }
+      ]
+    },
+    {
+      "title": "可启动，不代表策略覆盖所有访问",
+      "body": "没有可用后端或启动失败时，脚本会明确报告，不改成无隔离执行。即使教学网络连接被拒绝，也只验证了这一个场景。\n本例锁定版本的 macOS 默认策略允许文件读取，并开放临时目录写入，因此不只允许读写工作目录。其他路径、子进程与依赖的边界，仍需结合实际平台和配置逐项核对。",
+      "callouts": [
+        {
+          "type": "warning",
+          "body": "检测到隔离能力、成功启动隔离命令、某项限制实际生效，是不同证据。按实际验证范围描述结果，避免把单项通过扩大成完整安全保证。"
+        }
+      ]
+    },
+    {
+      "title": "边界明确以后，还要安排复用与回收",
+      "body": "一个环境被哪些请求共享、任务结束后谁负责停止、文件能保留多久，也会影响实际边界。\n最后一节把请求归属、缓存和生命周期接起来。",
+      "links": [
+        {
+          "label": "Mastra：LocalSandbox",
+          "href": "https://mastra.ai/reference/workspace/local-sandbox"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "宿主能连接教学端点，Seatbelt 禁网命令连接失败。这验证了哪项限制？为什么还不足以证明全部文件访问已被隔离？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "目录、工具限制与系统隔离分别看",
+          "body": "工作目录帮助定位文件，只读文件接口约束相应 API；命令执行则可能拥有宿主进程的权限。它们不能互相替代。\nLocalSandbox 的 **isolation** 选择原生隔离后端：macOS 使用 Seatbelt，Linux 使用 Bubblewrap。也可以改用其他远程或容器 Sandbox 实现，但需要按对应提供方配置，不能直接套用本地选项。"
+        },
+        {
+          "title": "先检测能力，再运行受控场景",
+          "body": "**LocalSandbox.detectIsolation()** 返回当前机器可用的候选后端。程序再显式配置 isolation 与 **nativeSandbox.allowNetwork: false**。\n本例只开一个临时的 127.0.0.1 教学端点。宿主先确认服务可访问，再让原生隔离下的命令尝试连接，观察禁网配置是否参与实际执行。",
+          "codeBlocks": [
+            {
+              "label": "src/06-isolation.ts",
+              "language": "typescript",
+              "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { createServer } from 'node:http'\n\n// 能力检测说明候选原生后端，不代表已经验证全部安全策略。\nconst detection = LocalSandbox.detectIsolation()\nconsole.dir(detection)\nif (!detection.available) {\n  console.log('本机没有可用原生隔离后端，本例不降级执行隔离演示。')\n} else {\n  // 只开放一个本机教学端点，用于观察禁网配置是否影响实际连接。\n  const server = createServer((request, response) => response.end('本机教学回执'))\n  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))\n  const address = server.address()\n  if (!address || typeof address === 'string') throw new Error('本地教学端点启动失败。')\n  const url = `http://127.0.0.1:${address.port}`\n  // 显式启用检测到的原生后端，并配置禁止网络。\n  let sandbox\n  try {\n    sandbox = new LocalSandbox({ workingDirectory: resolve('lab/06-isolation'), isolation: detection.backend, nativeSandbox: { allowNetwork: false } })\n    console.log('宿主本机端点：', await fetch(url).then(response => response.text()))\n    await sandbox.start()\n    const script = `fetch(${JSON.stringify(url)}).then(response=>response.text()).then(text=>console.log(text)).catch(error=>{console.error(\"教学连接未完成：\",error.message);process.exitCode=2})`\n    const result = await sandbox.executeCommand(process.execPath, ['-e', script], { timeout: 5000 })\n    console.dir({ success: result.success, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr })\n  } catch (error) {\n    console.error('原生隔离演示未完成，不改用无隔离执行：', error instanceof Error ? error.message : error)\n  } finally {\n    await sandbox?.destroy()\n    await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))\n  }\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/06-isolation.ts"
+            }
+          ]
+        },
+        {
+          "title": "可启动，不代表策略覆盖所有访问",
+          "body": "没有可用后端或启动失败时，脚本会明确报告，不改成无隔离执行。即使教学网络连接被拒绝，也只验证了这一个场景。\n本例锁定版本的 macOS 默认策略允许文件读取，并开放临时目录写入，因此不只允许读写工作目录。其他路径、子进程与依赖的边界，仍需结合实际平台和配置逐项核对。",
+          "callouts": [
+            {
+              "type": "warning",
+              "body": "检测到隔离能力、成功启动隔离命令、某项限制实际生效，是不同证据。按实际验证范围描述结果，避免把单项通过扩大成完整安全保证。"
+            }
+          ]
+        },
+        {
+          "title": "边界明确以后，还要安排复用与回收",
+          "body": "一个环境被哪些请求共享、任务结束后谁负责停止、文件能保留多久，也会影响实际边界。\n最后一节把请求归属、缓存和生命周期接起来。",
+          "links": [
+            {
+              "label": "Mastra：LocalSandbox",
+              "href": "https://mastra.ai/reference/workspace/local-sandbox"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

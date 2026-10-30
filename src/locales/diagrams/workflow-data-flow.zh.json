@@ -1,0 +1,12 @@
+{
+  "title": "顺序由流程定义，数据逐步交接",
+  "caption": "then 等待前一步完成，map 把已有字段转换成下一步需要的形状。本例交付待确认清单，尚未保存或发送。",
+  "normalize": "normalize-material",
+  "normalizeDetail": "title / venue：去掉两端空白",
+  "mapping": "map：转换字段",
+  "mappingDetail": "title → heading，venue → entrance",
+  "prepare": "make-checklist",
+  "prepareDetail": "heading + entrance → 清单条目",
+  "deliver": "deliver-checklist",
+  "deliverDetail": "title + items + 待用户确认"
+}

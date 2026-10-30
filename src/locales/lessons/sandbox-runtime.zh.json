@@ -1,0 +1,112 @@
+{
+  "title": "执行环境（Sandbox）",
+  "lead": "让程序在明确的位置运行命令，并按实际后端理解执行与隔离能力。",
+  "sections": [
+    {
+      "title": "能读资料以后，还需要真正运行程序",
+      "body": "工作区已经能读取通知、保存清单。统计报名人数、转换文件或调用专门处理库时，需要实际执行程序，单靠技能说明与文字回答无法完成这些动作。\n**沙箱（Sandbox）**提供命令执行、工作目录与进程管理等能力。Workspace 可以组织这项能力，但是否隔离、文件怎样保留，仍由具体后端和配置决定。"
+    },
+    {
+      "title": "先认清 LocalSandbox 的执行位置",
+      "body": "**LocalSandbox** 默认在应用宿主上以应用进程的权限运行。设置 workingDirectory 只是确定工作目录，不会自动把操作系统访问限制在这个目录里。\n本章先用固定的示例代码认识执行接口，再单独配置并验证原生隔离。",
+      "callouts": [
+        {
+          "type": "warning",
+          "body": "默认 LocalSandbox 是宿主执行路径。运行不可信代码前，应明确隔离后端、文件与网络策略，或选择具备相应边界的独立执行环境。"
+        }
+      ]
+    },
+    {
+      "title": "启动后执行一个固定命令",
+      "body": "下载示例，进入 13-sandbox 文件夹，在 Node.js 24 或更高版本下安装依赖。全部入口只执行本章提供的教学代码，不需要模型密钥。\n调用 **start()** 准备环境，通过 **executeCommand()** 运行当前 Node 输出工作目录，最后在 finally 中 destroy。运行时创建的文件放在示例项目的 lab/ 目录中。",
+      "download": {
+        "href": "/downloads/13-sandbox.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install"
+        },
+        {
+          "label": "src/01-runtime.js",
+          "language": "javascript",
+          "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// LocalSandbox 默认在宿主进程权限下运行，本例只执行固定教学命令。\nconst sandbox = new LocalSandbox({ workingDirectory: resolve('lab/01-runtime'), timeout: 5000 })\ntry {\n  console.log('启动结果：', await sandbox.start())\n  console.log('执行位置：', sandbox.workingDirectory)\n  console.dir(await sandbox.executeCommand(process.execPath, ['-e', 'console.log(\"活动处理环境已启动\"); console.log(process.cwd())']))\n} finally {\n  await sandbox.destroy()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/01-runtime.js"
+        }
+      ]
+    },
+    {
+      "title": "下一步从执行结果判断发生了什么",
+      "body": "命令已经启动，不代表处理完成；有文字输出，也不一定意味着成功。\n下一节核对退出码、标准输出与错误信息，再决定后续程序能否使用结果。",
+      "links": [
+        {
+          "label": "Mastra：执行环境",
+          "href": "https://mastra.ai/docs/sandbox/overview"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "工作目录已经配置。它决定文件从哪里查找，还是限制全部文件权限？命令执行后，还应检查哪些返回信息？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "能读资料以后，还需要真正运行程序",
+          "body": "工作区已经能读取通知、保存清单。统计报名人数、转换文件或调用专门处理库时，需要实际执行程序，单靠技能说明与文字回答无法完成这些动作。\n**沙箱（Sandbox）**提供命令执行、工作目录与进程管理等能力。Workspace 可以组织这项能力，但是否隔离、文件怎样保留，仍由具体后端和配置决定。"
+        },
+        {
+          "title": "先认清 LocalSandbox 的执行位置",
+          "body": "**LocalSandbox** 默认在应用宿主上以应用进程的权限运行。设置 workingDirectory 只是确定工作目录，不会自动把操作系统访问限制在这个目录里。\n本章先用固定的示例代码认识执行接口，再单独配置并验证原生隔离。",
+          "callouts": [
+            {
+              "type": "warning",
+              "body": "默认 LocalSandbox 是宿主执行路径。运行不可信代码前，应明确隔离后端、文件与网络策略，或选择具备相应边界的独立执行环境。"
+            }
+          ]
+        },
+        {
+          "title": "启动后执行一个固定命令",
+          "body": "下载示例，进入 13-sandbox-ts 文件夹，在 Node.ts 24 或更高版本下安装依赖。全部入口只执行本章提供的教学代码，不需要模型密钥。\n调用 **start()** 准备环境，通过 **executeCommand()** 运行当前 Node 输出工作目录，最后在 finally 中 destroy。运行时创建的文件放在示例项目的 lab/ 目录中。",
+          "download": {
+            "href": "/downloads/13-sandbox-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install"
+            },
+            {
+              "label": "src/01-runtime.ts",
+              "language": "typescript",
+              "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// LocalSandbox 默认在宿主进程权限下运行，本例只执行固定教学命令。\nconst sandbox = new LocalSandbox({ workingDirectory: resolve('lab/01-runtime'), timeout: 5000 })\ntry {\n  console.log('启动结果：', await sandbox.start())\n  console.log('执行位置：', sandbox.workingDirectory)\n  console.dir(await sandbox.executeCommand(process.execPath, ['-e', 'console.log(\"活动处理环境已启动\"); console.log(process.cwd())']))\n} finally {\n  await sandbox.destroy()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/01-runtime.ts"
+            }
+          ]
+        },
+        {
+          "title": "下一步从执行结果判断发生了什么",
+          "body": "命令已经启动，不代表处理完成；有文字输出，也不一定意味着成功。\n下一节核对退出码、标准输出与错误信息，再决定后续程序能否使用结果。",
+          "links": [
+            {
+              "label": "Mastra：执行环境",
+              "href": "https://mastra.ai/docs/sandbox/overview"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

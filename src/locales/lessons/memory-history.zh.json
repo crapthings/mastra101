@@ -1,0 +1,92 @@
+{
+  "title": "消息历史（Message History）",
+  "lead": "通过历史窗口理解“保存了多少”和“这次读取多少”的区别。",
+  "sections": [
+    {
+      "title": "记录还在，模型却可能看不到",
+      "body": "先告诉助手从东门入场，再补充要带笔记本，最后问入口与携带要求。前面消息如果已经离开加载窗口，模型就可能只知道最近的要求。\n**消息历史（Message History）**按会话加载近期记录。**lastMessages** 控制历史消息数量；它计算的是消息，不是用户提问次数。工具调用与结果也会占用消息位置。"
+    },
+    {
+      "title": "用两个窗口对照同一组问题",
+      "body": "分别使用 2 和 8 运行脚本。每次运行都会新建会话，材料与提问顺序相同，只改变历史上限。前两次要求助手只确认收到，减少回答主动复述早期资料带来的干扰。\n最后同时核对回答与存储条数：较小窗口可能缺少第一份资料，但数据库仍保留那条记录。模型偶尔猜中入口也不能证明加载成功；严谨排查应查看该次模型调用实际收到的消息。",
+      "codeBlocks": [
+        {
+          "label": "src/03-history.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 比较两条与八条历史消息，参数不代表对话轮数。\nconst lastMessages = Number(process.argv[2] || '2')\nif (![2, 8].includes(lastMessages)) throw new Error('请使用 2 或 8。')\n\n// 消息窗口改变加载范围，已经保存的消息仍在数据库里。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'history-storage', url: 'file:./03-history.db' }),\n  options: { lastMessages, semanticRecall: false, generateTitle: false }\n})\n\n// 前两次只确认收到，避免主动复述全部活动资料。\nconst agent = new Agent({\n  id: 'activity-history', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol', memory,\n  instructions: '用中文回答。收到资料补充时只回复“收到”。用户提问时只依据当前可见资料回答，没有依据就说明未知。'\n})\n\n// 同一会话依次收到入场资料、携带要求与最后的问题。\nconst identity = { resource: randomUUID(), thread: randomUUID() }\nfor (const message of ['资料补充：阅读分享会从东门入场。', '资料补充：参加时带纸质笔记本。', '阅读分享会从哪个门入场，要带什么？']) {\n  const result = await agent.generate(message, { memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000) })\n  console.log(result.text)\n}\n\n// 读取完整存储用于对照，不把存储条数当成模型实际看到的条数。\nconst saved = await memory.recall({ threadId: identity.thread, resourceId: identity.resource, perPage: false })\nconsole.log('数据库中保留的消息数：', saved.messages.length)"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/03-history.js 2"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/03-history.js 8"
+        }
+      ]
+    },
+    {
+      "title": "每次通常只发送新消息",
+      "body": "由 Memory 管理历史后，应用通常只提交本次新消息，框架负责取回之前保存的记录。把整段前端聊天再次拼进请求，会让去重、时间顺序和保存范围更难判断。\n**recall()** 可以查询已保存的消息，适合展示聊天记录或排查存储。查询得到全部消息，不等于本次模型输入包含全部消息；存储查询与运行时组装各有自己的配置。"
+    },
+    {
+      "title": "把反复需要的信息单独维护",
+      "body": "增加窗口能取回更多近期内容，但长期偏好可能早已埋在很久以前的对话里。每次都带完整聊天既费空间，也增加找错信息的机会。\n下一节用工作记忆维护简短、持续相关的资料。",
+      "links": [
+        {
+          "label": "Mastra：消息历史",
+          "href": "https://mastra.ai/docs/memory/message-history"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "数据库能查到“东门入场”，最后回答却说入口未知。你会先调大输出预算，还是检查历史窗口与实际模型输入？lastMessages: 2 为什么不等于记住两轮对话？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "记录还在，模型却可能看不到",
+          "body": "先告诉助手从东门入场，再补充要带笔记本，最后问入口与携带要求。前面消息如果已经离开加载窗口，模型就可能只知道最近的要求。\n**消息历史（Message History）**按会话加载近期记录。**lastMessages** 控制历史消息数量；它计算的是消息，不是用户提问次数。工具调用与结果也会占用消息位置。"
+        },
+        {
+          "title": "用两个窗口对照同一组问题",
+          "body": "分别使用 2 和 8 运行脚本。每次运行都会新建会话，材料与提问顺序相同，只改变历史上限。前两次要求助手只确认收到，减少回答主动复述早期资料带来的干扰。\n最后同时核对回答与存储条数：较小窗口可能缺少第一份资料，但数据库仍保留那条记录。模型偶尔猜中入口也不能证明加载成功；严谨排查应查看该次模型调用实际收到的消息。",
+          "codeBlocks": [
+            {
+              "label": "src/03-history.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 比较两条与八条历史消息，参数不代表对话轮数。\nconst lastMessages = Number(process.argv[2] || '2')\nif (![2, 8].includes(lastMessages)) throw new Error('请使用 2 或 8。')\n\n// 消息窗口改变加载范围，已经保存的消息仍在数据库里。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'history-storage', url: 'file:./03-history.db' }),\n  options: { lastMessages, semanticRecall: false, generateTitle: false }\n})\n\n// 前两次只确认收到，避免主动复述全部活动资料。\nconst agent = new Agent({\n  id: 'activity-history', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol', memory,\n  instructions: '用中文回答。收到资料补充时只回复“收到”。用户提问时只依据当前可见资料回答，没有依据就说明未知。'\n})\n\n// 同一会话依次收到入场资料、携带要求与最后的问题。\nconst identity = { resource: randomUUID(), thread: randomUUID() }\nfor (const message of ['资料补充：阅读分享会从东门入场。', '资料补充：参加时带纸质笔记本。', '阅读分享会从哪个门入场，要带什么？']) {\n  const result = await agent.generate(message, { memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000) })\n  console.log(result.text)\n}\n\n// 读取完整存储用于对照，不把存储条数当成模型实际看到的条数。\nconst saved = await memory.recall({ threadId: identity.thread, resourceId: identity.resource, perPage: false })\nconsole.log('数据库中保留的消息数：', saved.messages.length)"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/03-history.ts 2"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/03-history.ts 8"
+            }
+          ]
+        },
+        {
+          "title": "每次通常只发送新消息",
+          "body": "由 Memory 管理历史后，应用通常只提交本次新消息，框架负责取回之前保存的记录。把整段前端聊天再次拼进请求，会让去重、时间顺序和保存范围更难判断。\n**recall()** 可以查询已保存的消息，适合展示聊天记录或排查存储。查询得到全部消息，不等于本次模型输入包含全部消息；存储查询与运行时组装各有自己的配置。"
+        },
+        {
+          "title": "把反复需要的信息单独维护",
+          "body": "增加窗口能取回更多近期内容，但长期偏好可能早已埋在很久以前的对话里。每次都带完整聊天既费空间，也增加找错信息的机会。\n下一节用工作记忆维护简短、持续相关的资料。",
+          "links": [
+            {
+              "label": "Mastra：消息历史",
+              "href": "https://mastra.ai/docs/memory/message-history"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

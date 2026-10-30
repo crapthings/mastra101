@@ -1,0 +1,80 @@
+{
+  "title": "跨进程对话（Cross-process Conversations）",
+  "lead": "跨进程继续对话，并把数据位置、会话归属与访问检查一起考虑。",
+  "sections": [
+    {
+      "title": "对象消失以后，数据还在不在",
+      "body": "前面的脚本大多在一个进程中连续运行。现在先保存活动资料，退出进程，再重新创建 Agent 询问入口，才是在检查持久化。\n**Storage** 决定数据存在哪里。LibSQL 的文件数据库可以跨进程保留；仅放在内存中的数据会随进程结束而消失。"
+    },
+    {
+      "title": "复用数据位置与调用标识",
+      "body": "按顺序运行“写入”和“读取”，两次都在示例项目目录执行，数据库路径、resource 和 thread 保持相同。\n读取模式先确认会话存在且归属一致，再发起模型请求。即使上次记录还在，若更换工作目录导致相对路径指向另一文件，或每次生成新 thread，新的调用也接不上原来的对话。\n重复执行“写入”会向同一会话追加记录。比较持久化效果时，应核对这次数据库里的具体消息，避免把先前试跑留下的资料当成本次写入结果。",
+      "codeBlocks": [
+        {
+          "label": "src/08-persistence.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\n\n// 两次进程使用相同数据库位置，才能继续读取同一份历史。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'persistent-storage', url: 'file:./08-persistence.db' }),\n  options: { lastMessages: 8, semanticRecall: false, generateTitle: false }\n})\n\n// 由应用提供固定教学标识，实际项目应来自已核实的用户与会话。\nconst identity = { resource: 'demo-reader', thread: 'demo-weekend-activity' }\n\n// 写入和读取分两次运行脚本，模拟进程退出后继续对话。\nconst mode = process.argv[2] || '读取'\nif (!['写入', '读取'].includes(mode)) throw new Error('请使用“写入”或“读取”。')\n\n// 使用相同记忆配置重新创建 Agent，不依赖上一个进程的对象。\nconst agent = new Agent({\n  id: 'persistent-activity', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol', memory,\n  instructions: '用中文依据可见活动资料回答。没有资料时说明需要补充，不猜入场地点。'\n})\n\n// 读取前先检查存储，避免把模型猜中当成持久化成功。\nconst thread = await memory.getThreadById({ threadId: identity.thread })\nif (mode === '读取' && !thread) throw new Error('没有教学历史，请先运行“写入”。')\nif (thread && thread.resourceId !== identity.resource) throw new Error('会话归属不一致。')\n\n// 写入后退出，再运行读取命令核对已有消息。\nconst result = await agent.generate(mode === '写入' ? '教学资料：阅读分享会从东门入场，请记下。' : '上次说阅读分享会从哪个入口进场？', {\n  memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000)\n})\nconsole.log(result.text)"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/08-persistence.js 写入"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/08-persistence.js 读取"
+        }
+      ]
+    },
+    {
+      "title": "从教学标识走向真实用户",
+      "body": "示例使用固定的教学归属，仅便于复现。真实应用应由服务端取得已经确认的用户标识，并核实请求的 thread 属于相应归属。\n同一个 Agent 可以服务不同用户，每次调用仍需传入正确标识。持久化解决保存问题，访问检查解决谁可以读取的问题，二者都要落实。"
+    },
+    {
+      "title": "留下来的信息，也会过期",
+      "body": "持久化后，用户偏好、入口安排和预约记录可能继续变化。“记住了”应当包含后续更新与核对，而不是永久保留第一次说法。\n最后一节把保存、读取、更正和删除放在同一份检查清单里。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "写入后退出进程，重新运行却找不到历史。应该怎样依次检查数据库位置、resource 和 thread？如果会话存在但属于另一用户，应继续查询还是先处理归属问题？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "对象消失以后，数据还在不在",
+          "body": "前面的脚本大多在一个进程中连续运行。现在先保存活动资料，退出进程，再重新创建 Agent 询问入口，才是在检查持久化。\n**Storage** 决定数据存在哪里。LibSQL 的文件数据库可以跨进程保留；仅放在内存中的数据会随进程结束而消失。"
+        },
+        {
+          "title": "复用数据位置与调用标识",
+          "body": "按顺序运行“写入”和“读取”，两次都在示例项目目录执行，数据库路径、resource 和 thread 保持相同。\n读取模式先确认会话存在且归属一致，再发起模型请求。即使上次记录还在，若更换工作目录导致相对路径指向另一文件，或每次生成新 thread，新的调用也接不上原来的对话。\n重复执行“写入”会向同一会话追加记录。比较持久化效果时，应核对这次数据库里的具体消息，避免把先前试跑留下的资料当成本次写入结果。",
+          "codeBlocks": [
+            {
+              "label": "src/08-persistence.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\n\n// 两次进程使用相同数据库位置，才能继续读取同一份历史。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'persistent-storage', url: 'file:./08-persistence.db' }),\n  options: { lastMessages: 8, semanticRecall: false, generateTitle: false }\n})\n\n// 由应用提供固定教学标识，实际项目应来自已核实的用户与会话。\nconst identity = { resource: 'demo-reader', thread: 'demo-weekend-activity' }\n\n// 写入和读取分两次运行脚本，模拟进程退出后继续对话。\nconst mode = process.argv[2] || '读取'\nif (!['写入', '读取'].includes(mode)) throw new Error('请使用“写入”或“读取”。')\n\n// 使用相同记忆配置重新创建 Agent，不依赖上一个进程的对象。\nconst agent = new Agent({\n  id: 'persistent-activity', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol', memory,\n  instructions: '用中文依据可见活动资料回答。没有资料时说明需要补充，不猜入场地点。'\n})\n\n// 读取前先检查存储，避免把模型猜中当成持久化成功。\nconst thread = await memory.getThreadById({ threadId: identity.thread })\nif (mode === '读取' && !thread) throw new Error('没有教学历史，请先运行“写入”。')\nif (thread && thread.resourceId !== identity.resource) throw new Error('会话归属不一致。')\n\n// 写入后退出，再运行读取命令核对已有消息。\nconst result = await agent.generate(mode === '写入' ? '教学资料：阅读分享会从东门入场，请记下。' : '上次说阅读分享会从哪个入口进场？', {\n  memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000)\n})\nconsole.log(result.text)"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/08-persistence.ts 写入"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/08-persistence.ts 读取"
+            }
+          ]
+        },
+        {
+          "title": "从教学标识走向真实用户",
+          "body": "示例使用固定的教学归属，仅便于复现。真实应用应由服务端取得已经确认的用户标识，并核实请求的 thread 属于相应归属。\n同一个 Agent 可以服务不同用户，每次调用仍需传入正确标识。持久化解决保存问题，访问检查解决谁可以读取的问题，二者都要落实。"
+        },
+        {
+          "title": "留下来的信息，也会过期",
+          "body": "持久化后，用户偏好、入口安排和预约记录可能继续变化。“记住了”应当包含后续更新与核对，而不是永久保留第一次说法。\n最后一节把保存、读取、更正和删除放在同一份检查清单里。"
+        }
+      ]
+    }
+  }
+}

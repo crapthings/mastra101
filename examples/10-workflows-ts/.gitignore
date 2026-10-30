@@ -1,0 +1,6 @@
+node_modules
+.env
+*.db
+*.db-*
+06-pending.json
+06-confirmed.json

@@ -1,0 +1,14 @@
+{
+  "title": "先整理对话，再整理观察",
+  "caption": "达到配置条件后，Observer 把待处理对话整理成观察。观察增长后，Reflector 再整理已有观察；后续模型输入使用观察与尚未整理的新消息。每次压缩都需要保留时间、条件与更正关系。",
+  "raw": "待整理的对话",
+  "rawDetail": "包含初次安排与后续更正",
+  "observer": "Observer",
+  "observerDetail": "从对话中提取观察",
+  "log": "观察记录",
+  "logDetail": "保留事件、来源与更新关系",
+  "reflector": "Reflector",
+  "reflectorDetail": "整理增长后的观察",
+  "model": "后续模型输入",
+  "modelDetail": "观察记录 + 尚未整理的新消息"
+}

@@ -1,0 +1,110 @@
+{
+  "title": "结果与错误处理（Results & Error Handling）",
+  "lead": "根据状态定位失败步骤，设置有限重试，并保留业务上的未完成含义。",
+  "sections": [
+    {
+      "title": "先分清运行结束在什么状态",
+      "body": "**success** 表示本次流程正常交付结果，**failed** 表示执行失败，**suspended** 表示等待恢复。应用应先按状态解释返回值，再看对应业务字段。\n调用入口的校验异常也可能直接抛出。因此处理失败时既要捕获调用异常，也要查看结果中的 error 和 steps，不只判断有没有最终文字。"
+    },
+    {
+      "title": "步骤重试，会重新执行这个步骤",
+      "body": "步骤的 **retries** 配置失败后的重试上限；工作流的 **retryConfig** 可提供默认重试配置。本例把默认预算设为 0，只为查询步骤设置 retries: 1，观察初次执行后最多再试一次。\n模型请求重试、Agent 的 maxSteps 与工作流步骤重试位于不同层次。若步骤内调用了 Agent，重新执行步骤可能再次触发整个 Agent 调用，费用和外部动作都要一起考虑。"
+    },
+    {
+      "title": "三条路径，观察次数与最终步骤",
+      "body": "“暂时失败”第一次抛错、第二次成功；“持续失败”在一次重试后仍失败；“待补充”则通过 **bail()** 提前交付业务结果，不进入后面的 finalize 步骤。\nbail 在本例返回运行状态 success，而业务状态仍是“待补充”。这正是技术上正常结束与用户任务已完成需要分开读取的原因。",
+      "codeBlocks": [
+        {
+          "label": "src/07-errors.js",
+          "language": "javascript",
+          "code": "import { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { z } from 'zod'\n\n// 三种教学路径分别观察有限重试、持续失败与业务提前结束。\nconst mode = z.enum(['暂时失败', '持续失败', '待补充']).parse(process.argv[2] || '暂时失败')\n// 计数只用于观察本进程的步骤执行，不是持久化业务状态。\nlet attempts = 0\n// 核对最终步骤是否实际执行，避免仅根据流程状态猜测。\nlet finalized = false\n// 业务结果保留待补充含义。\nconst outcomeSchema = z.object({ status: z.enum(['已核对', '待补充']), detail: z.string() })\n// 对只读教学查询设置一次重试，异常时重新执行这一步。\nconst inspect = createStep({\n  id: 'inspect-material', inputSchema: z.object({ title: z.string() }), outputSchema: outcomeSchema, retries: 1,\n  execute: async ({ bail }) => {\n    attempts++\n    if (mode === '待补充') return bail({ status: '待补充', detail: '请补充活动地点。' })\n    if (mode === '持续失败' || attempts === 1) throw new Error('教学资料查询暂时失败。')\n    return { status: '已核对', detail: '教学资料查询成功。' }\n  }\n})\n// 只有查询步骤正常交接，才运行这里。\nconst finalize = createStep({\n  id: 'finalize', inputSchema: outcomeSchema, outputSchema: outcomeSchema,\n  execute: async ({ inputData }) => { finalized = true; return inputData }\n})\n// 整体默认不额外重试，明确观察 inspect 的步骤级预算。\nconst workflow = createWorkflow({ id: 'activity-errors', inputSchema: z.object({ title: z.string() }), outputSchema: outcomeSchema, retryConfig: { attempts: 0, delay: 0 } })\n  .then(inspect).then(finalize).commit()\n// 根据状态读取结果或错误，同时保留各步骤证据。\nconst run = await workflow.createRun()\n// start 返回后先看 status，再解释业务字段。\nconst result = await run.start({ inputData: { title: '阅读分享会' } })\nconsole.dir({ result, attempts, finalized }, { depth: null })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/07-errors.js 暂时失败"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/07-errors.js 持续失败"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/07-errors.js 待补充"
+        }
+      ]
+    },
+    {
+      "title": "重试前，核对已经发生了什么",
+      "body": "只读教学查询容易重新执行。若步骤已经向外部提交预约或写入，后续超时并不能证明动作没有生效。恢复之前应核实业务结果，并使用相应幂等机制控制重复执行。\n流程记录与快照帮助判断进度，不会自动回滚已经发生的外部操作。回调中的日志或通知失败，也应与核心步骤结果分别处理。"
+    },
+    {
+      "title": "最后把 Agent 放进明确的步骤",
+      "body": "现在程序已经能控制顺序、分支与等待。下一节再把需要语言理解与生成的部分交给 Agent，保留前后的程序检查。",
+      "links": [
+        {
+          "label": "Mastra：工作流错误处理",
+          "href": "https://mastra.ai/docs/workflows/error-handling"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "retries: 1 的步骤初次失败后还能再执行几次？若上次已提交外部写入，重试前应先核实什么？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先分清运行结束在什么状态",
+          "body": "**success** 表示本次流程正常交付结果，**failed** 表示执行失败，**suspended** 表示等待恢复。应用应先按状态解释返回值，再看对应业务字段。\n调用入口的校验异常也可能直接抛出。因此处理失败时既要捕获调用异常，也要查看结果中的 error 和 steps，不只判断有没有最终文字。"
+        },
+        {
+          "title": "步骤重试，会重新执行这个步骤",
+          "body": "步骤的 **retries** 配置失败后的重试上限；工作流的 **retryConfig** 可提供默认重试配置。本例把默认预算设为 0，只为查询步骤设置 retries: 1，观察初次执行后最多再试一次。\n模型请求重试、Agent 的 maxSteps 与工作流步骤重试位于不同层次。若步骤内调用了 Agent，重新执行步骤可能再次触发整个 Agent 调用，费用和外部动作都要一起考虑。"
+        },
+        {
+          "title": "三条路径，观察次数与最终步骤",
+          "body": "“暂时失败”第一次抛错、第二次成功；“持续失败”在一次重试后仍失败；“待补充”则通过 **bail()** 提前交付业务结果，不进入后面的 finalize 步骤。\nbail 在本例返回运行状态 success，而业务状态仍是“待补充”。这正是技术上正常结束与用户任务已完成需要分开读取的原因。",
+          "codeBlocks": [
+            {
+              "label": "src/07-errors.ts",
+              "language": "typescript",
+              "code": "import { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { z } from 'zod'\n\n// 三种教学路径分别观察有限重试、持续失败与业务提前结束。\nconst mode = z.enum(['暂时失败', '持续失败', '待补充']).parse(process.argv[2] || '暂时失败')\n// 计数只用于观察本进程的步骤执行，不是持久化业务状态。\nlet attempts = 0\n// 核对最终步骤是否实际执行，避免仅根据流程状态猜测。\nlet finalized = false\n// 业务结果保留待补充含义。\nconst outcomeSchema = z.object({ status: z.enum(['已核对', '待补充']), detail: z.string() })\n// 对只读教学查询设置一次重试，异常时重新执行这一步。\nconst inspect = createStep({\n  id: 'inspect-material', inputSchema: z.object({ title: z.string() }), outputSchema: outcomeSchema, retries: 1,\n  execute: async ({ bail }) => {\n    attempts++\n    if (mode === '待补充') return bail({ status: '待补充', detail: '请补充活动地点。' })\n    if (mode === '持续失败' || attempts === 1) throw new Error('教学资料查询暂时失败。')\n    return { status: '已核对', detail: '教学资料查询成功。' }\n  }\n})\n// 只有查询步骤正常交接，才运行这里。\nconst finalize = createStep({\n  id: 'finalize', inputSchema: outcomeSchema, outputSchema: outcomeSchema,\n  execute: async ({ inputData }) => { finalized = true; return inputData }\n})\n// 整体默认不额外重试，明确观察 inspect 的步骤级预算。\nconst workflow = createWorkflow({ id: 'activity-errors', inputSchema: z.object({ title: z.string() }), outputSchema: outcomeSchema, retryConfig: { attempts: 0, delay: 0 } })\n  .then(inspect).then(finalize).commit()\n// 根据状态读取结果或错误，同时保留各步骤证据。\nconst run = await workflow.createRun()\n// start 返回后先看 status，再解释业务字段。\nconst result = await run.start({ inputData: { title: '阅读分享会' } })\nconsole.dir({ result, attempts, finalized }, { depth: null })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/07-errors.ts 暂时失败"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/07-errors.ts 持续失败"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/07-errors.ts 待补充"
+            }
+          ]
+        },
+        {
+          "title": "重试前，核对已经发生了什么",
+          "body": "只读教学查询容易重新执行。若步骤已经向外部提交预约或写入，后续超时并不能证明动作没有生效。恢复之前应核实业务结果，并使用相应幂等机制控制重复执行。\n流程记录与快照帮助判断进度，不会自动回滚已经发生的外部操作。回调中的日志或通知失败，也应与核心步骤结果分别处理。"
+        },
+        {
+          "title": "最后把 Agent 放进明确的步骤",
+          "body": "现在程序已经能控制顺序、分支与等待。下一节再把需要语言理解与生成的部分交给 Agent，保留前后的程序检查。",
+          "links": [
+            {
+              "label": "Mastra：工作流错误处理",
+              "href": "https://mastra.ai/docs/workflows/error-handling"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

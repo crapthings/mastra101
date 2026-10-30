@@ -1,0 +1,102 @@
+{
+  "title": "数据生命周期（Data Lifecycle）",
+  "lead": "让保留规则真正执行，并核对清理的范围、进度与结果。",
+  "sections": [
+    {
+      "title": "可以长期保存，也要明确何时清理",
+      "body": "消息与运行记录随着使用不断增加。活动资料、执行记录和用户长期偏好，可能各有不同的保留需要。\n**retention** 按领域和表声明保留策略。本例只为 memory.messages 配置规则，未配置的其他数据保留原有行为。先明确要清理哪一类记录，再选择合适的年龄条件。"
+    },
+    {
+      "title": "声明规则以后，还需要调用 prune",
+      "body": "**maxAge: '30d'** 表示消息年龄超过 30 天时符合本例的清理条件；消息按 **createdAt** 计算年龄，而不是按会话最后一次聊天时间。\n还需要调用 **prune()** 执行删除。retention 不会自动安排定时任务，也不会让尚未过期的记录提前消失。返回结果包含领域、表、删除数与本轮完成情况，便于核对发生了什么。"
+    },
+    {
+      "title": "在专用数据库里观察删除结果",
+      "body": "示例在本节独立数据库中准备两条消息：一条标记为 45 天前，一条是当前时间。清理前应有两条，执行后应留下新消息，会话记录仍在。\n本例没有配置向量、工作记忆和观察记忆，清理目标只有该教学文件里的过期消息。运行前后直接回查存储，核对规则确实执行到了预期记录。",
+      "codeBlocks": [
+        {
+          "label": "src/07-retention.js",
+          "language": "javascript",
+          "code": "import { LibSQLStore } from '@mastra/libsql'\nimport { Memory } from '@mastra/memory'\nimport { randomUUID } from 'node:crypto'\n\n// 只在本节专用教学数据库里设置消息保留策略。\nconst storage = new LibSQLStore({\n  id: 'retention-storage', url: 'file:./07-retention.db',\n  retention: { memory: { messages: { maxAge: '30d' } } }\n})\n// 本例不启用向量、工作记忆和观察记忆，便于单独检查消息清理。\nconst memory = new Memory({ storage, options: { semanticRecall: false, generateTitle: false } })\n// 每次运行新建会话，清理前后只检查本次准备的消息。\nconst thread = await memory.createThread({ threadId: randomUUID(), resourceId: 'demo-reader', title: '消息保留期练习' })\n// 准备一条过期资料与一条仍在保留期内的资料。\nconst dates = [new Date(Date.now() - 45 * 24 * 60 * 60 * 1000), new Date()]\nawait memory.saveMessages({ messages: dates.map((date, index) => ({\n  id: randomUUID(), threadId: thread.id, resourceId: 'demo-reader', role: 'user', createdAt: date,\n  content: { format: 2, parts: [{ type: 'text', text: index === 0 ? '旧教学资料：活动待确认。' : '新教学资料：主办方刚刚更正入口。' }] }\n})) })\nconsole.log('清理前消息数：', (await memory.recall({ threadId: thread.id, perPage: false })).messages.length)\n// retention 声明策略，prune 才执行；生产中由独立维护任务按计划调用。\nconst result = await storage.prune({ maxRows: 100, maxBatches: 10 })\nconsole.dir(result, { depth: null })\nconsole.log('清理后消息数：', (await memory.recall({ threadId: thread.id, perPage: false })).messages.length)\nconsole.log('会话仍然存在：', Boolean(await memory.getThreadById({ threadId: thread.id })))"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/07-retention.js"
+        }
+      ]
+    },
+    {
+      "title": "限制单次工作量，再安排后续执行",
+      "body": "**maxRows** 与 **maxBatches** 限制单次清理工作量。如果返回 **done: false**，表示还有符合条件的记录需要后续处理。真实应用可由维护任务按计划执行，并记录每轮结果。\n删除数据库行后，文件不一定立即缩小，释放的页面可以供后续写入复用。需要回收磁盘空间时，再按实际数据库的维护方式处理。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "保留策略、执行清理、核对结果是三个步骤。一次 prune 也不等于清除了这个用户在所有系统里的信息。"
+        }
+      ]
+    },
+    {
+      "title": "把清理范围放回整个记忆系统",
+      "body": "08 已经看到会话、资源偏好和检索结果有不同的生命周期。按年龄清理消息后，还要根据项目实际启用的能力，核对索引、观察记录及其他副本的处理方式。\n存储让运行状态有地方保存，但不会决定业务必须按什么顺序执行。下一章进入工作流，用清楚的步骤与数据交接组织任务，再观察运行状态怎样支持暂停和继续。",
+      "links": [
+        {
+          "label": "Mastra：保留策略与 prune",
+          "href": "https://mastra.ai/reference/storage/retention"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "一条消息创建于 45 天前，另一条是今天创建的。按 maxAge: 30d 清理应留下哪条？返回 done: false 时还需做什么？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "可以长期保存，也要明确何时清理",
+          "body": "消息与运行记录随着使用不断增加。活动资料、执行记录和用户长期偏好，可能各有不同的保留需要。\n**retention** 按领域和表声明保留策略。本例只为 memory.messages 配置规则，未配置的其他数据保留原有行为。先明确要清理哪一类记录，再选择合适的年龄条件。"
+        },
+        {
+          "title": "声明规则以后，还需要调用 prune",
+          "body": "**maxAge: '30d'** 表示消息年龄超过 30 天时符合本例的清理条件；消息按 **createdAt** 计算年龄，而不是按会话最后一次聊天时间。\n还需要调用 **prune()** 执行删除。retention 不会自动安排定时任务，也不会让尚未过期的记录提前消失。返回结果包含领域、表、删除数与本轮完成情况，便于核对发生了什么。"
+        },
+        {
+          "title": "在专用数据库里观察删除结果",
+          "body": "示例在本节独立数据库中准备两条消息：一条标记为 45 天前，一条是当前时间。清理前应有两条，执行后应留下新消息，会话记录仍在。\n本例没有配置向量、工作记忆和观察记忆，清理目标只有该教学文件里的过期消息。运行前后直接回查存储，核对规则确实执行到了预期记录。",
+          "codeBlocks": [
+            {
+              "label": "src/07-retention.ts",
+              "language": "typescript",
+              "code": "import { LibSQLStore } from '@mastra/libsql'\nimport { Memory } from '@mastra/memory'\nimport { randomUUID } from 'node:crypto'\n\n// 只在本节专用教学数据库里设置消息保留策略。\nconst storage = new LibSQLStore({\n  id: 'retention-storage', url: 'file:./07-retention.db',\n  retention: { memory: { messages: { maxAge: '30d' } } }\n})\n// 本例不启用向量、工作记忆和观察记忆，便于单独检查消息清理。\nconst memory = new Memory({ storage, options: { semanticRecall: false, generateTitle: false } })\n// 每次运行新建会话，清理前后只检查本次准备的消息。\nconst thread = await memory.createThread({ threadId: randomUUID(), resourceId: 'demo-reader', title: '消息保留期练习' })\n// 准备一条过期资料与一条仍在保留期内的资料。\nconst dates = [new Date(Date.now() - 45 * 24 * 60 * 60 * 1000), new Date()]\nawait memory.saveMessages({ messages: dates.map((date, index) => ({\n  id: randomUUID(), threadId: thread.id, resourceId: 'demo-reader', role: 'user', createdAt: date,\n  content: { format: 2, parts: [{ type: 'text', text: index === 0 ? '旧教学资料：活动待确认。' : '新教学资料：主办方刚刚更正入口。' }] }\n})) })\nconsole.log('清理前消息数：', (await memory.recall({ threadId: thread.id, perPage: false })).messages.length)\n// retention 声明策略，prune 才执行；生产中由独立维护任务按计划调用。\nconst result = await storage.prune({ maxRows: 100, maxBatches: 10 })\nconsole.dir(result, { depth: null })\nconsole.log('清理后消息数：', (await memory.recall({ threadId: thread.id, perPage: false })).messages.length)\nconsole.log('会话仍然存在：', Boolean(await memory.getThreadById({ threadId: thread.id })))"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/07-retention.ts"
+            }
+          ]
+        },
+        {
+          "title": "限制单次工作量，再安排后续执行",
+          "body": "**maxRows** 与 **maxBatches** 限制单次清理工作量。如果返回 **done: false**，表示还有符合条件的记录需要后续处理。真实应用可由维护任务按计划执行，并记录每轮结果。\n删除数据库行后，文件不一定立即缩小，释放的页面可以供后续写入复用。需要回收磁盘空间时，再按实际数据库的维护方式处理。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "保留策略、执行清理、核对结果是三个步骤。一次 prune 也不等于清除了这个用户在所有系统里的信息。"
+            }
+          ]
+        },
+        {
+          "title": "把清理范围放回整个记忆系统",
+          "body": "08 已经看到会话、资源偏好和检索结果有不同的生命周期。按年龄清理消息后，还要根据项目实际启用的能力，核对索引、观察记录及其他副本的处理方式。\n存储让运行状态有地方保存，但不会决定业务必须按什么顺序执行。下一章进入工作流，用清楚的步骤与数据交接组织任务，再观察运行状态怎样支持暂停和继续。",
+          "links": [
+            {
+              "label": "Mastra：保留策略与 prune",
+              "href": "https://mastra.ai/reference/storage/retention"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

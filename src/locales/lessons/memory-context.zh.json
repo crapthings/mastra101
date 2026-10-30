@@ -1,0 +1,82 @@
+{
+  "title": "上下文管理（Context Management）",
+  "lead": "为本次模型请求选择内容，理解历史条数与 Token 预算各管什么。",
+  "sections": [
+    {
+      "title": "数据库容量与模型窗口是两回事",
+      "body": "数据库可以保留许多次聊天，模型每次接收的内容却有窗口限制。系统提示词、当前问题、工具说明与返回结果，也都需要占用空间。\n**上下文管理（Context Management）**决定哪些保存内容进入当前请求。资料留在数据库里，并不要求每次全部发送。"
+    },
+    {
+      "title": "从消息条数走向内容预算",
+      "body": "lastMessages 按条数取历史，但一条工具结果可能比许多条简短对话更长。**messageHistory.maxTokens** 提供按提示 Token 预算控制历史的方式。\n本例设置 maxTokens: 4000、**atMaxRemoveTokens: 1000**。完整提示超过 4000 Token 时，框架从较早的历史中移除内容，目标是降至不超过 3000，为后续增长留出余量。Token 统计受分词方式影响，实际还应查看服务用量与模型输入。\n关联的工具调用与结果需要一起处理，避免留下只有请求或只有返回值的片段。当前问题和系统提示词等受保护内容若已超过预算，单靠裁掉历史仍然放不下。",
+      "codeBlocks": [
+        {
+          "label": "src/06-context.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 用提示 Token 预算控制历史窗口，较早的记录仍保存在数据库里。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'context-storage', url: 'file:./06-context.db' }),\n  options: {\n    semanticRecall: false, generateTitle: false,\n    messageHistory: { maxTokens: 4000, atMaxRemoveTokens: 1000 }\n  }\n})\n\n// 系统规则和当前任务也占上下文，应用需要为这些内容保留空间。\nconst agent = new Agent({\n  id: 'activity-context-budget', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol', memory,\n  instructions: '用中文核对活动材料，缺少依据时请用户补充，不从片段推断已经预约。'\n})\n\n// 小材料用于跑通配置，不代表两次调用一定触发裁剪。\nconst identity = { resource: randomUUID(), thread: randomUUID() }\nawait agent.generate('阅读分享会周六两点开始，东门入场。', { memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000) })\n// 查看用量与结果，较长会话需要再对照模型实际输入确认裁剪效果。\nconst result = await agent.generate('帮我整理一下安排。', { memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000) })\nconsole.dir({ text: result.text, usage: result.usage }, { depth: null })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/06-context.js"
+        }
+      ]
+    },
+    {
+      "title": "移出窗口之后，仍可查回原文",
+      "body": "被移出窗口的历史仍保存在存储里。运行时会保留相应的裁剪边界，让后续请求继续避开这些已移出的历史；需要查原文时，仍可以通过存储查询核对。\n本例的短对话先跑通预算配置。验证裁剪时，再准备足够长的资料，对照裁剪前后实际模型输入，并核对当前问题、必要规则和工具关联消息是否保留。",
+      "callouts": [
+        {
+          "type": "warning",
+          "body": "maxOutputTokens 限制生成输出，messageHistory.maxTokens 参与历史上下文预算。调大前者不会让已移出的旧消息自动回来。"
+        }
+      ]
+    },
+    {
+      "title": "保留原文之外，还可以整理记录",
+      "body": "简单窗口优先保留最近内容，但较早的确认事项可能仍然重要。除了按需召回，还可以把较长的过程整理成更紧凑的记录。\n下一节介绍观察记忆，看看压缩对话时保留什么、又需要检查什么。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "提示超过 4000 Token、需留出 1000 Token 余量时，历史应怎样裁剪？为什么被裁掉的内容仍能从数据库查到？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "数据库容量与模型窗口是两回事",
+          "body": "数据库可以保留许多次聊天，模型每次接收的内容却有窗口限制。系统提示词、当前问题、工具说明与返回结果，也都需要占用空间。\n**上下文管理（Context Management）**决定哪些保存内容进入当前请求。资料留在数据库里，并不要求每次全部发送。"
+        },
+        {
+          "title": "从消息条数走向内容预算",
+          "body": "lastMessages 按条数取历史，但一条工具结果可能比许多条简短对话更长。**messageHistory.maxTokens** 提供按提示 Token 预算控制历史的方式。\n本例设置 maxTokens: 4000、**atMaxRemoveTokens: 1000**。完整提示超过 4000 Token 时，框架从较早的历史中移除内容，目标是降至不超过 3000，为后续增长留出余量。Token 统计受分词方式影响，实际还应查看服务用量与模型输入。\n关联的工具调用与结果需要一起处理，避免留下只有请求或只有返回值的片段。当前问题和系统提示词等受保护内容若已超过预算，单靠裁掉历史仍然放不下。",
+          "codeBlocks": [
+            {
+              "label": "src/06-context.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\n\n// 用提示 Token 预算控制历史窗口，较早的记录仍保存在数据库里。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'context-storage', url: 'file:./06-context.db' }),\n  options: {\n    semanticRecall: false, generateTitle: false,\n    messageHistory: { maxTokens: 4000, atMaxRemoveTokens: 1000 }\n  }\n})\n\n// 系统规则和当前任务也占上下文，应用需要为这些内容保留空间。\nconst agent = new Agent({\n  id: 'activity-context-budget', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol', memory,\n  instructions: '用中文核对活动材料，缺少依据时请用户补充，不从片段推断已经预约。'\n})\n\n// 小材料用于跑通配置，不代表两次调用一定触发裁剪。\nconst identity = { resource: randomUUID(), thread: randomUUID() }\nawait agent.generate('阅读分享会周六两点开始，东门入场。', { memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000) })\n// 查看用量与结果，较长会话需要再对照模型实际输入确认裁剪效果。\nconst result = await agent.generate('帮我整理一下安排。', { memory: identity, maxSteps: 1, abortSignal: AbortSignal.timeout(60_000) })\nconsole.dir({ text: result.text, usage: result.usage }, { depth: null })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/06-context.ts"
+            }
+          ]
+        },
+        {
+          "title": "移出窗口之后，仍可查回原文",
+          "body": "被移出窗口的历史仍保存在存储里。运行时会保留相应的裁剪边界，让后续请求继续避开这些已移出的历史；需要查原文时，仍可以通过存储查询核对。\n本例的短对话先跑通预算配置。验证裁剪时，再准备足够长的资料，对照裁剪前后实际模型输入，并核对当前问题、必要规则和工具关联消息是否保留。",
+          "callouts": [
+            {
+              "type": "warning",
+              "body": "maxOutputTokens 限制生成输出，messageHistory.maxTokens 参与历史上下文预算。调大前者不会让已移出的旧消息自动回来。"
+            }
+          ]
+        },
+        {
+          "title": "保留原文之外，还可以整理记录",
+          "body": "简单窗口优先保留最近内容，但较早的确认事项可能仍然重要。除了按需召回，还可以把较长的过程整理成更紧凑的记录。\n下一节介绍观察记忆，看看压缩对话时保留什么、又需要检查什么。"
+        }
+      ]
+    }
+  }
+}

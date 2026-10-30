@@ -1,0 +1,70 @@
+{
+  "title": "参考资料与模板（References & Assets）",
+  "lead": "把细节留在支持文件中，需要时读取，并核对产物是否符合方法与资料。",
+  "sections": [
+    {
+      "title": "入口写方法，细节放在支持材料",
+      "body": "SKILL.md 说明核对顺序；**references/** 保存检查项与依据；**assets/** 提供清单模板等可复用材料。\n一个技能也可以带 scripts/，但脚本文件被列出或读到，并不会自动执行。它需要适合的执行工具与环境，13 章再展开。"
+    },
+    {
+      "title": "先列出文件，再明确读取内容",
+      "body": "本例通过 getSkill() 查看参考资料与模板的列表，再由程序读取两个具体文件，展示它们分别提供哪些信息。\n这里先由程序展示文件原文。Agent 在任务中要读取同样的内容，可以使用前面介绍的 **skill_read**。",
+      "codeBlocks": [
+        {
+          "label": "src/05-references.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { fileURLToPath } from 'node:url'\nimport { readFile } from 'node:fs/promises'\n\n// 程序使用同一个技能目录，先查看它带有哪些支持文件。\nconst directory = fileURLToPath(new URL('../materials/skills/activity-review/', import.meta.url))\n// 此示例只读取技能与模板，不发起模型请求。\nconst agent = new Agent({ id: 'skill-references', name: '资料模板助手', model: 'vercel/openai/gpt-6.1-sol', skills: [directory] })\n// 元数据中的文件列表并不等于模型已经读取了文件内容。\nconst skill = await agent.getSkill('activity-review')\nconsole.dir({ references: skill?.references, assets: skill?.assets })\nconsole.log('核对依据：', await readFile(new URL('../materials/skills/activity-review/references/checks.md', import.meta.url), 'utf8'))\nconsole.log('交付模板：', await readFile(new URL('../materials/skills/activity-review/assets/result-template.md', import.meta.url), 'utf8'))"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/05-references.js"
+        }
+      ]
+    },
+    {
+      "title": "模板决定形式，资料决定依据",
+      "body": "“已确认”“待确认”两组模板有助于稳定交付，但每个条目仍要来自原始活动材料或经过核实的信息。\n缺少地点时，保留缺口比填出看似完整的模板更有用。模板更新后，也应检查已有规则是否还指向正确文件。"
+    },
+    {
+      "title": "不同任务，可以提供不同的方法集合",
+      "body": "资料与模板能复用，但不是每次请求都需要同一组技能。\n下一节由应用根据本次任务条件，确定提供哪些技能。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "模板要求填写地点，原材料却没有地点。结果应怎样填写？若还需要使用参考文件，应查看哪项读取记录？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "入口写方法，细节放在支持材料",
+          "body": "SKILL.md 说明核对顺序；**references/** 保存检查项与依据；**assets/** 提供清单模板等可复用材料。\n一个技能也可以带 scripts/，但脚本文件被列出或读到，并不会自动执行。它需要适合的执行工具与环境，13 章再展开。"
+        },
+        {
+          "title": "先列出文件，再明确读取内容",
+          "body": "本例通过 getSkill() 查看参考资料与模板的列表，再由程序读取两个具体文件，展示它们分别提供哪些信息。\n这里先由程序展示文件原文。Agent 在任务中要读取同样的内容，可以使用前面介绍的 **skill_read**。",
+          "codeBlocks": [
+            {
+              "label": "src/05-references.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { fileURLToPath } from 'node:url'\nimport { readFile } from 'node:fs/promises'\n\n// 程序使用同一个技能目录，先查看它带有哪些支持文件。\nconst directory = fileURLToPath(new URL('../materials/skills/activity-review/', import.meta.url))\n// 此示例只读取技能与模板，不发起模型请求。\nconst agent = new Agent({ id: 'skill-references', name: '资料模板助手', model: 'vercel/openai/gpt-6.1-sol', skills: [directory] })\n// 元数据中的文件列表并不等于模型已经读取了文件内容。\nconst skill = await agent.getSkill('activity-review')\nconsole.dir({ references: skill?.references, assets: skill?.assets })\nconsole.log('核对依据：', await readFile(new URL('../materials/skills/activity-review/references/checks.md', import.meta.url), 'utf8'))\nconsole.log('交付模板：', await readFile(new URL('../materials/skills/activity-review/assets/result-template.md', import.meta.url), 'utf8'))"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/05-references.ts"
+            }
+          ]
+        },
+        {
+          "title": "模板决定形式，资料决定依据",
+          "body": "“已确认”“待确认”两组模板有助于稳定交付，但每个条目仍要来自原始活动材料或经过核实的信息。\n缺少地点时，保留缺口比填出看似完整的模板更有用。模板更新后，也应检查已有规则是否还指向正确文件。"
+        },
+        {
+          "title": "不同任务，可以提供不同的方法集合",
+          "body": "资料与模板能复用，但不是每次请求都需要同一组技能。\n下一节由应用根据本次任务条件，确定提供哪些技能。"
+        }
+      ]
+    }
+  }
+}

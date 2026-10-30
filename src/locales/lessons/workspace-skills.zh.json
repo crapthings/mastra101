@@ -1,0 +1,82 @@
+{
+  "title": "技能目录（Workspace Skills）",
+  "lead": "把技能发现接到文件系统，分清项目共享方法与单个 Agent 的覆盖。",
+  "sections": [
+    {
+      "title": "同一份方法，可以供多个助手使用",
+      "body": "11 章把技能直接挂到 Agent。现在工作区已经连接文件系统，可以通过 **Workspace.skills** 配置项目内的技能目录。\n本例在工作区根下放置 skills/departure-checklist/SKILL.md，目录项 skills 从这份文件系统根解析，而不是从任意进程目录猜测。"
+    },
+    {
+      "title": "先准备文件，再开始发现",
+      "body": "脚本先写入教学技能，再初始化 Workspace。一个 Agent 使用工作区版本，另一个挂载同名内联技能，读取各自最终解析到的规则。\n当前配置下，Agent 直接配置的同名技能优先。覆盖改变该 Agent 的解析结果，不会把磁盘上的共享 SKILL.md 改写成内联版本。",
+      "codeBlocks": [
+        {
+          "label": "src/05-skills-directory.js",
+          "language": "javascript",
+          "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { Agent } from '@mastra/core/agent'\nimport { createSkill } from '@mastra/core/skills'\n\n// 先准备工作区技能文件，再启动技能发现。\nconst filesystem = new LocalFilesystem({ basePath: resolve('lab/05-skills') })\nawait filesystem.init()\nawait filesystem.writeFile('skills/departure-checklist/SKILL.md', '---\\nname: departure-checklist\\ndescription: 按已确认资料整理出发清单。\\n---\\n完整列出入场安排和携带要求，缺口单独列出。')\n// 路径 skills 相对工作区文件系统根解析。\nconst workspace = new Workspace({ filesystem, skills: ['skills'] })\nawait workspace.init()\ntry {\n  // 使用共享技能的助手没有另外配置同名技能。\n  const common = new Agent({ id: 'common-checklist', name: '常规清单助手', model: 'vercel/openai/gpt-6.1-sol', workspace })\n  // 单个 Agent 的同名技能覆盖工作区版本，不修改磁盘文件。\n  const brief = new Agent({ id: 'brief-checklist', name: '简短清单助手', model: 'vercel/openai/gpt-6.1-sol', workspace,\n    skills: [createSkill({ name: 'departure-checklist', description: '整理简短出发清单。', instructions: '简短版本：最多三项，只使用已确认资料。' })]\n  })\n  console.log('工作区版本：', (await common.getSkill('departure-checklist'))?.instructions)\n  console.log('Agent 覆盖版本：', (await brief.getSkill('departure-checklist'))?.instructions)\n  console.log('原文件仍保留：', await filesystem.readFile('skills/departure-checklist/SKILL.md', { encoding: 'utf8' }))\n} finally {\n  await workspace.destroy()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/05-skills-directory.js"
+        }
+      ]
+    },
+    {
+      "title": "先核对解析结果，再核对任务行为",
+      "body": "本例只验证技能发现与同名优先关系，不发起模型请求。要判断助手是否实际按所选方法执行，还要回到 11 的工具加载记录与结果检查。\n技能文件本身同样需要维护用途、内容和支持文件路径。多份方法同名时，应明确来源，避免只看显示名称就认错版本。"
+    },
+    {
+      "title": "共享方法之外，用户资料还要分开",
+      "body": "项目技能可以共享，用户文件却往往有自己的范围。\n下一节根据请求归属选择不同目录，继续区分共享能力与私人资料。",
+      "links": [
+        {
+          "label": "Mastra：文件技能",
+          "href": "https://mastra.ai/docs/sandbox/skills"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "Agent 用同名内联技能覆盖项目技能后，其他 Agent 应读到哪份规则？怎样确认磁盘上的共享文件没有被改写？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "同一份方法，可以供多个助手使用",
+          "body": "11 章把技能直接挂到 Agent。现在工作区已经连接文件系统，可以通过 **Workspace.skills** 配置项目内的技能目录。\n本例在工作区根下放置 skills/departure-checklist/SKILL.md，目录项 skills 从这份文件系统根解析，而不是从任意进程目录猜测。"
+        },
+        {
+          "title": "先准备文件，再开始发现",
+          "body": "脚本先写入教学技能，再初始化 Workspace。一个 Agent 使用工作区版本，另一个挂载同名内联技能，读取各自最终解析到的规则。\n当前配置下，Agent 直接配置的同名技能优先。覆盖改变该 Agent 的解析结果，不会把磁盘上的共享 SKILL.md 改写成内联版本。",
+          "codeBlocks": [
+            {
+              "label": "src/05-skills-directory.ts",
+              "language": "typescript",
+              "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { Agent } from '@mastra/core/agent'\nimport { createSkill } from '@mastra/core/skills'\n\n// 先准备工作区技能文件，再启动技能发现。\nconst filesystem = new LocalFilesystem({ basePath: resolve('lab/05-skills') })\nawait filesystem.init()\nawait filesystem.writeFile('skills/departure-checklist/SKILL.md', '---\\nname: departure-checklist\\ndescription: 按已确认资料整理出发清单。\\n---\\n完整列出入场安排和携带要求，缺口单独列出。')\n// 路径 skills 相对工作区文件系统根解析。\nconst workspace = new Workspace({ filesystem, skills: ['skills'] })\nawait workspace.init()\ntry {\n  // 使用共享技能的助手没有另外配置同名技能。\n  const common = new Agent({ id: 'common-checklist', name: '常规清单助手', model: 'vercel/openai/gpt-6.1-sol', workspace })\n  // 单个 Agent 的同名技能覆盖工作区版本，不修改磁盘文件。\n  const brief = new Agent({ id: 'brief-checklist', name: '简短清单助手', model: 'vercel/openai/gpt-6.1-sol', workspace,\n    skills: [createSkill({ name: 'departure-checklist', description: '整理简短出发清单。', instructions: '简短版本：最多三项，只使用已确认资料。' })]\n  })\n  console.log('工作区版本：', (await common.getSkill('departure-checklist'))?.instructions)\n  console.log('Agent 覆盖版本：', (await brief.getSkill('departure-checklist'))?.instructions)\n  console.log('原文件仍保留：', await filesystem.readFile('skills/departure-checklist/SKILL.md', { encoding: 'utf8' }))\n} finally {\n  await workspace.destroy()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/05-skills-directory.ts"
+            }
+          ]
+        },
+        {
+          "title": "先核对解析结果，再核对任务行为",
+          "body": "本例只验证技能发现与同名优先关系，不发起模型请求。要判断助手是否实际按所选方法执行，还要回到 11 的工具加载记录与结果检查。\n技能文件本身同样需要维护用途、内容和支持文件路径。多份方法同名时，应明确来源，避免只看显示名称就认错版本。"
+        },
+        {
+          "title": "共享方法之外，用户资料还要分开",
+          "body": "项目技能可以共享，用户文件却往往有自己的范围。\n下一节根据请求归属选择不同目录，继续区分共享能力与私人资料。",
+          "links": [
+            {
+              "label": "Mastra：文件技能",
+              "href": "https://mastra.ai/docs/sandbox/skills"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

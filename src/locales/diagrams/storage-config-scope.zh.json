@@ -1,0 +1,14 @@
+{
+  "title": "同一实例，共享配置与局部覆盖",
+  "caption": "没有单独指定存储的 Memory 使用实例提供的后端；显式配置的 Memory 使用自己的后端。这个覆盖只针对对应记忆，不会整体替换实例上其他能力的存储。",
+  "instance": "同一个 Mastra 实例",
+  "sharedAgent": "助手 A 的 Memory",
+  "sharedDetail": "未单独指定 storage",
+  "privateAgent": "助手 B 的 Memory",
+  "privateDetail": "显式指定 storage",
+  "shared": "实例默认存储",
+  "sharedStore": "02-shared.db",
+  "private": "独立记忆存储",
+  "privateStore": "02-private.db",
+  "other": "其他使用实例存储的能力"
+}

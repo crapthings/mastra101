@@ -1,0 +1,80 @@
+{
+  "title": "命令与结果（Commands & Results）",
+  "lead": "区分命令成功、部分输出与失败原因，用真实执行信息决定下一步。",
+  "sections": [
+    {
+      "title": "日志能说明进度，退出码说明执行结局",
+      "body": "命令可以先输出“处理中”，随后因输入缺失而失败。把第一段文字当成已完成结果，就会把进度误交给后续程序。\n**stdout** 保存标准输出，**stderr** 保存错误输出，**exitCode** 表示进程退出情况，**success** 对应执行是否正常成功。还应核对真实产物和业务含义。"
+    },
+    {
+      "title": "比较正常完成与显式失败",
+      "body": "本例根据有限命令参数选择固定代码，分别观察成功与退出码 7 的路径。失败样本会先输出部分进度，再写错误信息退出。\n参数通过 executeCommand(command, args) 分开提供。不要把任意用户文字直接拼成可由 shell 解释的命令；有执行需求时，应明确允许的程序与输入。",
+      "codeBlocks": [
+        {
+          "label": "src/02-command-results.js",
+          "language": "javascript",
+          "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { z } from 'zod'\n\n// 成功与失败都使用固定代码，观察退出码而不是只看输出文字。\nconst mode = z.enum(['成功', '失败']).parse(process.argv[2] || '成功')\n// 命令参数作为数组传入，不把任意用户文字拼成 shell 命令。\nconst sandbox = new LocalSandbox({ workingDirectory: resolve('lab/02-results') })\ntry {\n  await sandbox.start()\n  const script = mode === '成功' ? 'console.log(\"教学资料处理完成\")' : 'console.log(\"已经输出部分进度\"); console.error(\"教学输入缺少地点\"); process.exitCode = 7'\n  const result = await sandbox.executeCommand(process.execPath, ['-e', script])\n  console.dir({ success: result.success, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr })\n} finally {\n  await sandbox.destroy()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/02-command-results.js 成功"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/02-command-results.js 失败"
+        }
+      ]
+    },
+    {
+      "title": "程序启动失败与业务检查失败不同",
+      "body": "可执行程序不存在、依赖缺失和脚本主动返回非零退出码，发生位置并不相同。先保留错误上下文，再判断需要修复环境、补充资料还是有限重试。\n即使 exitCode 为 0，也仍要对照任务要求检查产物。它说明命令正常结束，不证明清单资料真实或已经得到用户批准。"
+    },
+    {
+      "title": "继续检查命令运行时看到的环境",
+      "body": "同一段脚本，在不同目录或依赖环境中可能得到不同结果。\n下一节看工作目录、环境变量和依赖是怎样参与执行的。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "命令先输出进度，最后以退出码 7 结束。后续程序应怎样记录这次结果，避免把部分输出当成完成的产物？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "日志能说明进度，退出码说明执行结局",
+          "body": "命令可以先输出“处理中”，随后因输入缺失而失败。把第一段文字当成已完成结果，就会把进度误交给后续程序。\n**stdout** 保存标准输出，**stderr** 保存错误输出，**exitCode** 表示进程退出情况，**success** 对应执行是否正常成功。还应核对真实产物和业务含义。"
+        },
+        {
+          "title": "比较正常完成与显式失败",
+          "body": "本例根据有限命令参数选择固定代码，分别观察成功与退出码 7 的路径。失败样本会先输出部分进度，再写错误信息退出。\n参数通过 executeCommand(command, args) 分开提供。不要把任意用户文字直接拼成可由 shell 解释的命令；有执行需求时，应明确允许的程序与输入。",
+          "codeBlocks": [
+            {
+              "label": "src/02-command-results.ts",
+              "language": "typescript",
+              "code": "import { LocalSandbox } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\nimport { z } from 'zod'\n\n// 成功与失败都使用固定代码，观察退出码而不是只看输出文字。\nconst mode = z.enum(['成功', '失败']).parse(process.argv[2] || '成功')\n// 命令参数作为数组传入，不把任意用户文字拼成 shell 命令。\nconst sandbox = new LocalSandbox({ workingDirectory: resolve('lab/02-results') })\ntry {\n  await sandbox.start()\n  const script = mode === '成功' ? 'console.log(\"教学资料处理完成\")' : 'console.log(\"已经输出部分进度\"); console.error(\"教学输入缺少地点\"); process.exitCode = 7'\n  const result = await sandbox.executeCommand(process.execPath, ['-e', script])\n  console.dir({ success: result.success, exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr })\n} finally {\n  await sandbox.destroy()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/02-command-results.ts 成功"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/02-command-results.ts 失败"
+            }
+          ]
+        },
+        {
+          "title": "程序启动失败与业务检查失败不同",
+          "body": "可执行程序不存在、依赖缺失和脚本主动返回非零退出码，发生位置并不相同。先保留错误上下文，再判断需要修复环境、补充资料还是有限重试。\n即使 exitCode 为 0，也仍要对照任务要求检查产物。它说明命令正常结束，不证明清单资料真实或已经得到用户批准。"
+        },
+        {
+          "title": "继续检查命令运行时看到的环境",
+          "body": "同一段脚本，在不同目录或依赖环境中可能得到不同结果。\n下一节看工作目录、环境变量和依赖是怎样参与执行的。"
+        }
+      ]
+    }
+  }
+}

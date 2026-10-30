@@ -1,0 +1,82 @@
+{
+  "title": "发现与加载（Discovery & Loading）",
+  "lead": "按用途发现技能，逐步读取规则，并用运行记录核对本次是否实际加载。",
+  "sections": [
+    {
+      "title": "先看用途，再读具体方法",
+      "body": "配置技能后，Mastra 向模型提供名称、描述等发现信息，并提供读取技能的工具。模型不必在每次调用开始时完整阅读所有方法。\n这种 **按需加载（Progressive Disclosure）**先提供选择线索，再读取规则，需要时继续查支持资料。它减少无关内容，但也要求用途写得明确。"
+    },
+    {
+      "title": "三个技能工具各做什么",
+      "body": "**skill** 加载所选技能的说明与文件列表；**skill_read** 读取技能目录内的支持文件；**skill_search** 帮助查找规则或参考内容。\n加载内容作为工具结果进入当前对话。它需要在后续上下文中仍可见，模型才能继续使用；“之前加载过”不是永久生效的全局开关。"
+    },
+    {
+      "title": "用工具记录确认加载动作",
+      "body": "本例同时提供资料核对与提醒文案两项技能，当前任务是核对缺少地点的活动资料。\n运行前复制 .env.example 为 .env，填入前面使用的 AI_GATEWAY_API_KEY。这个入口会调用 vercel/openai/gpt-6.1-sol，输出每步工具请求与结果。先核对是否加载了 activity-review，再看回答是否保留未知地点。",
+      "codeBlocks": [
+        {
+          "label": "src/03-loading.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { createSkill } from '@mastra/core/skills'\n\n// 技能目录先提供用途，模型需要时再读取完整规则。\nconst review = createSkill({ name: 'activity-review', description: '核对活动资料中的明确事实与缺口。', instructions: '列出已确认和待确认两组；地点未知时保留未知，不推测预约结果。' })\n// 另一个技能帮助观察模型是否选择了适用的方法。\nconst reminder = createSkill({ name: 'short-reminder', description: '根据已确认安排撰写简短提醒文案。', instructions: '只写已确认安排，表达简短，不声称已经发送。' })\n// 要求先加载相关技能，执行记录用于核对实际行为。\nconst agent = new Agent({\n  id: 'skill-loading', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文回答。处理任务前先通过 skill 工具读取匹配技能，再依据其规则处理材料。', skills: [review, reminder]\n})\n// 本次任务是核对资料，不是写提醒或发送通知。\nconst result = await agent.generate('请核对活动资料：主办方说周六下午两点开始，需要预约，地点尚未公布。', {\n  maxSteps: 4, abortSignal: AbortSignal.timeout(60_000),\n  onStepFinish: ({ toolCalls, toolResults }) => console.dir({ toolCalls, toolResults }, { depth: null })\n})\nconsole.log(result.text || '没有最终文本，请检查运行记录。')"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/03-loading.js"
+        }
+      ]
+    },
+    {
+      "title": "加载成功以后，继续检查结果",
+      "body": "列出技能只能说明它可用；出现 skill 请求和对应返回，才能说明本次读到了规则。结果是否按规则区分已确认与待确认，仍需对照资料判断。\n下一节把方法移到文件中，让修改规则不必始终编辑 Agent 的代码。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "可发现、已加载、已按规则完成，是三个不同状态。检查哪一环有问题，就修改对应的描述、加载过程或处理规则。"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "记录中能看到 activity-review 的元数据，却没有 skill 工具调用。能否认定完整规则已被模型读取？如果已加载但仍编造地点，应继续核对什么？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先看用途，再读具体方法",
+          "body": "配置技能后，Mastra 向模型提供名称、描述等发现信息，并提供读取技能的工具。模型不必在每次调用开始时完整阅读所有方法。\n这种 **按需加载（Progressive Disclosure）**先提供选择线索，再读取规则，需要时继续查支持资料。它减少无关内容，但也要求用途写得明确。"
+        },
+        {
+          "title": "三个技能工具各做什么",
+          "body": "**skill** 加载所选技能的说明与文件列表；**skill_read** 读取技能目录内的支持文件；**skill_search** 帮助查找规则或参考内容。\n加载内容作为工具结果进入当前对话。它需要在后续上下文中仍可见，模型才能继续使用；“之前加载过”不是永久生效的全局开关。"
+        },
+        {
+          "title": "用工具记录确认加载动作",
+          "body": "本例同时提供资料核对与提醒文案两项技能，当前任务是核对缺少地点的活动资料。\n运行前复制 .env.example 为 .env，填入前面使用的 AI_GATEWAY_API_KEY。这个入口会调用 vercel/openai/gpt-6.1-sol，输出每步工具请求与结果。先核对是否加载了 activity-review，再看回答是否保留未知地点。",
+          "codeBlocks": [
+            {
+              "label": "src/03-loading.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { createSkill } from '@mastra/core/skills'\n\n// 技能目录先提供用途，模型需要时再读取完整规则。\nconst review = createSkill({ name: 'activity-review', description: '核对活动资料中的明确事实与缺口。', instructions: '列出已确认和待确认两组；地点未知时保留未知，不推测预约结果。' })\n// 另一个技能帮助观察模型是否选择了适用的方法。\nconst reminder = createSkill({ name: 'short-reminder', description: '根据已确认安排撰写简短提醒文案。', instructions: '只写已确认安排，表达简短，不声称已经发送。' })\n// 要求先加载相关技能，执行记录用于核对实际行为。\nconst agent = new Agent({\n  id: 'skill-loading', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文回答。处理任务前先通过 skill 工具读取匹配技能，再依据其规则处理材料。', skills: [review, reminder]\n})\n// 本次任务是核对资料，不是写提醒或发送通知。\nconst result = await agent.generate('请核对活动资料：主办方说周六下午两点开始，需要预约，地点尚未公布。', {\n  maxSteps: 4, abortSignal: AbortSignal.timeout(60_000),\n  onStepFinish: ({ toolCalls, toolResults }) => console.dir({ toolCalls, toolResults }, { depth: null })\n})\nconsole.log(result.text || '没有最终文本，请检查运行记录。')"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/03-loading.ts"
+            }
+          ]
+        },
+        {
+          "title": "加载成功以后，继续检查结果",
+          "body": "列出技能只能说明它可用；出现 skill 请求和对应返回，才能说明本次读到了规则。结果是否按规则区分已确认与待确认，仍需对照资料判断。\n下一节把方法移到文件中，让修改规则不必始终编辑 Agent 的代码。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "可发现、已加载、已按规则完成，是三个不同状态。检查哪一环有问题，就修改对应的描述、加载过程或处理规则。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

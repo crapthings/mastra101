@@ -1,0 +1,84 @@
+{
+  "title": "技能文件（SKILL.md）",
+  "lead": "把任务方法组织成可阅读的文件，理解目录、元数据与正文各自的作用。",
+  "sections": [
+    {
+      "title": "方法稳定以后，可以像资料一样维护",
+      "body": "核对规则需要调整时，用文件维护更容易阅读和审查。一个文件技能以目录为单位，入口是 **SKILL.md**。\n文件开头的 YAML 元数据说明名称与用途，后面的 Markdown 正文写具体方法。名称应符合规范并与目录对应；本例使用 activity-review 作为标识，正文保持中文。"
+    },
+    {
+      "title": "先看随包提供的技能原文",
+      "body": "下面文件位于 materials/skills/activity-review。规则集中在入口文件，详细检查项与模板放在支持目录，稍后按需读取。",
+      "codeBlocks": [
+        {
+          "label": "materials/skills/activity-review/SKILL.md",
+          "language": "markdown",
+          "code": "---\nname: activity-review\ndescription: 用于核对活动资料的时间、地点、预约条件与未知项。\n---\n\n# 活动资料核对\n\n先读取材料，分开列出已确认内容与待确认事项。保留来源，不把“需要预约”写成“已经预约”。\n\n需要细查时读取 references/checks.md，输出时可参考 assets/result-template.md。支持文件按需读取，不要把不存在的内容补齐。"
+        }
+      ]
+    },
+    {
+      "title": "文件技能可以直接挂到 Agent",
+      "body": "本例通过文件 URL 定位随包目录，再将该目录路径放入 Agent.skills。随后列出技能并读取正文，不请求模型。\n技能目录可以直接挂给 Agent。下一章再通过 Workspace，让多个助手使用项目共享的技能文件。",
+      "codeBlocks": [
+        {
+          "label": "src/04-skill-file.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { fileURLToPath } from 'node:url'\n\n// 技能目录来自随包材料，绝对路径不随命令启动目录改变。\nconst directory = fileURLToPath(new URL('../materials/skills/activity-review/', import.meta.url))\n// Agent 可以直接加载文件技能，不必先配置 Workspace 或 Sandbox。\nconst agent = new Agent({\n  id: 'file-skill', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文核对活动资料。', skills: [directory]\n})\nconsole.table(await agent.listSkills())\nconsole.log((await agent.getSkill('activity-review'))?.instructions)"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/04-skill-file.js"
+        }
+      ]
+    },
+    {
+      "title": "文件里写了方法，也需要可用资料",
+      "body": "入口文件可以说明“参考哪些检查项、采用哪份模板”，但模型仍需读取对应文件，才能用到其中细节。\n下一节把规则、参考资料与交付模板的作用分开。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "activity-review 目录中的 SKILL.md 声明了另一个名称。应核对哪项文件约定？修改后，怎样确认加载的是这份规则？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "方法稳定以后，可以像资料一样维护",
+          "body": "核对规则需要调整时，用文件维护更容易阅读和审查。一个文件技能以目录为单位，入口是 **SKILL.md**。\n文件开头的 YAML 元数据说明名称与用途，后面的 Markdown 正文写具体方法。名称应符合规范并与目录对应；本例使用 activity-review 作为标识，正文保持中文。"
+        },
+        {
+          "title": "先看随包提供的技能原文",
+          "body": "下面文件位于 materials/skills/activity-review。规则集中在入口文件，详细检查项与模板放在支持目录，稍后按需读取。",
+          "codeBlocks": [
+            {
+              "label": "materials/skills/activity-review/SKILL.md",
+              "language": "markdown",
+              "code": "---\nname: activity-review\ndescription: 用于核对活动资料的时间、地点、预约条件与未知项。\n---\n\n# 活动资料核对\n\n先读取材料，分开列出已确认内容与待确认事项。保留来源，不把“需要预约”写成“已经预约”。\n\n需要细查时读取 references/checks.md，输出时可参考 assets/result-template.md。支持文件按需读取，不要把不存在的内容补齐。"
+            }
+          ]
+        },
+        {
+          "title": "文件技能可以直接挂到 Agent",
+          "body": "本例通过文件 URL 定位随包目录，再将该目录路径放入 Agent.skills。随后列出技能并读取正文，不请求模型。\n技能目录可以直接挂给 Agent。下一章再通过 Workspace，让多个助手使用项目共享的技能文件。",
+          "codeBlocks": [
+            {
+              "label": "src/04-skill-file.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { fileURLToPath } from 'node:url'\n\n// 技能目录来自随包材料，绝对路径不随命令启动目录改变。\nconst directory = fileURLToPath(new URL('../materials/skills/activity-review/', import.meta.url))\n// Agent 可以直接加载文件技能，不必先配置 Workspace 或 Sandbox。\nconst agent = new Agent({\n  id: 'file-skill', name: '活动资料助手', model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '用中文核对活动资料。', skills: [directory]\n})\nconsole.table(await agent.listSkills())\nconsole.log((await agent.getSkill('activity-review'))?.instructions)"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/04-skill-file.ts"
+            }
+          ]
+        },
+        {
+          "title": "文件里写了方法，也需要可用资料",
+          "body": "入口文件可以说明“参考哪些检查项、采用哪份模板”，但模型仍需读取对应文件，才能用到其中细节。\n下一节把规则、参考资料与交付模板的作用分开。"
+        }
+      ]
+    }
+  }
+}

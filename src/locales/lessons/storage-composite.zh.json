@@ -1,0 +1,90 @@
+{
+  "title": "组合存储（Composite Storage）",
+  "lead": "为不同数据领域选择后端，同时保留清楚的默认规则。",
+  "sections": [
+    {
+      "title": "所有数据未必适合同一个后端",
+      "body": "起步时把消息、运行状态和记录放在同一后端最容易核对。数据增长后，不同领域可能有不同的写入量、查询方式或维护需求。\n**组合存储（MastraCompositeStore）**按领域分配后端。只有需要这种分工时，再引入组合配置，避免让简单项目过早承担多套连接。"
+    },
+    {
+      "title": "default 提供默认值，domains 明确覆盖",
+      "body": "**default** 处理没有单独指定的领域；**domains** 为具体领域提供实现。覆盖 memory 时，传入的是 MemoryLibSQL 这样的领域实现，而不是整个存储配置对象。\n某个领域单独覆盖后，该领域的读写走覆盖实现；其他领域仍按默认规则处理。它改变的是之后操作的路由，不会自动复制或搬迁原有记录。"
+    },
+    {
+      "title": "向默认与覆盖后端分别读回",
+      "body": "本例用两个 LibSQL 文件演示拆分：memory 使用显式覆盖，其他领域保留默认后端。创建一条新会话后，分别从两个 memory 接口读取它。\n预期新会话只出现在覆盖后端；同时，workflows 接口仍来自默认后端。读回记录核对实际落点，接口对应关系核对默认路由，两类证据一起验证配置。",
+      "codeBlocks": [
+        {
+          "label": "src/06-composite.js",
+          "language": "javascript",
+          "code": "import { MastraCompositeStore } from '@mastra/core/storage'\nimport { LibSQLStore, MemoryLibSQL } from '@mastra/libsql'\nimport { Memory } from '@mastra/memory'\nimport { randomUUID } from 'node:crypto'\n\n// 未单独覆盖的领域使用默认后端。\nconst defaultStore = new LibSQLStore({ id: 'default-store', url: 'file:./06-default.db' })\n// memory 领域单独连接另一教学数据库。\nconst memoryDomain = new MemoryLibSQL({ url: 'file:./06-memory.db' })\n// 按领域选择后端，示例用两个本地文件代替不同服务。\nconst storage = new MastraCompositeStore({\n  id: 'composite-storage', default: defaultStore, domains: { memory: memoryDomain }\n})\n// 上层记忆仍使用相同接口，后端由组合存储路由。\nconst memory = new Memory({ storage, options: { semanticRecall: false, generateTitle: false } })\n// 唯一标识用于验证这条记录没有落入默认 memory 领域。\nconst threadId = randomUUID()\nawait memory.createThread({ threadId, resourceId: 'demo-reader', title: '路由后的活动会话' })\n\n// 两个 memory 接口的读回结果，直接证明领域覆盖的落点。\nconst fallbackMemory = await defaultStore.getStore('memory')\nconsole.dir({\n  routedHasThread: Boolean(await memoryDomain.getThreadById({ threadId })),\n  defaultHasThread: Boolean(await fallbackMemory.getThreadById({ threadId })),\n  workflowUsesDefault: (await storage.getStore('workflows')) === (await defaultStore.getStore('workflows'))\n})"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/06-composite.js"
+        }
+      ]
+    },
+    {
+      "title": "沿领域、后端、记录定位问题",
+      "body": "先确定操作属于哪个领域，再查该领域实际选择的后端，最后按标识读回目标记录。这样可以区分路由选错、连接位置不对与记录本身不存在。\n组合配置负责领域到后端的映射。各领域的数据访问范围仍由应用与相应功能配置控制，继续沿用前面 resource、thread 的核对方式。"
+    },
+    {
+      "title": "保存位置明确后，还要管理保留时间",
+      "body": "无论使用一个后端还是多个后端，消息与运行记录都可能持续增长。\n最后一节用保留策略与清理调用，区分配置规则、实际删除和完整的数据生命周期。",
+      "links": [
+        {
+          "label": "Mastra：组合存储",
+          "href": "https://mastra.ai/reference/storage/composite"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "memory 领域改用独立后端后，默认数据库里还留着旧消息。这是否说明路由失败？应检查新写入还是只看旧文件是否存在？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "所有数据未必适合同一个后端",
+          "body": "起步时把消息、运行状态和记录放在同一后端最容易核对。数据增长后，不同领域可能有不同的写入量、查询方式或维护需求。\n**组合存储（MastraCompositeStore）**按领域分配后端。只有需要这种分工时，再引入组合配置，避免让简单项目过早承担多套连接。"
+        },
+        {
+          "title": "default 提供默认值，domains 明确覆盖",
+          "body": "**default** 处理没有单独指定的领域；**domains** 为具体领域提供实现。覆盖 memory 时，传入的是 MemoryLibSQL 这样的领域实现，而不是整个存储配置对象。\n某个领域单独覆盖后，该领域的读写走覆盖实现；其他领域仍按默认规则处理。它改变的是之后操作的路由，不会自动复制或搬迁原有记录。"
+        },
+        {
+          "title": "向默认与覆盖后端分别读回",
+          "body": "本例用两个 LibSQL 文件演示拆分：memory 使用显式覆盖，其他领域保留默认后端。创建一条新会话后，分别从两个 memory 接口读取它。\n预期新会话只出现在覆盖后端；同时，workflows 接口仍来自默认后端。读回记录核对实际落点，接口对应关系核对默认路由，两类证据一起验证配置。",
+          "codeBlocks": [
+            {
+              "label": "src/06-composite.ts",
+              "language": "typescript",
+              "code": "import { MastraCompositeStore } from '@mastra/core/storage'\nimport { LibSQLStore, MemoryLibSQL } from '@mastra/libsql'\nimport { Memory } from '@mastra/memory'\nimport { randomUUID } from 'node:crypto'\n\n// 未单独覆盖的领域使用默认后端。\nconst defaultStore = new LibSQLStore({ id: 'default-store', url: 'file:./06-default.db' })\n// memory 领域单独连接另一教学数据库。\nconst memoryDomain = new MemoryLibSQL({ url: 'file:./06-memory.db' })\n// 按领域选择后端，示例用两个本地文件代替不同服务。\nconst storage = new MastraCompositeStore({\n  id: 'composite-storage', default: defaultStore, domains: { memory: memoryDomain }\n})\n// 上层记忆仍使用相同接口，后端由组合存储路由。\nconst memory = new Memory({ storage, options: { semanticRecall: false, generateTitle: false } })\n// 唯一标识用于验证这条记录没有落入默认 memory 领域。\nconst threadId = randomUUID()\nawait memory.createThread({ threadId, resourceId: 'demo-reader', title: '路由后的活动会话' })\n\n// 两个 memory 接口的读回结果，直接证明领域覆盖的落点。\nconst fallbackMemory = await defaultStore.getStore('memory')\nconsole.dir({\n  routedHasThread: Boolean(await memoryDomain.getThreadById({ threadId })),\n  defaultHasThread: Boolean(await fallbackMemory.getThreadById({ threadId })),\n  workflowUsesDefault: (await storage.getStore('workflows')) === (await defaultStore.getStore('workflows'))\n})"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/06-composite.ts"
+            }
+          ]
+        },
+        {
+          "title": "沿领域、后端、记录定位问题",
+          "body": "先确定操作属于哪个领域，再查该领域实际选择的后端，最后按标识读回目标记录。这样可以区分路由选错、连接位置不对与记录本身不存在。\n组合配置负责领域到后端的映射。各领域的数据访问范围仍由应用与相应功能配置控制，继续沿用前面 resource、thread 的核对方式。"
+        },
+        {
+          "title": "保存位置明确后，还要管理保留时间",
+          "body": "无论使用一个后端还是多个后端，消息与运行记录都可能持续增长。\n最后一节用保留策略与清理调用，区分配置规则、实际删除和完整的数据生命周期。",
+          "links": [
+            {
+              "label": "Mastra：组合存储",
+              "href": "https://mastra.ai/reference/storage/composite"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

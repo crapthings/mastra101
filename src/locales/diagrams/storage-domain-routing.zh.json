@@ -1,0 +1,13 @@
+{
+  "title": "组合存储按领域选择后端",
+  "caption": "本例显式覆盖 memory，其余领域继续使用 default。图中的两个文件都是 LibSQL；这演示领域路由，而不是迁移旧数据或在两份数据库之间自动同步。",
+  "router": "MastraCompositeStore",
+  "routerDetail": "default + domains.memory",
+  "memory": "memory 领域",
+  "workflow": "workflows 领域",
+  "scores": "scores 领域",
+  "override": "显式指定的 MemoryLibSQL",
+  "overrideDetail": "06-memory.db",
+  "fallback": "default 的 LibSQLStore",
+  "fallbackDetail": "06-default.db"
+}

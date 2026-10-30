@@ -1,0 +1,13 @@
+{
+  "title": "一个归属，可以拥有多段会话",
+  "caption": "同一位用户的两段活动对话使用不同 threadId。近期消息按会话读取；资源范围的工作记忆可以在同一 resource 内共享。另一资源的数据需要独立处理。",
+  "readerA": "归属 A · 第一位教学用户",
+  "first": "会话 A1",
+  "firstDetail": "阅读分享会的消息历史",
+  "second": "会话 A2",
+  "secondDetail": "周末展览的消息历史",
+  "shared": "资源范围的偏好：提醒简短",
+  "readerB": "归属 B · 第二位教学用户",
+  "third": "会话 B1",
+  "thirdDetail": "这位用户自己的活动历史"
+}

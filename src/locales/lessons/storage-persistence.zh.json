@@ -1,0 +1,130 @@
+{
+  "title": "存储与持久化（Storage & Persistence）",
+  "lead": "从重新读取一条记录开始，分清程序对象、存储接口与实际数据库。",
+  "sections": [
+    {
+      "title": "助手退出以后，资料留下来了吗",
+      "body": "上一章的记忆保存了会话、消息与偏好。程序重新启动后，原来的 Memory 对象已经消失，但文件数据库里的记录还可以重新读取。\n**存储（Storage）**为 Mastra 的运行数据提供保存与查询接口，**持久化（Persistence）**则关注数据能否在进程退出后继续存在。使用哪一种适配器、连接到哪里，决定记录实际保存的位置。"
+    },
+    {
+      "title": "从对象到后端，中间有一层接口",
+      "body": "上一章从对话延续观察记忆，这里沿着数据的保存路径往下看：应用调用 Memory，Memory 使用存储接口，适配器再把读写操作交给具体后端。\n使用临时内存存储，数据只在当前进程中保留；使用本地文件或服务端数据库，进程重新启动后可以连接原来的数据位置，再按标识读取记录。"
+    },
+    {
+      "title": "直接读回一条保存的记录",
+      "body": "下载示例，进入 09-storage 文件夹，在 Node.js 24 或更高版本下安装依赖。这里全部示例都只操作本地教学数据库，不需要模型密钥。\n先运行“写入”，退出后再运行“读取”。两次使用同一数据库文件、threadId 与 resourceId，脚本直接打印读回的会话。",
+      "download": {
+        "href": "/downloads/09-storage.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install"
+        },
+        {
+          "label": "src/01-persistence.js",
+          "language": "javascript",
+          "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\n\n// 文件数据库用于观察退出进程后的数据保留。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'storage-intro', url: 'file:./01-storage.db' }),\n  options: { semanticRecall: false, generateTitle: false }\n})\n\n// 固定教学标识，写入与读取两个进程指向同一段会话。\nconst threadId = 'demo-activity-storage'\n// 应用确认的教学归属保持一致。\nconst resourceId = 'demo-reader'\n// 每次只执行写入或读取中的一个动作。\nconst mode = process.argv[2] || '读取'\nif (!['写入', '读取'].includes(mode)) throw new Error('请使用“写入”或“读取”。')\nif (mode === '写入') {\n  await memory.createThread({ threadId, resourceId, title: '阅读分享会：存储教学记录' })\n}\n\n// 回查数据库，不通过模型复述判断写入成功。\nconst thread = await memory.getThreadById({ threadId })\nif (thread && thread.resourceId !== resourceId) throw new Error('会话归属不一致。')\nconsole.dir(thread, { depth: null })\nif (!thread) console.log('没有这条教学记录，请在同一目录先执行写入。')"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/01-persistence.js 写入"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/01-persistence.js 读取"
+        }
+      ]
+    },
+    {
+      "title": "能连接，还要确认连对了位置",
+      "body": "存储适配器的 **id** 用于标识配置，**url** 指向本例实际使用的数据库文件，**threadId** 则定位文件中的会话。\n排查时，先确认连接到哪个数据库，再查里面有没有目标会话。文件出现只说明有了数据位置，读回目标记录才说明这次保存与查询已经接上。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "存储接口决定怎样操作，连接配置决定操作哪里。核对持久化时，要读回目标记录，而不只看进程是否正常结束。"
+        }
+      ]
+    },
+    {
+      "title": "接下来决定配置放在哪里",
+      "body": "08 把存储直接交给 Memory，07 的审批示例则把存储配置在 Mastra 实例上。两种方式都能工作，但影响范围不同。\n下一节把共享配置与单独覆盖对应起来。",
+      "links": [
+        {
+          "label": "Mastra：存储",
+          "href": "https://mastra.ai/docs/storage"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "两次运行使用同一个 storage id，读取时却换了数据库文件路径。原会话会跟着出现吗？应该怎样分别核对存储位置与会话标识？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "助手退出以后，资料留下来了吗",
+          "body": "上一章的记忆保存了会话、消息与偏好。程序重新启动后，原来的 Memory 对象已经消失，但文件数据库里的记录还可以重新读取。\n**存储（Storage）**为 Mastra 的运行数据提供保存与查询接口，**持久化（Persistence）**则关注数据能否在进程退出后继续存在。使用哪一种适配器、连接到哪里，决定记录实际保存的位置。"
+        },
+        {
+          "title": "从对象到后端，中间有一层接口",
+          "body": "上一章从对话延续观察记忆，这里沿着数据的保存路径往下看：应用调用 Memory，Memory 使用存储接口，适配器再把读写操作交给具体后端。\n使用临时内存存储，数据只在当前进程中保留；使用本地文件或服务端数据库，进程重新启动后可以连接原来的数据位置，再按标识读取记录。"
+        },
+        {
+          "title": "直接读回一条保存的记录",
+          "body": "下载示例，进入 09-storage-ts 文件夹，在 Node.ts 24 或更高版本下安装依赖。这里全部示例都只操作本地教学数据库，不需要模型密钥。\n先运行“写入”，退出后再运行“读取”。两次使用同一数据库文件、threadId 与 resourceId，脚本直接打印读回的会话。",
+          "download": {
+            "href": "/downloads/09-storage-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install"
+            },
+            {
+              "label": "src/01-persistence.ts",
+              "language": "typescript",
+              "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\n\n// 文件数据库用于观察退出进程后的数据保留。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'storage-intro', url: 'file:./01-storage.db' }),\n  options: { semanticRecall: false, generateTitle: false }\n})\n\n// 固定教学标识，写入与读取两个进程指向同一段会话。\nconst threadId = 'demo-activity-storage'\n// 应用确认的教学归属保持一致。\nconst resourceId = 'demo-reader'\n// 每次只执行写入或读取中的一个动作。\nconst mode = process.argv[2] || '读取'\nif (!['写入', '读取'].includes(mode)) throw new Error('请使用“写入”或“读取”。')\nif (mode === '写入') {\n  await memory.createThread({ threadId, resourceId, title: '阅读分享会：存储教学记录' })\n}\n\n// 回查数据库，不通过模型复述判断写入成功。\nconst thread = await memory.getThreadById({ threadId })\nif (thread && thread.resourceId !== resourceId) throw new Error('会话归属不一致。')\nconsole.dir(thread, { depth: null })\nif (!thread) console.log('没有这条教学记录，请在同一目录先执行写入。')"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/01-persistence.ts 写入"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/01-persistence.ts 读取"
+            }
+          ]
+        },
+        {
+          "title": "能连接，还要确认连对了位置",
+          "body": "存储适配器的 **id** 用于标识配置，**url** 指向本例实际使用的数据库文件，**threadId** 则定位文件中的会话。\n排查时，先确认连接到哪个数据库，再查里面有没有目标会话。文件出现只说明有了数据位置，读回目标记录才说明这次保存与查询已经接上。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "存储接口决定怎样操作，连接配置决定操作哪里。核对持久化时，要读回目标记录，而不只看进程是否正常结束。"
+            }
+          ]
+        },
+        {
+          "title": "接下来决定配置放在哪里",
+          "body": "08 把存储直接交给 Memory，07 的审批示例则把存储配置在 Mastra 实例上。两种方式都能工作，但影响范围不同。\n下一节把共享配置与单独覆盖对应起来。",
+          "links": [
+            {
+              "label": "Mastra：存储",
+              "href": "https://mastra.ai/docs/storage"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

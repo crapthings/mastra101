@@ -1,0 +1,82 @@
+{
+  "title": "搜索与索引（Search & Indexing）",
+  "lead": "从资料中找候选片段，并让索引随原文更新，保留来源与时间依据。",
+  "sections": [
+    {
+      "title": "文件在，不等于索引已经包含新内容",
+      "body": "主办方更正入口后，文件可能已经写成东门，但旧索引仍保存南门。搜索结果就可能继续返回过期片段。\nWorkspace 可以配置 **BM25** 词项搜索，也可以连接嵌入与向量搜索。本例先使用本地 BM25，不需要调用嵌入服务。"
+    },
+    {
+      "title": "显式写文件，也显式更新索引",
+      "body": "脚本先保存并索引南门资料，再只更新文件为东门。此时搜索仍可看到旧索引；调用 **workspace.index()** 更新后，再搜索应得到新内容。\n文件保存当前原文，索引保存供搜索使用的内容。这里由程序显式更新索引；使用自动索引时，也要确认文件更正是否已经同步。",
+      "codeBlocks": [
+        {
+          "label": "src/04-search.js",
+          "language": "javascript",
+          "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// BM25 在本地构建词项索引，不调用嵌入模型。\nconst workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: resolve('lab/04-search') }), bm25: true })\nawait workspace.init()\ntry {\n  await workspace.filesystem.writeFile('notice.txt', '入场：南门。携带：预约码。')\n  await workspace.index('notice.txt', '入场：南门。携带：预约码。')\n  console.log('初次索引：', await workspace.search('预约码'))\n  // 文件写入和索引更新分开观察，避免把旧索引误当成新文件。\n  await workspace.filesystem.writeFile('notice.txt', '入场：东门。携带：预约码。')\n  console.log('尚未更新的索引：', await workspace.search('预约码'))\n  await workspace.index('notice.txt', '入场：东门。携带：预约码。')\n  console.log('更新后的索引：', await workspace.search('预约码'))\n} finally {\n  await workspace.destroy()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/04-search.js"
+        }
+      ]
+    },
+    {
+      "title": "候选片段还需要回到任务里核对",
+      "body": "**workspace.search()** 返回内容、标识和分数等信息。应用可以根据它定位原文，但分数只是相关性的线索。\nBM25 依赖词项，未必理解任意中文同义问法；采用向量或混合检索后，也仍要核对来源、更新和适用范围。08 的对话召回与这里的文件搜索使用不同资料来源，不应混成同一份历史。"
+    },
+    {
+      "title": "资料可搜索，方法也可以共享",
+      "body": "工作区里既有活动资料，也可以有 11 章讲过的技能目录。\n下一节让多个助手发现同一份文件技能，再观察单个 Agent 怎样使用自己的版本。",
+      "links": [
+        {
+          "label": "Mastra：搜索与索引",
+          "href": "https://mastra.ai/docs/sandbox/search"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "文件已经更正为东门，搜索仍返回南门。怎样区分文件未更新与索引未更新，并验证修复结果？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "文件在，不等于索引已经包含新内容",
+          "body": "主办方更正入口后，文件可能已经写成东门，但旧索引仍保存南门。搜索结果就可能继续返回过期片段。\nWorkspace 可以配置 **BM25** 词项搜索，也可以连接嵌入与向量搜索。本例先使用本地 BM25，不需要调用嵌入服务。"
+        },
+        {
+          "title": "显式写文件，也显式更新索引",
+          "body": "脚本先保存并索引南门资料，再只更新文件为东门。此时搜索仍可看到旧索引；调用 **workspace.index()** 更新后，再搜索应得到新内容。\n文件保存当前原文，索引保存供搜索使用的内容。这里由程序显式更新索引；使用自动索引时，也要确认文件更正是否已经同步。",
+          "codeBlocks": [
+            {
+              "label": "src/04-search.ts",
+              "language": "typescript",
+              "code": "import { Workspace, LocalFilesystem } from '@mastra/core/workspace'\nimport { resolve } from 'node:path'\n\n// BM25 在本地构建词项索引，不调用嵌入模型。\nconst workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: resolve('lab/04-search') }), bm25: true })\nawait workspace.init()\ntry {\n  await workspace.filesystem.writeFile('notice.txt', '入场：南门。携带：预约码。')\n  await workspace.index('notice.txt', '入场：南门。携带：预约码。')\n  console.log('初次索引：', await workspace.search('预约码'))\n  // 文件写入和索引更新分开观察，避免把旧索引误当成新文件。\n  await workspace.filesystem.writeFile('notice.txt', '入场：东门。携带：预约码。')\n  console.log('尚未更新的索引：', await workspace.search('预约码'))\n  await workspace.index('notice.txt', '入场：东门。携带：预约码。')\n  console.log('更新后的索引：', await workspace.search('预约码'))\n} finally {\n  await workspace.destroy()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/04-search.ts"
+            }
+          ]
+        },
+        {
+          "title": "候选片段还需要回到任务里核对",
+          "body": "**workspace.search()** 返回内容、标识和分数等信息。应用可以根据它定位原文，但分数只是相关性的线索。\nBM25 依赖词项，未必理解任意中文同义问法；采用向量或混合检索后，也仍要核对来源、更新和适用范围。08 的对话召回与这里的文件搜索使用不同资料来源，不应混成同一份历史。"
+        },
+        {
+          "title": "资料可搜索，方法也可以共享",
+          "body": "工作区里既有活动资料，也可以有 11 章讲过的技能目录。\n下一节让多个助手发现同一份文件技能，再观察单个 Agent 怎样使用自己的版本。",
+          "links": [
+            {
+              "label": "Mastra：搜索与索引",
+              "href": "https://mastra.ai/docs/sandbox/search"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

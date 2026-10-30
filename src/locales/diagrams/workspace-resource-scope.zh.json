@@ -1,0 +1,11 @@
+{
+  "title": "同名文件可以属于不同资料范围",
+  "caption": "应用先确认 reader，再由 resolver 选择文件系统。两个目录中的 preference.txt 是不同文件；数据库中的 memory.resource 不会自动替应用配置文件范围。",
+  "a": "reader-a 的请求",
+  "b": "reader-b 的请求",
+  "fa": "reader-a 的目录",
+  "fb": "reader-b 的目录",
+  "file": "各自的 preference.txt",
+  "ca": "第一位用户的教学资料",
+  "cb": "第二位用户的教学资料"
+}
