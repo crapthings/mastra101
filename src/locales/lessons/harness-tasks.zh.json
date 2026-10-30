@@ -1,0 +1,150 @@
+{
+  "title": "任务清单（Task Tracking）",
+  "lead": "把需要完成的事项留在可更新的清单里，并用真实证据维护进度。",
+  "sections": [
+    {
+      "title": "目标说明做到什么，清单说明还做什么",
+      "body": "目标可以是“完成核查报告”，清单则拆出“核对住宿标准、查找批准记录、整理待确认项”。它们互相配合，却不等价：所有复选项被勾上，不能单独证明报告正确。\n**任务跟踪（Task Tracking）**把待办保存为结构化状态，帮助长任务保留尚未完成的事项。它不是后台执行队列，也不会因为新增了一项任务就自动运行工具。"
+    },
+    {
+      "title": "工具与状态处理器一起注册",
+      "body": "**TaskSignalProvider** 将任务工具与 TaskStateProcessor 一起注册。清单保存在当前线程的 threadState 存储中，再整理到 tasks 状态通道，供后续模型读取。\n这里沿用带 Memory 的线程和文件存储。工具负责修改清单，处理器负责让模型看到当前进度，两者共同维护跨轮次的待办。"
+    },
+    {
+      "title": "四个工具，分别维护什么",
+      "body": "task_write 建立或替换整份清单；task_update 修改一项；task_complete 完成一项；task_check 读取完成情况。更新时沿用稳定的任务 id，避免重写后把同一件事认成两项。\n当前实现同时只允许一项 in_progress。这个约束让清单进度明确，不代表 Agent 的所有后台工作都因此被串行化。",
+      "table": {
+        "headers": [
+          "工具",
+          "用法"
+        ],
+        "rows": [
+          [
+            "task_write",
+            "提交完整清单，替换原列表"
+          ],
+          [
+            "task_update",
+            "按 id 修改内容或状态"
+          ],
+          [
+            "task_complete",
+            "按 id 标记某项完成"
+          ],
+          [
+            "task_check",
+            "查看是否仍有未完成项"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "完成核对，不虚构批准",
+      "body": "本例让模型维护两项任务：核对材料、取得批准。完成材料核对后，第一项可以完成，第二项仍应为 pending。检查工具调用中的清单与 task_check 返回，确认待办保留下来。\n报告可以在写清缺项后完成，申请获批却需要真实批准记录。先明确要完成哪件事，才能正确维护任务状态。",
+      "codeBlocks": [
+        {
+          "label": "src/08-tasks.js",
+          "language": "javascript",
+          "code": "import { TaskSignalProvider } from '@mastra/core/signals'\nimport { createThreadRuntime } from './thread-runtime.js'\n\n// 任务工具和状态处理器一起注册，任务清单保存在当前线程。\nconst tasks = new TaskSignalProvider()\n// 只完成材料核对，不把等待批准的事项自动标成完成。\nconst runtime = await createThreadRuntime('tasks', {\n  signals: [tasks],\n  instructions: '用 task_write 建立两项任务：核对住宿材料、取得事先书面批准。只将第一项标为完成，第二项保留 pending；最后调用 task_check，不要虚构批准。'\n})\ntry {\n  const result = await runtime.reviewer.generate('材料：申请 560 元，上限 500 元，尚无批准记录。维护核查任务清单。', {\n    memory: { thread: runtime.thread.threadId, resource: runtime.thread.resourceId },\n    maxSteps: 5,\n    onStepFinish: ({ toolCalls, toolResults }) => console.dir({ toolCalls, toolResults }, { depth: 6 })\n  })\n  console.log('核查说明：', result.text)\n} finally {\n  tasks.stop()\n  await runtime.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/08-tasks.js"
+        }
+      ]
+    },
+    {
+      "title": "清单反映证据，不代替证据",
+      "body": "模型可以错勾一项，用户也可能撤回原条件。进度应与实际工具结果、待审批动作和业务记录对应，必要时重新打开任务。真正必须执行的顺序，仍交给工作流。\n任务清单记录要做什么，接下来要解决的是谁实际执行耗时操作，以及结果什么时候回来。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "task_complete 只更新清单状态，不会替你完成审批、文件写入或外部操作。"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：任务跟踪",
+          "href": "https://mastra.ai/reference/signals/task-signal-provider"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "清单把“取得批准”标为 completed，审批系统却没有记录。应据什么修正清单？核查报告完成后，哪项业务工作仍需保留？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "目标说明做到什么，清单说明还做什么",
+          "body": "目标可以是“完成核查报告”，清单则拆出“核对住宿标准、查找批准记录、整理待确认项”。它们互相配合，却不等价：所有复选项被勾上，不能单独证明报告正确。\n**任务跟踪（Task Tracking）**把待办保存为结构化状态，帮助长任务保留尚未完成的事项。它不是后台执行队列，也不会因为新增了一项任务就自动运行工具。"
+        },
+        {
+          "title": "工具与状态处理器一起注册",
+          "body": "**TaskSignalProvider** 将任务工具与 TaskStateProcessor 一起注册。清单保存在当前线程的 threadState 存储中，再整理到 tasks 状态通道，供后续模型读取。\n这里沿用带 Memory 的线程和文件存储。工具负责修改清单，处理器负责让模型看到当前进度，两者共同维护跨轮次的待办。"
+        },
+        {
+          "title": "四个工具，分别维护什么",
+          "body": "task_write 建立或替换整份清单；task_update 修改一项；task_complete 完成一项；task_check 读取完成情况。更新时沿用稳定的任务 id，避免重写后把同一件事认成两项。\n当前实现同时只允许一项 in_progress。这个约束让清单进度明确，不代表 Agent 的所有后台工作都因此被串行化。",
+          "table": {
+            "headers": [
+              "工具",
+              "用法"
+            ],
+            "rows": [
+              [
+                "task_write",
+                "提交完整清单，替换原列表"
+              ],
+              [
+                "task_update",
+                "按 id 修改内容或状态"
+              ],
+              [
+                "task_complete",
+                "按 id 标记某项完成"
+              ],
+              [
+                "task_check",
+                "查看是否仍有未完成项"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "完成核对，不虚构批准",
+          "body": "本例让模型维护两项任务：核对材料、取得批准。完成材料核对后，第一项可以完成，第二项仍应为 pending。检查工具调用中的清单与 task_check 返回，确认待办保留下来。\n报告可以在写清缺项后完成，申请获批却需要真实批准记录。先明确要完成哪件事，才能正确维护任务状态。",
+          "codeBlocks": [
+            {
+              "label": "src/08-tasks.ts",
+              "language": "typescript",
+              "code": "import { TaskSignalProvider } from '@mastra/core/signals'\nimport { createThreadRuntime } from './thread-runtime.ts'\n\n// 任务工具和状态处理器一起注册，任务清单保存在当前线程。\nconst tasks = new TaskSignalProvider()\n// 只完成材料核对，不把等待批准的事项自动标成完成。\nconst runtime = await createThreadRuntime('tasks', {\n  signals: [tasks],\n  instructions: '用 task_write 建立两项任务：核对住宿材料、取得事先书面批准。只将第一项标为完成，第二项保留 pending；最后调用 task_check，不要虚构批准。'\n})\ntry {\n  const result = await runtime.reviewer.generate('材料：申请 560 元，上限 500 元，尚无批准记录。维护核查任务清单。', {\n    memory: { thread: runtime.thread.threadId, resource: runtime.thread.resourceId },\n    maxSteps: 5,\n    onStepFinish: ({ toolCalls, toolResults }) => console.dir({ toolCalls, toolResults }, { depth: 6 })\n  })\n  console.log('核查说明：', result.text)\n} finally {\n  tasks.stop()\n  await runtime.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/08-tasks.ts"
+            }
+          ]
+        },
+        {
+          "title": "清单反映证据，不代替证据",
+          "body": "模型可以错勾一项，用户也可能撤回原条件。进度应与实际工具结果、待审批动作和业务记录对应，必要时重新打开任务。真正必须执行的顺序，仍交给工作流。\n任务清单记录要做什么，接下来要解决的是谁实际执行耗时操作，以及结果什么时候回来。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "task_complete 只更新清单状态，不会替你完成审批、文件写入或外部操作。"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：任务跟踪",
+              "href": "https://mastra.ai/reference/signals/task-signal-provider"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "title": "数据共享、消息传递和所有权分开",
+  "caption": "补充消息可以到达另一实例。共享通信将它交给负责线程的执行方，租约协调所有权，存储保留状态；业务写入仍需要幂等。",
+  "left": "实例 A",
+  "leftDetail": "正在推进线程",
+  "right": "实例 B",
+  "rightDetail": "接到用户补充消息",
+  "bus": "共享 PubSub",
+  "busDetail": "转发输入与运行事件",
+  "lease": "共享线程租约",
+  "leaseDetail": "协调当前执行责任",
+  "storage": "共享存储",
+  "storageDetail": "保存历史与持久状态",
+  "foot": "同一个 threadId，避免各自启动竞争运行"
+}

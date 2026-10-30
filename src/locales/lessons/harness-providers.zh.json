@@ -1,0 +1,120 @@
+{
+  "title": "事件来源（Signal Providers）",
+  "lead": "把来源订阅与线程路由连接起来，让持续任务对外部变化作出响应。",
+  "sections": [
+    {
+      "title": "事件到了，但该通知谁",
+      "body": "一份差旅制度可能被多个核查线程使用，另一份采购制度则由其他线程关注。应用需要管理来源与线程的对应关系，而不是把每条事件广播给所有助手。\n**SignalProvider** 维护订阅、轮询和通知转发，也可以向 Agent 提供工具与处理器。提供方读取真实系统并识别变化，再将匹配事件交给通知机制。"
+    },
+    {
+      "title": "三种标识，连接两侧",
+      "body": "resourceId 与 threadId 指定接收方，externalResourceId 标识被关注的外部对象，例如 travel-2026。多个线程可以关注同一对象，一个线程也可以有多个订阅。\n这些标识帮助路由，不能代替订阅权限。是否有权关注某份制度，应由应用确认，再调用提供方暴露的 watch 等入口。"
+    },
+    {
+      "title": "推送和轮询只是两种入口",
+      "body": "支持 Webhook 的系统主动推送事件，应用先核实来源再调用 handleWebhook()；不支持推送时，可以实现 poll() 按间隔读取。两者最终都要识别外部对象、匹配订阅并调用 notify()。\n默认轮询不会重叠运行，失败后等待下一轮，不会自动替任意外部 API 做完整重试。来源去重、漏事件补查和必要的游标仍需按实际服务设计。"
+    },
+    {
+      "title": "只把更新交给匹配线程",
+      "body": "本例的 PolicyEvents 接收一条已由应用取得的结构化事件，匹配订阅相同 documentId 的线程，再生成通知。真实 Webhook 的来源校验应放在接收事件的应用入口。\n脚本分别传入匹配与不匹配的文件，检查 matched 和收件箱数量。notify() 沿用上一节的通知策略，本例只保存通知，不请求模型。",
+      "codeBlocks": [
+        {
+          "label": "src/policy-events.js",
+          "language": "javascript",
+          "code": "import { SignalProvider } from '@mastra/core/signals'\nimport { z } from 'zod'\n\n// 将已由应用接收的制度更新，映射到订阅这份制度的线程。\nexport class PolicyEvents extends SignalProvider {\n  id = 'policy-events'\n\n  watch (target, documentId) {\n    return this.subscribe(target, documentId)\n  }\n\n  async handleWebhook ({ body }) {\n    const event = z.object({ documentId: z.string().min(1), version: z.number().int().positive() }).parse(body)\n    const subscriptions = this.getSubscriptionsForResource(event.documentId)\n    for (const target of subscriptions) {\n      await this.notify({\n        source: this.id, kind: 'policy-updated', priority: 'high',\n        summary: `制度 ${event.documentId} 已更新到第 ${event.version} 版，请重新核对引用。`,\n        payload: event, dedupeKey: `${event.documentId}:${event.version}`\n      }, { resourceId: target.resourceId, threadId: target.threadId })\n    }\n    return { status: 200, body: { matched: subscriptions.length } }\n  }\n}"
+        },
+        {
+          "label": "src/11-providers.js",
+          "language": "javascript",
+          "code": "import assert from 'node:assert/strict'\nimport { PolicyEvents } from './policy-events.js'\nimport { createThreadRuntime } from './thread-runtime.js'\n\n// 事件提供方保存来源订阅，通知策略仍只写入收件箱。\nconst events = new PolicyEvents()\n// 只让当前线程订阅差旅制度，不订阅其他文件。\nconst runtime = await createThreadRuntime('providers', {\n  signals: [events], notifications: { deliveryPolicy: { default: 'persist' } }\n})\ntry {\n  events.watch(runtime.thread, 'travel-2026')\n  console.log('匹配事件：', await events.handleWebhook({ body: { documentId: 'travel-2026', version: 2 } }))\n  console.log('不匹配事件：', await events.handleWebhook({ body: { documentId: 'other-policy', version: 2 } }))\n  const inbox = await runtime.storage.getStore('notifications')\n  const records = await inbox.listNotifications(runtime.thread)\n  assert.equal(records.length, 1)\n  console.log('当前线程收到的通知：', records.map(record => record.summary))\n} finally {\n  events.stop()\n  await runtime.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/11-providers.js"
+        }
+      ]
+    },
+    {
+      "title": "通知持久化，不等于订阅持久化",
+      "body": "基类订阅表保存在提供方实例的内存中。进程重启后，需要从应用保留的记录恢复订阅；另一个实例也不会自动获得原表。否则，旧通知还在，新事件却无法找到接收线程。\n退出时先停止接收新事件，再调用 stop() 停止轮询、清空订阅，并关闭应用持有的异步客户端。提供方的资源清理由应用安排。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "事件已经入库、来源订阅能够恢复、外部动作不会重复，是三项不同的保证。只配数据库不能自动得到三者。"
+        }
+      ]
+    },
+    {
+      "title": "事件触发之外，还有时间触发",
+      "body": "制度更新由事件触发；每天早上复核昨天尚未完成的申请，则由时间触发。两者可以把工作交给同一线程，也都要明确这次处理依据和完成标准。\n下一节接回 Schedules，比较独立巡检与向既有线程发送提醒。",
+      "links": [
+        {
+          "label": "Mastra：Signal Providers",
+          "href": "https://mastra.ai/docs/signals/signal-providers"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "服务重启后还能读到旧通知，却收不到新制度更新。应沿着事件接收、订阅恢复和通知写入检查什么？怎样验证一条新事件能到达目标线程？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "事件到了，但该通知谁",
+          "body": "一份差旅制度可能被多个核查线程使用，另一份采购制度则由其他线程关注。应用需要管理来源与线程的对应关系，而不是把每条事件广播给所有助手。\n**SignalProvider** 维护订阅、轮询和通知转发，也可以向 Agent 提供工具与处理器。提供方读取真实系统并识别变化，再将匹配事件交给通知机制。"
+        },
+        {
+          "title": "三种标识，连接两侧",
+          "body": "resourceId 与 threadId 指定接收方，externalResourceId 标识被关注的外部对象，例如 travel-2026。多个线程可以关注同一对象，一个线程也可以有多个订阅。\n这些标识帮助路由，不能代替订阅权限。是否有权关注某份制度，应由应用确认，再调用提供方暴露的 watch 等入口。"
+        },
+        {
+          "title": "推送和轮询只是两种入口",
+          "body": "支持 Webhook 的系统主动推送事件，应用先核实来源再调用 handleWebhook()；不支持推送时，可以实现 poll() 按间隔读取。两者最终都要识别外部对象、匹配订阅并调用 notify()。\n默认轮询不会重叠运行，失败后等待下一轮，不会自动替任意外部 API 做完整重试。来源去重、漏事件补查和必要的游标仍需按实际服务设计。"
+        },
+        {
+          "title": "只把更新交给匹配线程",
+          "body": "本例的 PolicyEvents 接收一条已由应用取得的结构化事件，匹配订阅相同 documentId 的线程，再生成通知。真实 Webhook 的来源校验应放在接收事件的应用入口。\n脚本分别传入匹配与不匹配的文件，检查 matched 和收件箱数量。notify() 沿用上一节的通知策略，本例只保存通知，不请求模型。",
+          "codeBlocks": [
+            {
+              "label": "src/policy-events.ts",
+              "language": "typescript",
+              "code": "import { SignalProvider } from '@mastra/core/signals'\nimport { z } from 'zod'\n\n// 将已由应用接收的制度更新，映射到订阅这份制度的线程。\nexport class PolicyEvents extends SignalProvider {\n  id = 'policy-events'\n\n  watch (target, documentId) {\n    return this.subscribe(target, documentId)\n  }\n\n  async handleWebhook ({ body }) {\n    const event = z.object({ documentId: z.string().min(1), version: z.number().int().positive() }).parse(body)\n    const subscriptions = this.getSubscriptionsForResource(event.documentId)\n    for (const target of subscriptions) {\n      await this.notify({\n        source: this.id, kind: 'policy-updated', priority: 'high',\n        summary: `制度 ${event.documentId} 已更新到第 ${event.version} 版，请重新核对引用。`,\n        payload: event, dedupeKey: `${event.documentId}:${event.version}`\n      }, { resourceId: target.resourceId, threadId: target.threadId })\n    }\n    return { status: 200, body: { matched: subscriptions.length } }\n  }\n}"
+            },
+            {
+              "label": "src/11-providers.ts",
+              "language": "typescript",
+              "code": "import assert from 'node:assert/strict'\nimport { PolicyEvents } from './policy-events.ts'\nimport { createThreadRuntime } from './thread-runtime.ts'\n\n// 事件提供方保存来源订阅，通知策略仍只写入收件箱。\nconst events = new PolicyEvents()\n// 只让当前线程订阅差旅制度，不订阅其他文件。\nconst runtime = await createThreadRuntime('providers', {\n  signals: [events], notifications: { deliveryPolicy: { default: 'persist' } }\n})\ntry {\n  events.watch(runtime.thread, 'travel-2026')\n  console.log('匹配事件：', await events.handleWebhook({ body: { documentId: 'travel-2026', version: 2 } }))\n  console.log('不匹配事件：', await events.handleWebhook({ body: { documentId: 'other-policy', version: 2 } }))\n  const inbox = await runtime.storage.getStore('notifications')\n  const records = await inbox.listNotifications(runtime.thread)\n  assert.equal(records.length, 1)\n  console.log('当前线程收到的通知：', records.map(record => record.summary))\n} finally {\n  events.stop()\n  await runtime.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/11-providers.ts"
+            }
+          ]
+        },
+        {
+          "title": "通知持久化，不等于订阅持久化",
+          "body": "基类订阅表保存在提供方实例的内存中。进程重启后，需要从应用保留的记录恢复订阅；另一个实例也不会自动获得原表。否则，旧通知还在，新事件却无法找到接收线程。\n退出时先停止接收新事件，再调用 stop() 停止轮询、清空订阅，并关闭应用持有的异步客户端。提供方的资源清理由应用安排。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "事件已经入库、来源订阅能够恢复、外部动作不会重复，是三项不同的保证。只配数据库不能自动得到三者。"
+            }
+          ]
+        },
+        {
+          "title": "事件触发之外，还有时间触发",
+          "body": "制度更新由事件触发；每天早上复核昨天尚未完成的申请，则由时间触发。两者可以把工作交给同一线程，也都要明确这次处理依据和完成标准。\n下一节接回 Schedules，比较独立巡检与向既有线程发送提醒。",
+          "links": [
+            {
+              "label": "Mastra：Signal Providers",
+              "href": "https://mastra.ai/docs/signals/signal-providers"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

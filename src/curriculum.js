@@ -289,10 +289,17 @@ export const chapters = [
       { id: 'harness-runtime', path: '/harness' },
       { id: 'harness-durable', path: '/harness/durable' },
       { id: 'harness-observe', path: '/harness/observe' },
+      { id: 'harness-thread-streams', path: '/harness/thread-streams' },
+      { id: 'harness-signals', path: '/harness/signals' },
+      { id: 'harness-state', path: '/harness/state' },
       { id: 'harness-goals', path: '/harness/goals' },
+      { id: 'harness-tasks', path: '/harness/tasks' },
       { id: 'harness-background', path: '/harness/background' },
+      { id: 'harness-notifications', path: '/harness/notifications' },
+      { id: 'harness-providers', path: '/harness/providers' },
       { id: 'harness-schedules', path: '/harness/schedules' },
       { id: 'harness-controller', path: '/harness/controller' },
+      { id: 'harness-coordination', path: '/harness/coordination' },
       { id: 'harness-recovery', path: '/harness/recovery' }
     ]
   }

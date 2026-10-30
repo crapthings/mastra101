@@ -1,6 +1,6 @@
 {
   "title": "目标决定是否继续，预算限制尝试",
-  "caption": "目标只在适合判定的候选结果出现后检查。未达标且预算尚有剩余时继续；达到目标则完成，预算用尽或需要人介入则暂停。",
+  "caption": "未达标且预算充足时，反馈推动下一轮。waiting 让本轮等人，目标仍为 active；预算耗尽则 paused。观察停止原因时，分清本轮事件与保存的目标状态。",
   "one": "线程目标 · Objective",
   "oneDetail": "保存明确、可检查的完成条件",
   "two": "候选结果",
@@ -8,10 +8,10 @@
   "three": "目标判定 · judge",
   "threeDetail": "maxRuns 限制目标判定次数",
   "left": "继续",
-  "leftDetail": "未达标，还有预算",
+  "leftDetail": "有预算且无需等人",
   "middle": "完成 · done",
   "middleDetail": "判定达到目标",
-  "right": "暂停 · paused",
-  "rightDetail": "预算用尽或等人",
+  "right": "等待或暂停",
+  "rightDetail": "按具体原因与状态区分",
   "loop": "带回具体反馈"
 }

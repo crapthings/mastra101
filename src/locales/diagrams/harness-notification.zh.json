@@ -1,0 +1,17 @@
+{
+  "title": "事件先有记录，再按策略投递",
+  "caption": "SignalProvider 先匹配来源订阅，通知收件箱保存记录，策略决定何时交给线程。被投递或已读，都不等于业务处理完成。",
+  "top": "制度更新等外部事件",
+  "topDetail": "应用核实来源与接收范围",
+  "middle": "提供方匹配订阅",
+  "middleDetail": "外部对象 → resourceId / threadId",
+  "inbox": "持久通知记录",
+  "inboxDetail": "summary、payload、状态与去重键",
+  "left": "立即投递",
+  "leftDetail": "让线程获得上下文",
+  "right": "保存或延后",
+  "rightDetail": "等待策略与后续调度",
+  "bottom": "读取、核查与实际操作",
+  "bottomDetail": "用业务结果确认处理完成",
+  "later": "投递或读取后"
+}

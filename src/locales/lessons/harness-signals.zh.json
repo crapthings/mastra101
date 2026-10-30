@@ -1,0 +1,182 @@
+{
+  "title": "信号投递（Signals）",
+  "lead": "把用户消息和应用更新送入线程，明确何时处理、何时只保存。",
+  "sections": [
+    {
+      "title": "新信息不必等到原任务结束",
+      "body": "核查时，用户可能补充“这次有书面批准”，外部系统也可能返回“批准记录仍缺失”。应用需要把新信息送到对应线程，而不是另起一段不知道前文的对话。\n**信号（Signal）**是向线程递送输入的机制。sendMessage() 表达用户消息，sendSignal() 表达应用提供的带类型上下文；输出仍从上一节的线程订阅接收。"
+    },
+    {
+      "title": "当前处理，还是下一轮再做",
+      "body": "sendMessage() 默认向活动运行递送输入，空闲时唤起新运行；queueMessage() 让当前运行先结束，再处理后续消息。queueSignal() 为应用更新提供相同的排队方式。\n活动输入会在运行可接收的边界进入后续模型请求。模型尚未输出可见内容、且接口支持中断时，也可能取消当前请求，带着新信息重发；已有文字或工具调用时，则等待合适边界。取消前的用量仍可能计费。\n因此，补充材料不能当作撤销操作。需要停下当前方向再改做其他事时，使用后面的会话控制入口。",
+      "table": {
+        "headers": [
+          "意图",
+          "入口"
+        ],
+        "rows": [
+          [
+            "用户补充本次要求",
+            "sendMessage()"
+          ],
+          [
+            "当前工作之后，再做一件事",
+            "queueMessage()"
+          ],
+          [
+            "应用提供本次更新",
+            "sendSignal()"
+          ],
+          [
+            "应用更新留给后续轮次",
+            "queueSignal()"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "先确认投递，再观察执行",
+      "body": "await result.accepted 等待的是投递决定：wake 启动运行，deliver 递送到执行方，persist 只保存，discard 丢弃；blocked 表示暂停的运行阻止了新启动。\npersist 分支还要 await result.persisted 确认写入。之后从线程订阅观察执行结局，再核对业务输出。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "输入被接受、保存完成、运行结束、业务达标，是四个不同的观察点。按接下来的用途，等到相应证据再继续。"
+        }
+      ]
+    },
+    {
+      "title": "有更新，但现在不唤醒",
+      "body": "示例使用 ifIdle.behavior: persist 保存一条应用更新，之后再由用户消息显式启动核查。它不会仅为写入这条信息而调用模型。ifActive 与 ifIdle 分别决定活动和空闲时的行为。\ntype 和 tagName 说明上下文的来源与用途，不会把外部文字升级成系统指令。transient 适合只对当前请求有效的更新，不能依靠它跨重启保留材料。",
+      "codeBlocks": [
+        {
+          "label": "src/05-signals.js",
+          "language": "javascript",
+          "code": "import { createThreadRuntime, receiveTurn } from './thread-runtime.js'\n\n// 先保存工具取得的补充材料，不因更新本身启动模型。\nconst runtime = await createThreadRuntime('signals')\ntry {\n  const signal = runtime.reviewer.sendSignal({\n    type: 'reactive', tagName: 'approval-update',\n    contents: '教学系统更新：560 元住宿申请仍缺少事先书面批准记录。'\n  }, { ...runtime.thread, ifIdle: { behavior: 'persist' } })\n  const accepted = await signal.accepted\n  console.log('仅保存的投递决定：', accepted.action)\n  if (accepted.action !== 'persist') throw new Error('没有进入预期的仅保存分支')\n  await signal.persisted\n  const subscription = await runtime.reviewer.subscribeToThread({ ...runtime.thread, withRunStatus: true })\n  try {\n    console.log('显式提问后的结果：', await receiveTurn(subscription, () => runtime.reviewer.sendMessage('根据刚才保存的材料，列出仍需补充的资料。', runtime.thread)))\n  } finally {\n    subscription.unsubscribe()\n  }\n} finally {\n  await runtime.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/05-signals.js"
+        }
+      ]
+    },
+    {
+      "title": "工作中补材料，后续任务先排队",
+      "body": "第二个入口先等只读工具开始，再发送应用更新，同时将用户的后续问题排队。放行工具后，原运行应在后续模型请求中获得补充材料，排队的问题则产生另一次运行。\n检查两个 runId、模型实际收到的输入和工具执行次数。示例用程序控制工具何时开始、何时返回，避免靠固定延时猜测运行进度。普通信号不会因此重做正在执行的工具。",
+      "codeBlocks": [
+        {
+          "label": "src/05-active-signals.js",
+          "language": "javascript",
+          "code": "import { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { createThreadRuntime, receiveTurn } from './thread-runtime.js'\n\n// 等工具确实开始后，再模拟外部系统补充材料。\nconst entered = Promise.withResolvers()\n// 由主程序放行只读工具，避免用猜测的延时判断运行是否活动。\nconst release = Promise.withResolvers()\n// 单独统计工具实际执行次数，核对补充信号没有重复执行查询。\nlet executions = 0\n// 工具等待期间仍属于同一次运行，返回值来自教学数据。\nconst readPolicy = createTool({\n  id: 'read-policy', description: '读取当前差旅制度，等待应用确认数据就绪。', inputSchema: z.object({}),\n  execute: async () => {\n    executions++\n    entered.resolve()\n    await release.promise\n    return { limit: 500, approvalRequired: true }\n  }\n})\n// 首次模型步骤固定为只读查询，后续只整理已有材料。\nconst runtime = await createThreadRuntime('active-signals', {\n  tools: { readPolicy },\n  defaultOptions: { maxSteps: 4, prepareStep: ({ stepNumber }) => ({ toolChoice: stepNumber === 0 && executions === 0 ? { type: 'tool', toolName: 'readPolicy' } : 'none' }) }\n})\n// 两次运行使用同一订阅，消息按运行标识分别显示。\nconst subscription = await runtime.reviewer.subscribeToThread({ ...runtime.thread, withRunStatus: true })\n// 限制等工具开始的时间，同时准备释放工具，避免异常退出留下等待。\nconst timer = setTimeout(() => entered.reject(new Error('工具尚未开始，无法验证活动信号')), 60_000)\n// 接上读取任务的失败处理，后续统一等待或收尾。\nconst first = receiveTurn(subscription, () => runtime.reviewer.sendMessage('先调用 readPolicy，再核查 560 元住宿申请。', runtime.thread))\nfirst.catch(() => {})\ntry {\n  await entered.promise\n  const update = runtime.reviewer.sendSignal({ type: 'reactive', tagName: 'approval-update', contents: '应用补充：这份申请还没有事先书面批准记录。' }, runtime.thread)\n  console.log('活动运行的投递决定：', (await update.accepted).action)\n  const followUp = runtime.reviewer.queueMessage('上一轮结束后，请单独列出仍需用户提供的材料。', runtime.thread)\n  followUp.accepted.catch(() => {})\n  release.resolve()\n  console.log('原运行：', await first)\n  console.log('排队后的运行：', await receiveTurn(subscription, () => followUp))\n  console.log('只读工具执行次数：', executions)\n} finally {\n  clearTimeout(timer)\n  release.resolve()\n  subscription.unsubscribe()\n  await first.catch(() => {})\n  await runtime.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/05-active-signals.js"
+        }
+      ]
+    },
+    {
+      "title": "排队之后，还要管理去留",
+      "body": "cancelQueuedMessages() 清理尚在排队的用户消息，已经接受的输入不在此列。停止当前运行和清空待处理输入，应分别决定。\n消息适合记录“刚补交了批准材料”。但金额、批准状态等信息会持续变化，只追加旧消息容易混淆当前值。下一节为这些信息维护明确的状态。",
+      "links": [
+        {
+          "label": "Mastra：发送与排队信号",
+          "href": "https://mastra.ai/docs/signals/sending-signals"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "一条更新的 accepted.action 为 persist。它是否已经被模型处理？应再等待什么确认保存，又通过什么入口让下一轮使用它？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "新信息不必等到原任务结束",
+          "body": "核查时，用户可能补充“这次有书面批准”，外部系统也可能返回“批准记录仍缺失”。应用需要把新信息送到对应线程，而不是另起一段不知道前文的对话。\n**信号（Signal）**是向线程递送输入的机制。sendMessage() 表达用户消息，sendSignal() 表达应用提供的带类型上下文；输出仍从上一节的线程订阅接收。"
+        },
+        {
+          "title": "当前处理，还是下一轮再做",
+          "body": "sendMessage() 默认向活动运行递送输入，空闲时唤起新运行；queueMessage() 让当前运行先结束，再处理后续消息。queueSignal() 为应用更新提供相同的排队方式。\n活动输入会在运行可接收的边界进入后续模型请求。模型尚未输出可见内容、且接口支持中断时，也可能取消当前请求，带着新信息重发；已有文字或工具调用时，则等待合适边界。取消前的用量仍可能计费。\n因此，补充材料不能当作撤销操作。需要停下当前方向再改做其他事时，使用后面的会话控制入口。",
+          "table": {
+            "headers": [
+              "意图",
+              "入口"
+            ],
+            "rows": [
+              [
+                "用户补充本次要求",
+                "sendMessage()"
+              ],
+              [
+                "当前工作之后，再做一件事",
+                "queueMessage()"
+              ],
+              [
+                "应用提供本次更新",
+                "sendSignal()"
+              ],
+              [
+                "应用更新留给后续轮次",
+                "queueSignal()"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "先确认投递，再观察执行",
+          "body": "await result.accepted 等待的是投递决定：wake 启动运行，deliver 递送到执行方，persist 只保存，discard 丢弃；blocked 表示暂停的运行阻止了新启动。\npersist 分支还要 await result.persisted 确认写入。之后从线程订阅观察执行结局，再核对业务输出。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "输入被接受、保存完成、运行结束、业务达标，是四个不同的观察点。按接下来的用途，等到相应证据再继续。"
+            }
+          ]
+        },
+        {
+          "title": "有更新，但现在不唤醒",
+          "body": "示例使用 ifIdle.behavior: persist 保存一条应用更新，之后再由用户消息显式启动核查。它不会仅为写入这条信息而调用模型。ifActive 与 ifIdle 分别决定活动和空闲时的行为。\ntype 和 tagName 说明上下文的来源与用途，不会把外部文字升级成系统指令。transient 适合只对当前请求有效的更新，不能依靠它跨重启保留材料。",
+          "codeBlocks": [
+            {
+              "label": "src/05-signals.ts",
+              "language": "typescript",
+              "code": "import { createThreadRuntime, receiveTurn } from './thread-runtime.ts'\n\n// 先保存工具取得的补充材料，不因更新本身启动模型。\nconst runtime = await createThreadRuntime('signals')\ntry {\n  const signal = runtime.reviewer.sendSignal({\n    type: 'reactive', tagName: 'approval-update',\n    contents: '教学系统更新：560 元住宿申请仍缺少事先书面批准记录。'\n  }, { ...runtime.thread, ifIdle: { behavior: 'persist' } })\n  const accepted = await signal.accepted\n  console.log('仅保存的投递决定：', accepted.action)\n  if (accepted.action !== 'persist') throw new Error('没有进入预期的仅保存分支')\n  await signal.persisted\n  const subscription = await runtime.reviewer.subscribeToThread({ ...runtime.thread, withRunStatus: true })\n  try {\n    console.log('显式提问后的结果：', await receiveTurn(subscription, () => runtime.reviewer.sendMessage('根据刚才保存的材料，列出仍需补充的资料。', runtime.thread)))\n  } finally {\n    subscription.unsubscribe()\n  }\n} finally {\n  await runtime.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/05-signals.ts"
+            }
+          ]
+        },
+        {
+          "title": "工作中补材料，后续任务先排队",
+          "body": "第二个入口先等只读工具开始，再发送应用更新，同时将用户的后续问题排队。放行工具后，原运行应在后续模型请求中获得补充材料，排队的问题则产生另一次运行。\n检查两个 runId、模型实际收到的输入和工具执行次数。示例用程序控制工具何时开始、何时返回，避免靠固定延时猜测运行进度。普通信号不会因此重做正在执行的工具。",
+          "codeBlocks": [
+            {
+              "label": "src/05-active-signals.ts",
+              "language": "typescript",
+              "code": "import { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { createThreadRuntime, receiveTurn } from './thread-runtime.ts'\n\n// 等工具确实开始后，再模拟外部系统补充材料。\nconst entered = Promise.withResolvers()\n// 由主程序放行只读工具，避免用猜测的延时判断运行是否活动。\nconst release = Promise.withResolvers()\n// 单独统计工具实际执行次数，核对补充信号没有重复执行查询。\nlet executions = 0\n// 工具等待期间仍属于同一次运行，返回值来自教学数据。\nconst readPolicy = createTool({\n  id: 'read-policy', description: '读取当前差旅制度，等待应用确认数据就绪。', inputSchema: z.object({}),\n  execute: async () => {\n    executions++\n    entered.resolve()\n    await release.promise\n    return { limit: 500, approvalRequired: true }\n  }\n})\n// 首次模型步骤固定为只读查询，后续只整理已有材料。\nconst runtime = await createThreadRuntime('active-signals', {\n  tools: { readPolicy },\n  defaultOptions: { maxSteps: 4, prepareStep: ({ stepNumber }) => ({ toolChoice: stepNumber === 0 && executions === 0 ? { type: 'tool', toolName: 'readPolicy' } : 'none' }) }\n})\n// 两次运行使用同一订阅，消息按运行标识分别显示。\nconst subscription = await runtime.reviewer.subscribeToThread({ ...runtime.thread, withRunStatus: true })\n// 限制等工具开始的时间，同时准备释放工具，避免异常退出留下等待。\nconst timer = setTimeout(() => entered.reject(new Error('工具尚未开始，无法验证活动信号')), 60_000)\n// 接上读取任务的失败处理，后续统一等待或收尾。\nconst first = receiveTurn(subscription, () => runtime.reviewer.sendMessage('先调用 readPolicy，再核查 560 元住宿申请。', runtime.thread))\nfirst.catch(() => {})\ntry {\n  await entered.promise\n  const update = runtime.reviewer.sendSignal({ type: 'reactive', tagName: 'approval-update', contents: '应用补充：这份申请还没有事先书面批准记录。' }, runtime.thread)\n  console.log('活动运行的投递决定：', (await update.accepted).action)\n  const followUp = runtime.reviewer.queueMessage('上一轮结束后，请单独列出仍需用户提供的材料。', runtime.thread)\n  followUp.accepted.catch(() => {})\n  release.resolve()\n  console.log('原运行：', await first)\n  console.log('排队后的运行：', await receiveTurn(subscription, () => followUp))\n  console.log('只读工具执行次数：', executions)\n} finally {\n  clearTimeout(timer)\n  release.resolve()\n  subscription.unsubscribe()\n  await first.catch(() => {})\n  await runtime.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/05-active-signals.ts"
+            }
+          ]
+        },
+        {
+          "title": "排队之后，还要管理去留",
+          "body": "cancelQueuedMessages() 清理尚在排队的用户消息，已经接受的输入不在此列。停止当前运行和清空待处理输入，应分别决定。\n消息适合记录“刚补交了批准材料”。但金额、批准状态等信息会持续变化，只追加旧消息容易混淆当前值。下一节为这些信息维护明确的状态。",
+          "links": [
+            {
+              "label": "Mastra：发送与排队信号",
+              "href": "https://mastra.ai/docs/signals/sending-signals"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -199,7 +199,14 @@
     "harness-background": "后台任务（Background Tasks）",
     "harness-schedules": "定时任务（Schedules）",
     "harness-controller": "会话控制（AgentController）",
-    "harness-recovery": "恢复与验收（Recovery）"
+    "harness-recovery": "恢复与验收（Recovery）",
+    "harness-thread-streams": "线程订阅（Thread Streams）",
+    "harness-signals": "信号投递（Signals）",
+    "harness-state": "状态信号（State Signals）",
+    "harness-tasks": "任务清单（Task Tracking）",
+    "harness-notifications": "通知收件箱（Notifications）",
+    "harness-providers": "事件来源（Signal Providers）",
+    "harness-coordination": "跨进程协调（PubSub & Leases）"
   },
   "chapters": {
     "llm": "大语言模型",

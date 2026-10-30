@@ -1,0 +1,110 @@
+{
+  "title": "通知收件箱（Notifications）",
+  "lead": "把需要稍后处理的外部事件保存下来，分开观察记录、投递与业务处理。",
+  "sections": [
+    {
+      "title": "忙着核查时，又来了一次更新",
+      "body": "后台读取完成可以作为一次即时反馈。制度改版、用户补交材料等事件，还可能要求暂存、合并、重试和以后查看，不能只依赖当时打开的连接。\n**通知（Notification）**把事件保存进持久收件箱，再根据策略投递给线程。它与界面弹出的提示无关，也不等于已经向用户发送消息。"
+    },
+    {
+      "title": "为事件建立可查询的记录",
+      "body": "sendSignal({ type: 'notification' }) 递送的是带类型的上下文。要创建可查询的通知记录，应使用 **sendNotificationSignal()**，并配置支持 notifications 领域的存储。\nsummary 提供模型可读的摘要，payload 保留程序使用的原始字段。模型不会自动看到完整 payload，所需细节应通过受控读取入口提供。"
+    },
+    {
+      "title": "优先级要结合线程状态",
+      "body": "投递策略结合优先级与线程状态，决定立即 deliver、只 persist、defer、queue、summarize 或 discard。例如，紧急变更可以及时递送，普通更新可以先保存，等当前工作结束再处理。\n策略负责安排投递时机。需要延后处理时，还要有相应调度与消费服务，持续推进收件箱里的记录。"
+    },
+    {
+      "title": "用同一个事件核对合并",
+      "body": "本例明确采用 persist，只写收件箱、不唤起模型。相同 dedupeKey 的事件重复到达时，检查同一范围内仍 pending 的记录是否合并，再读回通知内容。\n去重只在符合来源、种类、线程、Agent、归属等条件的待处理记录之间进行，不是永久的全局幂等锁。记录已投递或处理后再次收到事件，仍需按业务标识判断。",
+      "codeBlocks": [
+        {
+          "label": "src/10-notifications.js",
+          "language": "javascript",
+          "code": "import assert from 'node:assert/strict'\nimport { createThreadRuntime } from './thread-runtime.js'\n\n// 本例只保存收件箱，不立即投递，也不启动模型。\nconst runtime = await createThreadRuntime('notifications', {\n  notifications: { deliveryPolicy: { default: 'persist' } }\n})\ntry {\n  const event = {\n    source: 'policy-service', kind: 'policy-updated', priority: 'high',\n    summary: '差旅制度更新：超额住宿仍需事先书面批准。',\n    payload: { docId: 'travel-2026', version: 2 }, dedupeKey: 'travel-2026:v2'\n  }\n  const first = await runtime.reviewer.sendNotificationSignal(event, runtime.thread)\n  const repeated = await runtime.reviewer.sendNotificationSignal(event, runtime.thread)\n  const inbox = await runtime.storage.getStore('notifications')\n  const records = await inbox.listNotifications(runtime.thread)\n  assert.equal(first.record.id, repeated.record.id)\n  assert.equal(records.length, 1)\n  console.log('投递策略：', first.decision.action)\n  console.log('待处理通知：', records.map(record => ({ id: record.id, status: record.status, summary: record.summary, payload: record.payload })))\n} finally {\n  await runtime.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/10-notifications.js"
+        }
+      ]
+    },
+    {
+      "title": "读过、投递过和处理过分开",
+      "body": "通知可能处于 pending、delivered、seen，也可能 failed 或被归档。seen 表示已读；报告是否已按新制度更新，还需要核对后续工具与业务结果。\n需要模型主动查看收件箱时，可用 createNotificationInboxTool() 提供 list、read、markSeen、archive 等操作，再用任务清单保留处理进度。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "收件箱保留事件，投递策略安排何时告知，工具与业务流程完成后续工作。三层状态分别核对。"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：Notifications",
+          "href": "https://mastra.ai/docs/signals/notifications"
+        }
+      ]
+    },
+    {
+      "title": "谁把外部更新送进来",
+      "body": "如果应用已经取得事件并知道目标线程，直接发送通知就够了。需要让许多线程订阅不同制度、项目或账号时，再为事件来源建立统一管理。\n下一节用 SignalProvider 连接“外部发生了什么”和“哪段对话需要知道”。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "制度更新已合并为一条 pending 通知，下一步应做什么？通知变为 seen 后，还要取得哪项证据，才能把“按新制度重新核查”标为完成？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "忙着核查时，又来了一次更新",
+          "body": "后台读取完成可以作为一次即时反馈。制度改版、用户补交材料等事件，还可能要求暂存、合并、重试和以后查看，不能只依赖当时打开的连接。\n**通知（Notification）**把事件保存进持久收件箱，再根据策略投递给线程。它与界面弹出的提示无关，也不等于已经向用户发送消息。"
+        },
+        {
+          "title": "为事件建立可查询的记录",
+          "body": "sendSignal({ type: 'notification' }) 递送的是带类型的上下文。要创建可查询的通知记录，应使用 **sendNotificationSignal()**，并配置支持 notifications 领域的存储。\nsummary 提供模型可读的摘要，payload 保留程序使用的原始字段。模型不会自动看到完整 payload，所需细节应通过受控读取入口提供。"
+        },
+        {
+          "title": "优先级要结合线程状态",
+          "body": "投递策略结合优先级与线程状态，决定立即 deliver、只 persist、defer、queue、summarize 或 discard。例如，紧急变更可以及时递送，普通更新可以先保存，等当前工作结束再处理。\n策略负责安排投递时机。需要延后处理时，还要有相应调度与消费服务，持续推进收件箱里的记录。"
+        },
+        {
+          "title": "用同一个事件核对合并",
+          "body": "本例明确采用 persist，只写收件箱、不唤起模型。相同 dedupeKey 的事件重复到达时，检查同一范围内仍 pending 的记录是否合并，再读回通知内容。\n去重只在符合来源、种类、线程、Agent、归属等条件的待处理记录之间进行，不是永久的全局幂等锁。记录已投递或处理后再次收到事件，仍需按业务标识判断。",
+          "codeBlocks": [
+            {
+              "label": "src/10-notifications.ts",
+              "language": "typescript",
+              "code": "import assert from 'node:assert/strict'\nimport { createThreadRuntime } from './thread-runtime.ts'\n\n// 本例只保存收件箱，不立即投递，也不启动模型。\nconst runtime = await createThreadRuntime('notifications', {\n  notifications: { deliveryPolicy: { default: 'persist' } }\n})\ntry {\n  const event = {\n    source: 'policy-service', kind: 'policy-updated', priority: 'high',\n    summary: '差旅制度更新：超额住宿仍需事先书面批准。',\n    payload: { docId: 'travel-2026', version: 2 }, dedupeKey: 'travel-2026:v2'\n  }\n  const first = await runtime.reviewer.sendNotificationSignal(event, runtime.thread)\n  const repeated = await runtime.reviewer.sendNotificationSignal(event, runtime.thread)\n  const inbox = await runtime.storage.getStore('notifications')\n  const records = await inbox.listNotifications(runtime.thread)\n  assert.equal(first.record.id, repeated.record.id)\n  assert.equal(records.length, 1)\n  console.log('投递策略：', first.decision.action)\n  console.log('待处理通知：', records.map(record => ({ id: record.id, status: record.status, summary: record.summary, payload: record.payload })))\n} finally {\n  await runtime.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/10-notifications.ts"
+            }
+          ]
+        },
+        {
+          "title": "读过、投递过和处理过分开",
+          "body": "通知可能处于 pending、delivered、seen，也可能 failed 或被归档。seen 表示已读；报告是否已按新制度更新，还需要核对后续工具与业务结果。\n需要模型主动查看收件箱时，可用 createNotificationInboxTool() 提供 list、read、markSeen、archive 等操作，再用任务清单保留处理进度。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "收件箱保留事件，投递策略安排何时告知，工具与业务流程完成后续工作。三层状态分别核对。"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：Notifications",
+              "href": "https://mastra.ai/docs/signals/notifications"
+            }
+          ]
+        },
+        {
+          "title": "谁把外部更新送进来",
+          "body": "如果应用已经取得事件并知道目标线程，直接发送通知就够了。需要让许多线程订阅不同制度、项目或账号时，再为事件来源建立统一管理。\n下一节用 SignalProvider 连接“外部发生了什么”和“哪段对话需要知道”。"
+        }
+      ]
+    }
+  }
+}

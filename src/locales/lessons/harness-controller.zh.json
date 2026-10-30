@@ -4,21 +4,21 @@
   "sections": [
     {
       "title": "从一次调用，走向持续协作",
-      "body": "用户先要求列核查计划，再补材料、要求形成结论，还可能中途改方向。应用需要管理当前模式、输出事件、线程和正在执行的工作。\n**AgentController** 是这些交互的共享运行宿主；**Session** 承接某个用户或任务的实时执行；**Thread** 保存对话及选定的线程设置。控制器不是所有用户共用的单个“当前会话”。"
+      "body": "用户先要求列出核查计划，再补材料、要求形成结论，还可能中途改方向。应用需要共同管理当前模式、线程、输出事件和正在执行的工作。\n**AgentController** 提供这套会话运行机制；**Session** 承接一项交互任务的实时状态与控制；**Thread** 保存对话及选定的线程设置。这里的 Session 与 19 章认证中的登录会话不同。"
     },
     {
       "title": "同一会话可以切换工作模式",
       "body": "示例设置“核查计划”和“形成结论”两种模式，用 session.mode.switch() 改变后续指令，同时保留线程中的材料。模式切换不会自动切换模型，也不等于新的安全权限。\n如果某种模式只能读取材料，还应限制可用工具与实际授权，不能只写一句“不要修改”。会话订阅按事件输出文字，界面需要完整消息时再按消息标识合并更新。",
       "codeBlocks": [
         {
-          "label": "src/07-controller.js",
+          "label": "src/13-controller.js",
           "language": "javascript",
           "code": "import { AgentController } from '@mastra/core/agent-controller'\nimport { createAssistant, createStorage } from './assistant.js'\n\n// 用同一个控制器承载两种核查模式，每个会话保留自己的实时状态。\nconst storage = await createStorage('controller')\n// 配置共享的会话控制器。\nconst controller = new AgentController({\n  id: 'review-controller',\n  agent: createAssistant(storage),\n  storage,\n  modes: [\n    { id: 'plan', name: '核查计划', metadata: { default: true }, instructions: '先列出需核对的事实，不作报销结论。' },\n    { id: 'review', name: '形成结论', instructions: '基于已有材料形成结论，同时指出尚未确认的事项。' }\n  ]\n})\n// 保存订阅清理函数，避免退出后继续接收会话事件。\nlet unsubscribe\n\ntry {\n  await controller.init()\n  const session = await controller.createSession({ id: crypto.randomUUID(), resourceId: 'demo-user' })\n  unsubscribe = session.subscribe(event => {\n    if (event.type === 'message_update' && event.event.type === 'text-delta') {\n      process.stdout.write(event.event.delta)\n    }\n  })\n  await session.sendMessage({ content: '制度上限 500 元，超出须事先书面批准。申请金额 560 元，尚无批准记录。先列核查计划。' })\n  await session.mode.switch({ modeId: 'review' })\n  console.log('\\n当前模式：', session.mode.get())\n  await session.sendMessage({ content: '现在给出结论，保留待补材料。' })\n  console.log()\n} finally {\n  unsubscribe?.()\n  await controller.destroy()\n  await storage.close()\n}"
         },
         {
           "label": "终端",
           "language": "bash",
-          "code": "node --env-file=.env src/07-controller.js"
+          "code": "node --env-file=.env src/13-controller.js"
         }
       ]
     },
@@ -51,8 +51,22 @@
       }
     },
     {
-      "title": "保存线程，不是保存整个现场",
-      "body": "明确指定不同 session id，可以让同一 resource 的不同任务拥有独立实时状态。接口仍要验证当前身份是否有权使用对应资源与线程，不能直接信任客户端传来的标识。\n存储可以保留消息、当前模式和模型等线程设置，但任意 session.state、临时授权、待处理批准和活动运行不会因此全部自动恢复。下一节就用重启场景检查，到底保留了什么。",
+      "title": "按模式提供工具，再按动作取得批准",
+      "body": "“核查计划”可以只提供只读查询，“保存报告”才提供写入工具。通过 availableTools 收窄模式可用能力，并通过工具审批接收对具体参数的批准；模式切换不是对之后所有写入的授权。\nSession 可以把 pending approval 与后续恢复过程交给界面展示。UI 仍应按消息 id 更新已有内容，分别保存批准决定与工具执行结果，避免把按钮点击当成报告已经写入。"
+    },
+    {
+      "title": "组合入口复用同一套机制",
+      "body": "编码项目可使用 **createCodingAgent()** 创建标准 Agent，复用工作区、网络重试等默认配置；配置 Memory 时，还会接入任务清单。创建出的 Agent 同样可以交给 AgentController 使用。\n选用这种组合入口时，仍需明确存储、目标和操作权限，并按 12、13 章检查文件系统与沙箱边界。",
+      "links": [
+        {
+          "label": "Mastra：createCodingAgent()",
+          "href": "https://mastra.ai/reference/coding-agent/create-coding-agent"
+        }
+      ]
+    },
+    {
+      "title": "分别保存线程与实时状态",
+      "body": "为同一用户的不同任务指定不同 session id，可以隔离它们的实时状态。接口仍需验证资源与线程归属，不能直接信任客户端传来的标识。\n存储可以保留消息、当前模式和模型等线程设置；任意 session.state、临时授权、待处理批准和活动运行则需要分别检查恢复方式。会话跨实例时，还要让新输入找到正在执行的进程。下一节区分共享数据、消息传递与运行所有权。",
       "links": [
         {
           "label": "Mastra：Agent Controller",
@@ -68,21 +82,21 @@
       "sections": [
         {
           "title": "从一次调用，走向持续协作",
-          "body": "用户先要求列核查计划，再补材料、要求形成结论，还可能中途改方向。应用需要管理当前模式、输出事件、线程和正在执行的工作。\n**AgentController** 是这些交互的共享运行宿主；**Session** 承接某个用户或任务的实时执行；**Thread** 保存对话及选定的线程设置。控制器不是所有用户共用的单个“当前会话”。"
+          "body": "用户先要求列出核查计划，再补材料、要求形成结论，还可能中途改方向。应用需要共同管理当前模式、线程、输出事件和正在执行的工作。\n**AgentController** 提供这套会话运行机制；**Session** 承接一项交互任务的实时状态与控制；**Thread** 保存对话及选定的线程设置。这里的 Session 与 19 章认证中的登录会话不同。"
         },
         {
           "title": "同一会话可以切换工作模式",
           "body": "示例设置“核查计划”和“形成结论”两种模式，用 session.mode.switch() 改变后续指令，同时保留线程中的材料。模式切换不会自动切换模型，也不等于新的安全权限。\n如果某种模式只能读取材料，还应限制可用工具与实际授权，不能只写一句“不要修改”。会话订阅按事件输出文字，界面需要完整消息时再按消息标识合并更新。",
           "codeBlocks": [
             {
-              "label": "src/07-controller.ts",
+              "label": "src/13-controller.ts",
               "language": "typescript",
               "code": "import { AgentController } from '@mastra/core/agent-controller'\nimport { createAssistant, createStorage } from './assistant.ts'\n\n// 用同一个控制器承载两种核查模式，每个会话保留自己的实时状态。\nconst storage = await createStorage('controller')\n// 配置共享的会话控制器。\nconst controller = new AgentController({\n  id: 'review-controller',\n  agent: createAssistant(storage),\n  storage,\n  modes: [\n    { id: 'plan', name: '核查计划', metadata: { default: true }, instructions: '先列出需核对的事实，不作报销结论。' },\n    { id: 'review', name: '形成结论', instructions: '基于已有材料形成结论，同时指出尚未确认的事项。' }\n  ]\n})\n// 保存订阅清理函数，避免退出后继续接收会话事件。\nlet unsubscribe\n\ntry {\n  await controller.init()\n  const session = await controller.createSession({ id: crypto.randomUUID(), resourceId: 'demo-user' })\n  unsubscribe = session.subscribe(event => {\n    if (event.type === 'message_update' && event.event.type === 'text-delta') {\n      process.stdout.write(event.event.delta)\n    }\n  })\n  await session.sendMessage({ content: '制度上限 500 元，超出须事先书面批准。申请金额 560 元，尚无批准记录。先列核查计划。' })\n  await session.mode.switch({ modeId: 'review' })\n  console.log('\\n当前模式：', session.mode.get())\n  await session.sendMessage({ content: '现在给出结论，保留待补材料。' })\n  console.log()\n} finally {\n  unsubscribe?.()\n  await controller.destroy()\n  await storage.close()\n}"
             },
             {
               "label": "终端",
               "language": "bash",
-              "code": "node --env-file=.env src/07-controller.ts"
+              "code": "node --env-file=.env src/13-controller.ts"
             }
           ]
         },
@@ -115,8 +129,22 @@
           }
         },
         {
-          "title": "保存线程，不是保存整个现场",
-          "body": "明确指定不同 session id，可以让同一 resource 的不同任务拥有独立实时状态。接口仍要验证当前身份是否有权使用对应资源与线程，不能直接信任客户端传来的标识。\n存储可以保留消息、当前模式和模型等线程设置，但任意 session.state、临时授权、待处理批准和活动运行不会因此全部自动恢复。下一节就用重启场景检查，到底保留了什么。",
+          "title": "按模式提供工具，再按动作取得批准",
+          "body": "“核查计划”可以只提供只读查询，“保存报告”才提供写入工具。通过 availableTools 收窄模式可用能力，并通过工具审批接收对具体参数的批准；模式切换不是对之后所有写入的授权。\nSession 可以把 pending approval 与后续恢复过程交给界面展示。UI 仍应按消息 id 更新已有内容，分别保存批准决定与工具执行结果，避免把按钮点击当成报告已经写入。"
+        },
+        {
+          "title": "组合入口复用同一套机制",
+          "body": "编码项目可使用 **createCodingAgent()** 创建标准 Agent，复用工作区、网络重试等默认配置；配置 Memory 时，还会接入任务清单。创建出的 Agent 同样可以交给 AgentController 使用。\n选用这种组合入口时，仍需明确存储、目标和操作权限，并按 12、13 章检查文件系统与沙箱边界。",
+          "links": [
+            {
+              "label": "Mastra：createCodingAgent()",
+              "href": "https://mastra.ai/reference/coding-agent/create-coding-agent"
+            }
+          ]
+        },
+        {
+          "title": "分别保存线程与实时状态",
+          "body": "为同一用户的不同任务指定不同 session id，可以隔离它们的实时状态。接口仍需验证资源与线程归属，不能直接信任客户端传来的标识。\n存储可以保留消息、当前模式和模型等线程设置；任意 session.state、临时授权、待处理批准和活动运行则需要分别检查恢复方式。会话跨实例时，还要让新输入找到正在执行的进程。下一节区分共享数据、消息传递与运行所有权。",
           "links": [
             {
               "label": "Mastra：Agent Controller",

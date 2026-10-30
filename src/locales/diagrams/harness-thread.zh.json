@@ -1,0 +1,13 @@
+{
+  "title": "线程持续存在，运行分别结束",
+  "caption": "先订阅同一个 thread，再发送多条消息。每次运行有自己的 runId 和结局，订阅可以跨越这些运行继续接收事件。",
+  "top": "同一线程 · threadId",
+  "detail": "资料和对话通过记忆关联",
+  "left": "运行 A · runId A",
+  "leftDetail": "第一次核查与结果",
+  "right": "运行 B · runId B",
+  "rightDetail": "补充材料后的核查",
+  "bottom": "线程订阅",
+  "bottomDetail": "按 runId 接收输出与运行结局",
+  "foot": "离开订阅不等于取消运行"
+}

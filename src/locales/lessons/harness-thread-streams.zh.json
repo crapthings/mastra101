@@ -1,0 +1,96 @@
+{
+  "title": "线程订阅（Thread Streams）",
+  "lead": "用一次订阅接收同一线程中的多次运行，分开识别对话和执行。",
+  "sections": [
+    {
+      "title": "运行结束了，会话还在继续",
+      "body": "前面通过 runId 观察同一次运行。核查报告生成后，用户又补了一份批准记录，这通常会开始下一次运行，但仍属于同一段核查对话。\n**线程订阅（Thread Stream）**围绕 thread 接收输出，可以跨越多次运行。一次 stream() 或 observe(runId) 跟随某次运行，subscribeToThread() 则跟随这段对话的后续变化。"
+    },
+    {
+      "title": "先订阅，再发送输入",
+      "body": "先打开订阅，再发消息，才能接住最初产生的事件。公共文件先创建线程，用同一 **resourceId** 标明数据归属，用 **threadId** 关联记忆、订阅和后续输入。\n示例的 receiveTurn() 消费异步迭代器，等待一次运行成功的 thread-run-status，并设置等待上限。它服务于串行演示；真实界面应持续接收事件，按 runId 分组，并处理失败、取消和暂停等结局。",
+      "codeBlocks": [
+        {
+          "label": "src/thread-runtime.js",
+          "language": "javascript",
+          "code": "import { Mastra } from '@mastra/core'\nimport { createAssistant, createStorage } from './assistant.js'\n\n// 创建已经存在的教学线程，让订阅、状态与通知使用同一归属。\nexport async function createThreadRuntime (name, options = {}) {\n  const storage = await createStorage(name)\n  const reviewer = createAssistant(storage, options)\n  const mastra = new Mastra({ agents: { reviewer }, storage })\n  const thread = { resourceId: 'demo-user', threadId: crypto.randomUUID() }\n  const memory = await reviewer.getMemory()\n  await memory.createThread({ ...thread, title: '差旅制度核查' })\n  return {\n    reviewer, mastra, storage, thread,\n    close: async () => {\n      await mastra.shutdown()\n      await storage.close()\n    }\n  }\n}\n\n// 在同一个线程订阅中等一次运行结束，超时退出时保留未完成含义。\nexport async function receiveTurn (subscription, send) {\n  const reader = subscription.stream[Symbol.asyncIterator]()\n  const timer = setTimeout(() => subscription.unsubscribe(), 60_000)\n  try {\n    const received = (async () => {\n      let text = ''\n      for (;;) {\n        const { value: chunk, done } = await reader.next()\n        if (done) throw new Error('订阅结束，尚未取得本次运行状态')\n        if (chunk.type === 'text-delta') text += chunk.payload.text\n        if (chunk.type === 'thread-run-status') {\n          if (chunk.payload.status !== 'success') throw new Error(`本次运行没有成功结束：${chunk.payload.status}`)\n          return { runId: chunk.runId, text, status: chunk.payload.status }\n        }\n      }\n    })()\n    // 立即接上拒绝处理，发送失败时也不会遗留未处理的读取异常。\n    received.catch(() => {})\n    const result = await send()\n    if (result?.accepted) {\n      const { action, runId } = await result.accepted\n      console.log('投递决定：', { action, runId })\n    }\n    return await received\n  } finally {\n    clearTimeout(timer)\n  }\n}"
+        }
+      ]
+    },
+    {
+      "title": "一份订阅，接住两次运行",
+      "body": "示例连续发送两条消息，同一订阅应收到两个不同的 runId。withInitialHistory 可在开始时带回最近一页历史；withRunStatus 则增加 success、failed、aborted、suspended 等运行结局。\n订阅本身不会因为一轮回答结束而关闭。要判断任务发生了什么，应读取运行结局和业务内容，而不是等待整个线程流结束。",
+      "codeBlocks": [
+        {
+          "label": "src/04-thread-streams.js",
+          "language": "javascript",
+          "code": "import { createThreadRuntime, receiveTurn } from './thread-runtime.js'\n\n// 一个线程订阅接收两次运行，各次输出仍按 runId 区分。\nconst runtime = await createThreadRuntime('thread-streams')\n// 先订阅再发消息，避免错过最初的实时事件。\nconst subscription = await runtime.reviewer.subscribeToThread({\n  ...runtime.thread, withInitialHistory: true, withRunStatus: true\n})\ntry {\n  const first = await receiveTurn(subscription, () => runtime.reviewer.sendMessage('制度：住宿每晚不超过 500 元，超出须事先书面批准。先列出核查条件。', runtime.thread))\n  console.log('第一次运行：', first)\n  const second = await receiveTurn(subscription, () => runtime.reviewer.sendMessage('申请金额是 560 元，还没有批准记录。现在还缺什么？', runtime.thread))\n  console.log('第二次运行：', second)\n  console.log('是否为不同运行：', first.runId !== second.runId)\n} finally {\n  subscription.unsubscribe()\n  await runtime.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/04-thread-streams.js"
+        }
+      ]
+    },
+    {
+      "title": "重连时，历史和实时各有职责",
+      "body": "历史消息用于恢复对话显示，保留的流事件用于接续输出。重新订阅后，应按消息和运行标识合并内容，避免把旧结果重复追加。\nunsubscribe() 关闭订阅；要取消执行，应另行调用 abort()。暂停等待审批的运行，则需要从相应恢复入口继续，普通新消息可能得到 blocked。下一节看输入如何送达活动或空闲的线程。",
+      "links": [
+        {
+          "label": "Mastra：Thread Streams",
+          "href": "https://mastra.ai/docs/signals/thread-streams"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "同一线程先核查材料，后补批准记录。应保留哪个标识来关联对话，又用哪个标识区分两次运行？关闭订阅是否应取消核查？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "运行结束了，会话还在继续",
+          "body": "前面通过 runId 观察同一次运行。核查报告生成后，用户又补了一份批准记录，这通常会开始下一次运行，但仍属于同一段核查对话。\n**线程订阅（Thread Stream）**围绕 thread 接收输出，可以跨越多次运行。一次 stream() 或 observe(runId) 跟随某次运行，subscribeToThread() 则跟随这段对话的后续变化。"
+        },
+        {
+          "title": "先订阅，再发送输入",
+          "body": "先打开订阅，再发消息，才能接住最初产生的事件。公共文件先创建线程，用同一 **resourceId** 标明数据归属，用 **threadId** 关联记忆、订阅和后续输入。\n示例的 receiveTurn() 消费异步迭代器，等待一次运行成功的 thread-run-status，并设置等待上限。它服务于串行演示；真实界面应持续接收事件，按 runId 分组，并处理失败、取消和暂停等结局。",
+          "codeBlocks": [
+            {
+              "label": "src/thread-runtime.ts",
+              "language": "typescript",
+              "code": "import { Mastra } from '@mastra/core'\nimport { createAssistant, createStorage } from './assistant.ts'\n\n// 创建已经存在的教学线程，让订阅、状态与通知使用同一归属。\nexport async function createThreadRuntime (name, options = {}) {\n  const storage = await createStorage(name)\n  const reviewer = createAssistant(storage, options)\n  const mastra = new Mastra({ agents: { reviewer }, storage })\n  const thread = { resourceId: 'demo-user', threadId: crypto.randomUUID() }\n  const memory = await reviewer.getMemory()\n  await memory.createThread({ ...thread, title: '差旅制度核查' })\n  return {\n    reviewer, mastra, storage, thread,\n    close: async () => {\n      await mastra.shutdown()\n      await storage.close()\n    }\n  }\n}\n\n// 在同一个线程订阅中等一次运行结束，超时退出时保留未完成含义。\nexport async function receiveTurn (subscription, send) {\n  const reader = subscription.stream[Symbol.asyncIterator]()\n  const timer = setTimeout(() => subscription.unsubscribe(), 60_000)\n  try {\n    const received = (async () => {\n      let text = ''\n      for (;;) {\n        const { value: chunk, done } = await reader.next()\n        if (done) throw new Error('订阅结束，尚未取得本次运行状态')\n        if (chunk.type === 'text-delta') text += chunk.payload.text\n        if (chunk.type === 'thread-run-status') {\n          if (chunk.payload.status !== 'success') throw new Error(`本次运行没有成功结束：${chunk.payload.status}`)\n          return { runId: chunk.runId, text, status: chunk.payload.status }\n        }\n      }\n    })()\n    // 立即接上拒绝处理，发送失败时也不会遗留未处理的读取异常。\n    received.catch(() => {})\n    const result = await send()\n    if (result?.accepted) {\n      const { action, runId } = await result.accepted\n      console.log('投递决定：', { action, runId })\n    }\n    return await received\n  } finally {\n    clearTimeout(timer)\n  }\n}"
+            }
+          ]
+        },
+        {
+          "title": "一份订阅，接住两次运行",
+          "body": "示例连续发送两条消息，同一订阅应收到两个不同的 runId。withInitialHistory 可在开始时带回最近一页历史；withRunStatus 则增加 success、failed、aborted、suspended 等运行结局。\n订阅本身不会因为一轮回答结束而关闭。要判断任务发生了什么，应读取运行结局和业务内容，而不是等待整个线程流结束。",
+          "codeBlocks": [
+            {
+              "label": "src/04-thread-streams.ts",
+              "language": "typescript",
+              "code": "import { createThreadRuntime, receiveTurn } from './thread-runtime.ts'\n\n// 一个线程订阅接收两次运行，各次输出仍按 runId 区分。\nconst runtime = await createThreadRuntime('thread-streams')\n// 先订阅再发消息，避免错过最初的实时事件。\nconst subscription = await runtime.reviewer.subscribeToThread({\n  ...runtime.thread, withInitialHistory: true, withRunStatus: true\n})\ntry {\n  const first = await receiveTurn(subscription, () => runtime.reviewer.sendMessage('制度：住宿每晚不超过 500 元，超出须事先书面批准。先列出核查条件。', runtime.thread))\n  console.log('第一次运行：', first)\n  const second = await receiveTurn(subscription, () => runtime.reviewer.sendMessage('申请金额是 560 元，还没有批准记录。现在还缺什么？', runtime.thread))\n  console.log('第二次运行：', second)\n  console.log('是否为不同运行：', first.runId !== second.runId)\n} finally {\n  subscription.unsubscribe()\n  await runtime.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/04-thread-streams.ts"
+            }
+          ]
+        },
+        {
+          "title": "重连时，历史和实时各有职责",
+          "body": "历史消息用于恢复对话显示，保留的流事件用于接续输出。重新订阅后，应按消息和运行标识合并内容，避免把旧结果重复追加。\nunsubscribe() 关闭订阅；要取消执行，应另行调用 abort()。暂停等待审批的运行，则需要从相应恢复入口继续，普通新消息可能得到 blocked。下一节看输入如何送达活动或空闲的线程。",
+          "links": [
+            {
+              "label": "Mastra：Thread Streams",
+              "href": "https://mastra.ai/docs/signals/thread-streams"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

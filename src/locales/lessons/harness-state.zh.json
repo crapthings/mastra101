@@ -1,0 +1,146 @@
+{
+  "title": "状态信号（State Signals）",
+  "lead": "用有名字、有版本的状态描述当前情况，避免把持续变化的信息变成一堆旧消息。",
+  "sections": [
+    {
+      "title": "事件说明变化，状态说明现在",
+      "body": "“批准记录刚更新”描述一次变化，“申请 001 仍缺批准”描述当前状态。持续核查需要知道现在是什么，不能只让模型从一串通知里推测。\n**状态信号（State Signal）**在线程内维护具名状态，也称 **状态通道（state lane）**。应用或处理器提供内容，框架将它组织为后续模型可用的上下文。"
+    },
+    {
+      "title": "完整快照和变化量分别提供",
+      "body": "**snapshot** 描述完整状态，**delta** 描述相对已有状态的变化。例如，完整快照列出金额和批准情况，变化量只说明“批准从缺失变为已取得”。程序负责比较和合并，Mastra 不会自动为任意 JSON 计算差异。\n如果旧快照已被上下文裁剪，只留下变化量，模型可能缺少理解它的背景。提供状态的一方应补上新快照；处理器可用 contextWindow.hasSnapshot 判断当前窗口是否保留了所需快照。"
+    },
+    {
+      "title": "模型可读内容与程序数据分开",
+      "body": "contents 是供模型理解的文字，value 是应用或处理器使用的可选结构数据，不会自动作为完整对象显示给模型。需要模型知道的金额和条件，应在 contents 中说清楚。\ncacheKey 标识这一版状态。同一状态 id 的模式和 key 都没变时，更新会跳过；值改变却沿用旧 key，可能使新内容不被接收。状态更新前还需要线程已经存在。",
+      "table": {
+        "headers": [
+          "字段",
+          "职责"
+        ],
+        "rows": [
+          [
+            "id",
+            "线程内稳定的状态名称"
+          ],
+          [
+            "mode",
+            "完整 snapshot 或变化 delta"
+          ],
+          [
+            "cacheKey",
+            "本次状态版本，用于跳过未变更新"
+          ],
+          [
+            "contents",
+            "实际交给模型阅读的说明"
+          ],
+          [
+            "value",
+            "供程序或处理器使用的结构数据"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "先保存一版，再验证重复更新",
+      "body": "示例为 application 写入完整快照，相同版本再次发送时应得到 unchanged。之后发起明确问题，检查本次输入是否能支持核查。\n它只验证快照、去重与后续使用，不模拟审批系统自动更新。真实应用收到批准结果时，需要先核对来源，再生成新的版本和状态说明。",
+      "codeBlocks": [
+        {
+          "label": "src/06-state-signals.js",
+          "language": "javascript",
+          "code": "import { createThreadRuntime, receiveTurn } from './thread-runtime.js'\n\n// 将核查状态放进命名状态位，结构数据与模型可读说明分别提供。\nconst runtime = await createThreadRuntime('state-signals')\ntry {\n  const state = {\n    id: 'application', mode: 'snapshot', cacheKey: 'application:001:v1',\n    contents: '申请 001：住宿金额 560 元，制度上限 500 元，尚无事先书面批准记录。',\n    value: { amount: 560, limit: 500, approval: null }\n  }\n  const first = await runtime.reviewer.sendStateSignal(state, { ...runtime.thread, ifIdle: { behavior: 'persist' } })\n  if (!first.skipped) {\n    await first.accepted\n    await first.persisted\n  }\n  const duplicate = await runtime.reviewer.sendStateSignal(state, { ...runtime.thread, ifIdle: { behavior: 'persist' } })\n  console.log('相同版本是否跳过：', duplicate)\n  const subscription = await runtime.reviewer.subscribeToThread({ ...runtime.thread, withRunStatus: true })\n  try {\n    console.log('当前状态的核查结果：', await receiveTurn(subscription, () => runtime.reviewer.sendMessage('根据当前申请状态，说明为什么还不能直接确认可报销。', runtime.thread)))\n  } finally {\n    subscription.unsubscribe()\n  }\n} finally {\n  await runtime.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/06-state-signals.js"
+        }
+      ]
+    },
+    {
+      "title": "保留状态，也保留事实来源",
+      "body": "状态信号需要持久存储才能跨进程保留，不能设置为 transient。模型据此了解当前情况，实际批准与核查仍需回到业务系统确认。\n目标和任务清单也采用类似方式：底层保存结构化记录，再将当前需要的信息组织成模型可读的说明。接下来先为这项工作设定可检查的目标。",
+      "links": [
+        {
+          "label": "Mastra：State Signals",
+          "href": "https://mastra.ai/docs/signals/state-signals"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "批准状态已变，却沿用旧 cacheKey，会发生什么？如果更新了版本和 value，却没改 contents，模型能否得知新的批准情况？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "事件说明变化，状态说明现在",
+          "body": "“批准记录刚更新”描述一次变化，“申请 001 仍缺批准”描述当前状态。持续核查需要知道现在是什么，不能只让模型从一串通知里推测。\n**状态信号（State Signal）**在线程内维护具名状态，也称 **状态通道（state lane）**。应用或处理器提供内容，框架将它组织为后续模型可用的上下文。"
+        },
+        {
+          "title": "完整快照和变化量分别提供",
+          "body": "**snapshot** 描述完整状态，**delta** 描述相对已有状态的变化。例如，完整快照列出金额和批准情况，变化量只说明“批准从缺失变为已取得”。程序负责比较和合并，Mastra 不会自动为任意 JSON 计算差异。\n如果旧快照已被上下文裁剪，只留下变化量，模型可能缺少理解它的背景。提供状态的一方应补上新快照；处理器可用 contextWindow.hasSnapshot 判断当前窗口是否保留了所需快照。"
+        },
+        {
+          "title": "模型可读内容与程序数据分开",
+          "body": "contents 是供模型理解的文字，value 是应用或处理器使用的可选结构数据，不会自动作为完整对象显示给模型。需要模型知道的金额和条件，应在 contents 中说清楚。\ncacheKey 标识这一版状态。同一状态 id 的模式和 key 都没变时，更新会跳过；值改变却沿用旧 key，可能使新内容不被接收。状态更新前还需要线程已经存在。",
+          "table": {
+            "headers": [
+              "字段",
+              "职责"
+            ],
+            "rows": [
+              [
+                "id",
+                "线程内稳定的状态名称"
+              ],
+              [
+                "mode",
+                "完整 snapshot 或变化 delta"
+              ],
+              [
+                "cacheKey",
+                "本次状态版本，用于跳过未变更新"
+              ],
+              [
+                "contents",
+                "实际交给模型阅读的说明"
+              ],
+              [
+                "value",
+                "供程序或处理器使用的结构数据"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "先保存一版，再验证重复更新",
+          "body": "示例为 application 写入完整快照，相同版本再次发送时应得到 unchanged。之后发起明确问题，检查本次输入是否能支持核查。\n它只验证快照、去重与后续使用，不模拟审批系统自动更新。真实应用收到批准结果时，需要先核对来源，再生成新的版本和状态说明。",
+          "codeBlocks": [
+            {
+              "label": "src/06-state-signals.ts",
+              "language": "typescript",
+              "code": "import { createThreadRuntime, receiveTurn } from './thread-runtime.ts'\n\n// 将核查状态放进命名状态位，结构数据与模型可读说明分别提供。\nconst runtime = await createThreadRuntime('state-signals')\ntry {\n  const state = {\n    id: 'application', mode: 'snapshot', cacheKey: 'application:001:v1',\n    contents: '申请 001：住宿金额 560 元，制度上限 500 元，尚无事先书面批准记录。',\n    value: { amount: 560, limit: 500, approval: null }\n  }\n  const first = await runtime.reviewer.sendStateSignal(state, { ...runtime.thread, ifIdle: { behavior: 'persist' } })\n  if (!first.skipped) {\n    await first.accepted\n    await first.persisted\n  }\n  const duplicate = await runtime.reviewer.sendStateSignal(state, { ...runtime.thread, ifIdle: { behavior: 'persist' } })\n  console.log('相同版本是否跳过：', duplicate)\n  const subscription = await runtime.reviewer.subscribeToThread({ ...runtime.thread, withRunStatus: true })\n  try {\n    console.log('当前状态的核查结果：', await receiveTurn(subscription, () => runtime.reviewer.sendMessage('根据当前申请状态，说明为什么还不能直接确认可报销。', runtime.thread)))\n  } finally {\n    subscription.unsubscribe()\n  }\n} finally {\n  await runtime.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/06-state-signals.ts"
+            }
+          ]
+        },
+        {
+          "title": "保留状态，也保留事实来源",
+          "body": "状态信号需要持久存储才能跨进程保留，不能设置为 transient。模型据此了解当前情况，实际批准与核查仍需回到业务系统确认。\n目标和任务清单也采用类似方式：底层保存结构化记录，再将当前需要的信息组织成模型可读的说明。接下来先为这项工作设定可检查的目标。",
+          "links": [
+            {
+              "label": "Mastra：State Signals",
+              "href": "https://mastra.ai/docs/signals/state-signals"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
