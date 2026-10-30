@@ -1,7 +1,7 @@
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react'
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { NavLink, useLocation } from 'react-router'
+import { Link, useLocation } from 'react-router'
 import { chapters } from '@/curriculum'
 import { useNavigationDrawer } from '@/stores/navigation'
 import { CodeLanguageSwitch } from './code-language-switch'
@@ -10,11 +10,12 @@ import { CodeLanguageSwitch } from './code-language-switch'
 export function ChapterNavigation () {
   const { t } = useTranslation()
   const { pathname } = useLocation()
+  const currentPath = pathname.replace(/\/+$/, '') || '/'
   const close = useNavigationDrawer(state => state.close)
   return (
     <nav aria-label={t('contents')} className='space-y-3'>
       {chapters.map((chapter, chapterIndex) => (
-        <Disclosure as='section' key={`${chapter.id}:${pathname}`} defaultOpen={chapter.lessons.some(lesson => lesson.path === pathname)}>
+        <Disclosure as='section' key={`${chapter.id}:${currentPath}`} defaultOpen={chapter.lessons.some(lesson => lesson.path === currentPath)}>
           <h2>
             <DisclosureButton className='group flex w-full items-center gap-3 rounded-lg py-3 text-left text-sm font-semibold hover:text-orange-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-600'>
               <span className='text-xs tabular-nums text-orange-700'>{String(chapterIndex + 1).padStart(2, '0')}</span>
@@ -25,7 +26,7 @@ export function ChapterNavigation () {
             </DisclosureButton>
           </h2>
           <DisclosurePanel as='ul' className='mb-3 ml-2 space-y-1 border-l border-stone-200 pl-3'>
-            {chapter.lessons.map(lesson => <li key={lesson.id}><NavLink end to={lesson.path} onClick={close} className={({ isActive }) => `block rounded-lg px-3 py-2.5 text-sm leading-relaxed transition-colors ${isActive ? 'bg-orange-100/70 font-medium text-orange-900' : 'text-stone-500 hover:bg-stone-100'}`}>{t(`lessons.${lesson.id}`)}</NavLink></li>)}
+            {chapter.lessons.map(lesson => <li key={lesson.id}><Link to={lesson.path} onClick={close} aria-current={currentPath === lesson.path ? 'page' : undefined} className={`block rounded-lg px-3 py-2.5 text-sm leading-relaxed transition-colors ${currentPath === lesson.path ? 'bg-orange-100/70 font-medium text-orange-900' : 'text-stone-500 hover:bg-stone-100'}`}>{t(`lessons.${lesson.id}`)}</Link></li>)}
           </DisclosurePanel>
         </Disclosure>
       ))}
