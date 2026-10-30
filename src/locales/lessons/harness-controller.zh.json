@@ -1,0 +1,130 @@
+{
+  "title": "会话控制（AgentController）",
+  "lead": "用会话承接模式、事件与人的控制，同时分清实时状态和持久线程。",
+  "sections": [
+    {
+      "title": "从一次调用，走向持续协作",
+      "body": "用户先要求列核查计划，再补材料、要求形成结论，还可能中途改方向。应用需要管理当前模式、输出事件、线程和正在执行的工作。\n**AgentController** 是这些交互的共享运行宿主；**Session** 承接某个用户或任务的实时执行；**Thread** 保存对话及选定的线程设置。控制器不是所有用户共用的单个“当前会话”。"
+    },
+    {
+      "title": "同一会话可以切换工作模式",
+      "body": "示例设置“核查计划”和“形成结论”两种模式，用 session.mode.switch() 改变后续指令，同时保留线程中的材料。模式切换不会自动切换模型，也不等于新的安全权限。\n如果某种模式只能读取材料，还应限制可用工具与实际授权，不能只写一句“不要修改”。会话订阅按事件输出文字，界面需要完整消息时再按消息标识合并更新。",
+      "codeBlocks": [
+        {
+          "label": "src/07-controller.js",
+          "language": "javascript",
+          "code": "import { AgentController } from '@mastra/core/agent-controller'\nimport { createAssistant, createStorage } from './assistant.js'\n\n// 用同一个控制器承载两种核查模式，每个会话保留自己的实时状态。\nconst storage = await createStorage('controller')\n// 配置共享的会话控制器。\nconst controller = new AgentController({\n  id: 'review-controller',\n  agent: createAssistant(storage),\n  storage,\n  modes: [\n    { id: 'plan', name: '核查计划', metadata: { default: true }, instructions: '先列出需核对的事实，不作报销结论。' },\n    { id: 'review', name: '形成结论', instructions: '基于已有材料形成结论，同时指出尚未确认的事项。' }\n  ]\n})\n// 保存订阅清理函数，避免退出后继续接收会话事件。\nlet unsubscribe\n\ntry {\n  await controller.init()\n  const session = await controller.createSession({ id: crypto.randomUUID(), resourceId: 'demo-user' })\n  unsubscribe = session.subscribe(event => {\n    if (event.type === 'message_update' && event.event.type === 'text-delta') {\n      process.stdout.write(event.event.delta)\n    }\n  })\n  await session.sendMessage({ content: '制度上限 500 元，超出须事先书面批准。申请金额 560 元，尚无批准记录。先列核查计划。' })\n  await session.mode.switch({ modeId: 'review' })\n  console.log('\\n当前模式：', session.mode.get())\n  await session.sendMessage({ content: '现在给出结论，保留待补材料。' })\n  console.log()\n} finally {\n  unsubscribe?.()\n  await controller.destroy()\n  await storage.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/07-controller.js"
+        }
+      ]
+    },
+    {
+      "title": "补充、改向和停止分别表达",
+      "body": "**sendMessage()** 发送工作；**followUp()** 在忙时排后续消息、空闲时直接发送；**steer()** 先取消当前运行，再用新消息改变方向；**abort()** 请求取消当前运行。\n这些控制不能撤销已经完成的外部操作。如果某个工具已经提交了申请，停止模型继续思考并不会把申请自动撤回。撤回需要业务系统提供真实入口及权限。",
+      "table": {
+        "headers": [
+          "操作",
+          "适合表达的意图"
+        ],
+        "rows": [
+          [
+            "sendMessage()",
+            "开始处理这条消息"
+          ],
+          [
+            "followUp()",
+            "当前工作之后，再处理这件事"
+          ],
+          [
+            "steer()",
+            "停下当前方向，改按新要求处理"
+          ],
+          [
+            "abort()",
+            "请求停止当前运行"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "保存线程，不是保存整个现场",
+      "body": "明确指定不同 session id，可以让同一 resource 的不同任务拥有独立实时状态。接口仍要验证当前身份是否有权使用对应资源与线程，不能直接信任客户端传来的标识。\n存储可以保留消息、当前模式和模型等线程设置，但任意 session.state、临时授权、待处理批准和活动运行不会因此全部自动恢复。下一节就用重启场景检查，到底保留了什么。",
+      "links": [
+        {
+          "label": "Mastra：Agent Controller",
+          "href": "https://mastra.ai/docs/harness/agent-controller"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "同一用户同时核查两份申请，为什么应该分配不同的 Session？服务重启后，哪些内容可以从线程恢复，哪些现场状态还需要单独处理？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "从一次调用，走向持续协作",
+          "body": "用户先要求列核查计划，再补材料、要求形成结论，还可能中途改方向。应用需要管理当前模式、输出事件、线程和正在执行的工作。\n**AgentController** 是这些交互的共享运行宿主；**Session** 承接某个用户或任务的实时执行；**Thread** 保存对话及选定的线程设置。控制器不是所有用户共用的单个“当前会话”。"
+        },
+        {
+          "title": "同一会话可以切换工作模式",
+          "body": "示例设置“核查计划”和“形成结论”两种模式，用 session.mode.switch() 改变后续指令，同时保留线程中的材料。模式切换不会自动切换模型，也不等于新的安全权限。\n如果某种模式只能读取材料，还应限制可用工具与实际授权，不能只写一句“不要修改”。会话订阅按事件输出文字，界面需要完整消息时再按消息标识合并更新。",
+          "codeBlocks": [
+            {
+              "label": "src/07-controller.ts",
+              "language": "typescript",
+              "code": "import { AgentController } from '@mastra/core/agent-controller'\nimport { createAssistant, createStorage } from './assistant.ts'\n\n// 用同一个控制器承载两种核查模式，每个会话保留自己的实时状态。\nconst storage = await createStorage('controller')\n// 配置共享的会话控制器。\nconst controller = new AgentController({\n  id: 'review-controller',\n  agent: createAssistant(storage),\n  storage,\n  modes: [\n    { id: 'plan', name: '核查计划', metadata: { default: true }, instructions: '先列出需核对的事实，不作报销结论。' },\n    { id: 'review', name: '形成结论', instructions: '基于已有材料形成结论，同时指出尚未确认的事项。' }\n  ]\n})\n// 保存订阅清理函数，避免退出后继续接收会话事件。\nlet unsubscribe\n\ntry {\n  await controller.init()\n  const session = await controller.createSession({ id: crypto.randomUUID(), resourceId: 'demo-user' })\n  unsubscribe = session.subscribe(event => {\n    if (event.type === 'message_update' && event.event.type === 'text-delta') {\n      process.stdout.write(event.event.delta)\n    }\n  })\n  await session.sendMessage({ content: '制度上限 500 元，超出须事先书面批准。申请金额 560 元，尚无批准记录。先列核查计划。' })\n  await session.mode.switch({ modeId: 'review' })\n  console.log('\\n当前模式：', session.mode.get())\n  await session.sendMessage({ content: '现在给出结论，保留待补材料。' })\n  console.log()\n} finally {\n  unsubscribe?.()\n  await controller.destroy()\n  await storage.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/07-controller.ts"
+            }
+          ]
+        },
+        {
+          "title": "补充、改向和停止分别表达",
+          "body": "**sendMessage()** 发送工作；**followUp()** 在忙时排后续消息、空闲时直接发送；**steer()** 先取消当前运行，再用新消息改变方向；**abort()** 请求取消当前运行。\n这些控制不能撤销已经完成的外部操作。如果某个工具已经提交了申请，停止模型继续思考并不会把申请自动撤回。撤回需要业务系统提供真实入口及权限。",
+          "table": {
+            "headers": [
+              "操作",
+              "适合表达的意图"
+            ],
+            "rows": [
+              [
+                "sendMessage()",
+                "开始处理这条消息"
+              ],
+              [
+                "followUp()",
+                "当前工作之后，再处理这件事"
+              ],
+              [
+                "steer()",
+                "停下当前方向，改按新要求处理"
+              ],
+              [
+                "abort()",
+                "请求停止当前运行"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "保存线程，不是保存整个现场",
+          "body": "明确指定不同 session id，可以让同一 resource 的不同任务拥有独立实时状态。接口仍要验证当前身份是否有权使用对应资源与线程，不能直接信任客户端传来的标识。\n存储可以保留消息、当前模式和模型等线程设置，但任意 session.state、临时授权、待处理批准和活动运行不会因此全部自动恢复。下一节就用重启场景检查，到底保留了什么。",
+          "links": [
+            {
+              "label": "Mastra：Agent Controller",
+              "href": "https://mastra.ai/docs/harness/agent-controller"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

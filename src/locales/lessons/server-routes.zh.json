@@ -1,0 +1,122 @@
+{
+  "title": "内置路由（API Routes）",
+  "lead": "根据接口描述构造请求，分别读取资源信息、运行标识和执行结果。",
+  "sections": [
+    {
+      "title": "注册能力之后，服务提供对应入口",
+      "body": "适配器为已注册的 Agent、Workflow 等能力提供内置 API。**GET /api/agents** 读取智能体目录，**GET /api/workflows** 读取工作流目录；执行任务则使用对应的资源路径与方法。\n这些接口还包含开发和管理能力。设计网页时，应同时明确它需要哪些操作，以及服务端应允许调用哪些操作；身份与权限会在下一章继续展开。"
+    },
+    {
+      "title": "先核对路径、方法和请求体",
+      "body": "脚本先查询两类目录，再请求一个不存在的智能体，最后为通知工作流创建一次运行。未知资源返回 404，创建运行则返回 **runId**，但此时尚未提交通知资料。\n本章的工作流 id 是 notice-check，注册表键是 noticeCheck，文件名则是另一回事。构造请求时，以接口描述和目录返回的资源标识为准。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/02-routes.js"
+        },
+        {
+          "label": "src/02-routes.js",
+          "language": "javascript",
+          "code": "import { createLab } from './lab.js'\n\n// 比较目录查询、未知资源与创建运行的响应。\nconst lab = await createLab()\ntry {\n  const paths = ['/api/agents', '/api/workflows', '/api/agents/not-registered']\n  for (const path of paths) {\n    const response = await fetch(lab.baseUrl + path)\n    const body = await response.json()\n    console.log('路径：', path, 'HTTP 状态：', response.status, '内容：', body.error ?? Object.keys(body))\n  }\n  const response = await fetch(`${lab.baseUrl}/api/workflows/notice-check/create-run`, {\n    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})\n  })\n  console.log('创建运行：', response.status, await response.json())\n} finally {\n  await lab.close()\n}"
+        }
+      ]
+    },
+    {
+      "title": "分三层读取结果",
+      "body": "请求得到响应后，先看 **HTTP 状态码**，再看响应体里的执行状态，最后读取业务结果。三层各自说明已经完成到哪里。\n例如同一份响应可以是 HTTP 200、工作流 success，而通知状态仍为“待确认”。网页应按这些信息显示实际进展。下一节用客户端 SDK 构造请求，继续区分它与服务端对象的关系。",
+      "table": {
+        "headers": [
+          "层级",
+          "本章执行响应中的读取位置",
+          "说明什么"
+        ],
+        "rows": [
+          [
+            "HTTP 请求",
+            "response.status，例如 200",
+            "接口如何处理这次请求"
+          ],
+          [
+            "工作流执行",
+            "响应体 status，例如 success",
+            "这次流程如何结束"
+          ],
+          [
+            "通知业务",
+            "响应体 result.status，例如待确认",
+            "入口资料是否已确认"
+          ]
+        ]
+      },
+      "links": [
+        {
+          "label": "Mastra：Server",
+          "href": "https://mastra.ai/docs/server/overview"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "响应为 HTTP 200，工作流 status 为 success，result.status 却是“待确认”。网页应该怎样显示结果？哪一层决定入口能否写进出发提醒？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "注册能力之后，服务提供对应入口",
+          "body": "适配器为已注册的 Agent、Workflow 等能力提供内置 API。**GET /api/agents** 读取智能体目录，**GET /api/workflows** 读取工作流目录；执行任务则使用对应的资源路径与方法。\n这些接口还包含开发和管理能力。设计网页时，应同时明确它需要哪些操作，以及服务端应允许调用哪些操作；身份与权限会在下一章继续展开。"
+        },
+        {
+          "title": "先核对路径、方法和请求体",
+          "body": "脚本先查询两类目录，再请求一个不存在的智能体，最后为通知工作流创建一次运行。未知资源返回 404，创建运行则返回 **runId**，但此时尚未提交通知资料。\n本章的工作流 id 是 notice-check，注册表键是 noticeCheck，文件名则是另一回事。构造请求时，以接口描述和目录返回的资源标识为准。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/02-routes.ts"
+            },
+            {
+              "label": "src/02-routes.ts",
+              "language": "typescript",
+              "code": "import { createLab } from './lab.ts'\n\n// 比较目录查询、未知资源与创建运行的响应。\nconst lab = await createLab()\ntry {\n  const paths = ['/api/agents', '/api/workflows', '/api/agents/not-registered']\n  for (const path of paths) {\n    const response = await fetch(lab.baseUrl + path)\n    const body = await response.json()\n    console.log('路径：', path, 'HTTP 状态：', response.status, '内容：', body.error ?? Object.keys(body))\n  }\n  const response = await fetch(`${lab.baseUrl}/api/workflows/notice-check/create-run`, {\n    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})\n  })\n  console.log('创建运行：', response.status, await response.json())\n} finally {\n  await lab.close()\n}"
+            }
+          ]
+        },
+        {
+          "title": "分三层读取结果",
+          "body": "请求得到响应后，先看 **HTTP 状态码**，再看响应体里的执行状态，最后读取业务结果。三层各自说明已经完成到哪里。\n例如同一份响应可以是 HTTP 200、工作流 success，而通知状态仍为“待确认”。网页应按这些信息显示实际进展。下一节用客户端 SDK 构造请求，继续区分它与服务端对象的关系。",
+          "table": {
+            "headers": [
+              "层级",
+              "本章执行响应中的读取位置",
+              "说明什么"
+            ],
+            "rows": [
+              [
+                "HTTP 请求",
+                "response.status，例如 200",
+                "接口如何处理这次请求"
+              ],
+              [
+                "工作流执行",
+                "响应体 status，例如 success",
+                "这次流程如何结束"
+              ],
+              [
+                "通知业务",
+                "响应体 result.status，例如待确认",
+                "入口资料是否已确认"
+              ]
+            ]
+          },
+          "links": [
+            {
+              "label": "Mastra：Server",
+              "href": "https://mastra.ai/docs/server/overview"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

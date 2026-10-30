@@ -1,0 +1,108 @@
+{
+  "title": "请求取消（Cancellation）",
+  "lead": "沿客户端、连接和执行任务检查取消是否生效，分清停止等待与撤销业务操作。",
+  "sections": [
+    {
+      "title": "客户端停止等待，任务未必已经停止",
+      "body": "调用方可以用 **AbortController** 中止当前 HTTP 请求。执行任务是否跟着停止，还取决于服务端是否收到断开信号，以及下游是否支持并响应取消。\n本例把 **c.req.raw.signal** 传给支持 **AbortSignal** 的计时任务，同时保存 started、finished、cancelled 三个状态，供脚本核对实际变化。",
+      "codeBlocks": [
+        {
+          "label": "src/cancellation-route.js",
+          "language": "javascript",
+          "code": "import { setTimeout as delay } from 'node:timers/promises'\nimport { registerApiRoute } from '@mastra/core/server'\n\n// 把当前 HTTP 请求的取消信号传给等待任务，保留实际执行状态供脚本核对。\nexport function createCancellationRoute (state) {\n  return registerApiRoute('/slow-preview', {\n    method: 'POST', handler: async c => {\n      state.started = true\n      try {\n        await delay(1000, undefined, { signal: c.req.raw.signal })\n        state.finished = true\n        return c.json({ status: '已完成等待' })\n      } catch (error) {\n        if (error.name !== 'AbortError') throw error\n        state.cancelled = true\n        return c.json({ status: '等待已取消' }, 499)\n      }\n    }\n  })\n}"
+        }
+      ]
+    },
+    {
+      "title": "等待任务开始，再发出取消",
+      "body": "脚本先发请求，确认服务端等待已开始，再调用 abort。预期客户端得到 **AbortError**，服务端将 cancelled 设为 true，finished 保持 false。\n脚本与服务运行在同一进程，所以能直接读取这些状态。实际远程任务需要通过日志或状态接口核对。路由中的 499 是示例自定的返回值，连接关闭后，客户端可能收不到它。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/09-cancellation.js"
+        },
+        {
+          "label": "src/09-cancellation.js",
+          "language": "javascript",
+          "code": "import { createLab } from './lab.js'\n\n// 请求开始后取消客户端等待，再读取服务器现场状态以确认下游是否响应取消。\nconst lab = await createLab()\ntry {\n  const controller = new AbortController()\n  const request = fetch(`${lab.baseUrl}/slow-preview`, { method: 'POST', signal: controller.signal })\n    .catch(error => error)\n  for (let attempt = 0; attempt < 100 && !lab.state.started; attempt++) {\n    await new Promise(resolve => setTimeout(resolve, 10))\n  }\n  if (!lab.state.started) throw new Error('服务端任务没有开始')\n  controller.abort()\n  const outcome = await request\n  console.log('客户端结果：', outcome.name)\n  for (let attempt = 0; attempt < 100 && !lab.state.cancelled && !lab.state.finished; attempt++) {\n    await new Promise(resolve => setTimeout(resolve, 10))\n  }\n  console.log('服务端现场：', lab.state)\n  if (!lab.state.cancelled || lab.state.finished) throw new Error('服务器没有按预期取消等待')\n} finally {\n  await lab.close()\n}"
+        }
+      ]
+    },
+    {
+      "title": "核对已经发生的业务结果",
+      "body": "取消可以中止这次等待；已发送的通知或已提交的写入，要按实际结果另外处理。断开或超时后再次提交前，应确认上一次是否已产生结果。\n本例等待请求结束或取消后，在 finally 关闭监听并调用 mastra.shutdown()。实际服务停止时，也需先停止接收新请求，再安排在途任务结束或取消，最后回收观测与存储资源。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "取消请求说明调用方不再等待；下游是否停止、已经产生的业务结果如何处理，需要分别确认。"
+        }
+      ]
+    },
+    {
+      "title": "接口接通之后，再决定谁能调用",
+      "body": "到这里，通知能力已经接到 HTTP，可以传递上下文、读取运行状态、接收流式事件，并核对取消是否传到执行任务。\n接下来还要确定谁能查看通知、发起任务，以及读取哪些记录。下一章从身份验证与权限控制继续，明确这些接口的使用范围。",
+      "links": [
+        {
+          "label": "Mastra：自定义路由与断开处理",
+          "href": "https://mastra.ai/docs/server/custom-api-routes"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "请求超时后，客户端准备重试发送通知。为什么应先核对上次的业务结果？本节哪两类现场信息能帮助判断等待是否真的停止？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "客户端停止等待，任务未必已经停止",
+          "body": "调用方可以用 **AbortController** 中止当前 HTTP 请求。执行任务是否跟着停止，还取决于服务端是否收到断开信号，以及下游是否支持并响应取消。\n本例把 **c.req.raw.signal** 传给支持 **AbortSignal** 的计时任务，同时保存 started、finished、cancelled 三个状态，供脚本核对实际变化。",
+          "codeBlocks": [
+            {
+              "label": "src/cancellation-route.ts",
+              "language": "typescript",
+              "code": "import { setTimeout as delay } from 'node:timers/promises'\nimport { registerApiRoute } from '@mastra/core/server'\n\n// 把当前 HTTP 请求的取消信号传给等待任务，保留实际执行状态供脚本核对。\nexport function createCancellationRoute (state) {\n  return registerApiRoute('/slow-preview', {\n    method: 'POST', handler: async c => {\n      state.started = true\n      try {\n        await delay(1000, undefined, { signal: c.req.raw.signal })\n        state.finished = true\n        return c.json({ status: '已完成等待' })\n      } catch (error) {\n        if (error.name !== 'AbortError') throw error\n        state.cancelled = true\n        return c.json({ status: '等待已取消' }, 499)\n      }\n    }\n  })\n}"
+            }
+          ]
+        },
+        {
+          "title": "等待任务开始，再发出取消",
+          "body": "脚本先发请求，确认服务端等待已开始，再调用 abort。预期客户端得到 **AbortError**，服务端将 cancelled 设为 true，finished 保持 false。\n脚本与服务运行在同一进程，所以能直接读取这些状态。实际远程任务需要通过日志或状态接口核对。路由中的 499 是示例自定的返回值，连接关闭后，客户端可能收不到它。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/09-cancellation.ts"
+            },
+            {
+              "label": "src/09-cancellation.ts",
+              "language": "typescript",
+              "code": "import { createLab } from './lab.ts'\n\n// 请求开始后取消客户端等待，再读取服务器现场状态以确认下游是否响应取消。\nconst lab = await createLab()\ntry {\n  const controller = new AbortController()\n  const request = fetch(`${lab.baseUrl}/slow-preview`, { method: 'POST', signal: controller.signal })\n    .catch(error => error)\n  for (let attempt = 0; attempt < 100 && !lab.state.started; attempt++) {\n    await new Promise(resolve => setTimeout(resolve, 10))\n  }\n  if (!lab.state.started) throw new Error('服务端任务没有开始')\n  controller.abort()\n  const outcome = await request\n  console.log('客户端结果：', outcome.name)\n  for (let attempt = 0; attempt < 100 && !lab.state.cancelled && !lab.state.finished; attempt++) {\n    await new Promise(resolve => setTimeout(resolve, 10))\n  }\n  console.log('服务端现场：', lab.state)\n  if (!lab.state.cancelled || lab.state.finished) throw new Error('服务器没有按预期取消等待')\n} finally {\n  await lab.close()\n}"
+            }
+          ]
+        },
+        {
+          "title": "核对已经发生的业务结果",
+          "body": "取消可以中止这次等待；已发送的通知或已提交的写入，要按实际结果另外处理。断开或超时后再次提交前，应确认上一次是否已产生结果。\n本例等待请求结束或取消后，在 finally 关闭监听并调用 mastra.shutdown()。实际服务停止时，也需先停止接收新请求，再安排在途任务结束或取消，最后回收观测与存储资源。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "取消请求说明调用方不再等待；下游是否停止、已经产生的业务结果如何处理，需要分别确认。"
+            }
+          ]
+        },
+        {
+          "title": "接口接通之后，再决定谁能调用",
+          "body": "到这里，通知能力已经接到 HTTP，可以传递上下文、读取运行状态、接收流式事件，并核对取消是否传到执行任务。\n接下来还要确定谁能查看通知、发起任务，以及读取哪些记录。下一章从身份验证与权限控制继续，明确这些接口的使用范围。",
+          "links": [
+            {
+              "label": "Mastra：自定义路由与断开处理",
+              "href": "https://mastra.ai/docs/server/custom-api-routes"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

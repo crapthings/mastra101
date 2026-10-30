@@ -1,0 +1,160 @@
+{
+  "title": "运行预算（Budgets & Cancellation）",
+  "lead": "分别设置父子步数，观察子任务查询后的整理空间，以及取消如何沿委派链传递。",
+  "sections": [
+    {
+      "title": "父助手的一步，可以包住子助手的多步",
+      "body": "主模型提出一次委派，在父循环里是一次工具请求。子助手收到任务后，可以继续经历查询、工具返回与结果整理。\n因此，父任务 **maxSteps** 不等于父子所有模型请求之和。即使父任务只走两步，中间的子任务仍可能有自己的多步调用；重试、Token 用量与耗时也要分别统计。"
+    },
+    {
+      "title": "子任务先查询，再回答，需要自己的空间",
+      "body": "示例把子助手第一步固定为 lookup 查询，下一步关闭工具以整理结果。默认预算为 1 时，查询可以已经返回，却没有后续模型步骤写出最终文字；改成 2 后，再检查是否完成整理。\n父助手拿到空文字时，不应替子任务假装已经核对完成。本例把空交接替换成明确的未完成说明，并保留子任务日志供检查。",
+      "table": {
+        "headers": [
+          "模式",
+          "子任务预算",
+          "观察重点"
+        ],
+        "rows": [
+          [
+            "1",
+            "默认一步",
+            "查询已发生，结果整理是否缺失"
+          ],
+          [
+            "2",
+            "默认两步",
+            "查询后能否依据结果回答"
+          ],
+          [
+            "覆盖",
+            "默认一步，钩子改为两步",
+            "程序修改预算与模型请求预算的区别"
+          ],
+          [
+            "取消",
+            "执行工具时发出取消",
+            "子调用是否收到信号，后续是否停止"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "模型提出的预算与程序覆盖不同",
+      "body": "子助手的 **defaultOptions.maxSteps** 提供默认预算。主模型在委派参数里提出 maxSteps 时，框架会按子助手默认上限约束它；模型可以缩小，不能借此扩大开发者设定的上限。\n**modifiedMaxSteps** 则来自应用钩子，在该约束之后应用，可以提高或降低本次预算。把它当作维护者明确的配置决定，不能直接转交任意用户输入。"
+    },
+    {
+      "title": "沿调用链发送取消信号",
+      "body": "父运行的 **abortSignal** 会传给正在委派的子运行。示例通过 AbortController，在子工具执行中触发取消，并打印工具上下文里的信号状态。\n真实工具里的网络、文件或其他操作仍需配合信号处理。取消是停止推进的请求，不会自动撤销已经写入的文件或已提交的外部动作。",
+      "codeBlocks": [
+        {
+          "label": "src/06-budgets.js",
+          "language": "javascript",
+          "code": "import { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { makeReviewer, makeCoordinator, logStep } from './shared.js'\n\n// 数字模式比较子任务步数，覆盖模式演示程序改预算，取消模式观察信号。\nconst mode = process.argv[2] || '2'\nif (!['1', '2', '覆盖', '取消'].includes(mode)) throw new Error('请使用“1”“2”“覆盖”或“取消”。')\n// 一个控制器负责向父运行及正在执行的子运行发送取消信号。\nconst controller = new AbortController()\n// 查询只返回本地教学数据，取消模式在执行中触发信号。\nconst lookup = createTool({\n  id: 'lookup', description: '读取教学入口。', inputSchema: z.object({}),\n  execute: async (_input, context) => {\n    if (mode === '取消') controller.abort()\n    console.dir({ 工具收到取消: context.abortSignal?.aborted })\n    return { venue: '南门', source: '教学通知' }\n  }\n})\n// 子任务先查询再整理，默认预算为一步或两步。\nconst reviewer = makeReviewer({\n  tools: { lookup }, instructions: '查询教学入口，再根据工具结果回答并注明来源。',\n  defaultOptions: {\n    maxSteps: mode === '1' || mode === '覆盖' ? 1 : 2,\n    onStepFinish: logStep('核对助手'),\n    prepareStep: ({ stepNumber }) => ({ toolChoice: stepNumber === 0 ? { type: 'tool', toolName: 'lookup' } : 'none' })\n  }\n})\n// 父运行的预算与子运行分开设置。\nconst parent = makeCoordinator({ reviewer })\ntry {\n  const result = await parent.generate('委派核对助手查询教学入口，取得结果后如实回答。', {\n    maxSteps: 2, abortSignal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]),\n    onStepFinish: logStep('主助手'),\n    prepareStep: ({ stepNumber }) => ({ toolChoice: stepNumber === 0 ? { type: 'tool', toolName: 'agent-reviewer' } : 'none' }),\n    delegation: {\n      onDelegationStart: () => mode === '覆盖' ? { modifiedMaxSteps: 2 } : { proceed: true },\n      onDelegationComplete: ({ result }) => {\n        console.dir({ 子任务结束原因: result?.finishReason, 子任务文本: result?.text })\n        if (!result?.text?.trim()) return { resultText: '子任务没有形成最终文字。可能已有查询结果，请保留未完成状态并检查记录。' }\n      }\n    }\n  })\n  console.dir({ text: result.text, 已发出取消: controller.signal.aborted })\n} catch (error) {\n  console.error('运行中断或失败：', error.message)\n  process.exitCode = 1\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/06-budgets.js 1\nnode --env-file=.env src/06-budgets.js 2\nnode --env-file=.env src/06-budgets.js 覆盖\nnode --env-file=.env src/06-budgets.js 取消"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：运行预算与取消",
+          "href": "https://mastra.ai/docs/subagents#cancellation"
+        }
+      ]
+    },
+    {
+      "title": "有用户确认时，继续保留审批边界",
+      "body": "子工具需要用户批准时，审批信息可以沿委派链向父运行呈现；应用仍需展示具体动作、接收决定，并使用对应恢复接口。把任务交给子助手，不会自动取得批准。\n这章先用只读查询观察运行。一次执行结束后，还要知道父子各自保存了什么，下一节进入会话与记忆。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "父子步数分别约束各自的循环。总开销要看整条调用链，完成情况要看各自的结果。"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "父任务只用了两步，为什么仍可能产生四次模型调用？子任务已有查询结果却没有最终文字时，应检查哪项预算与结束原因？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "父助手的一步，可以包住子助手的多步",
+          "body": "主模型提出一次委派，在父循环里是一次工具请求。子助手收到任务后，可以继续经历查询、工具返回与结果整理。\n因此，父任务 **maxSteps** 不等于父子所有模型请求之和。即使父任务只走两步，中间的子任务仍可能有自己的多步调用；重试、Token 用量与耗时也要分别统计。"
+        },
+        {
+          "title": "子任务先查询，再回答，需要自己的空间",
+          "body": "示例把子助手第一步固定为 lookup 查询，下一步关闭工具以整理结果。默认预算为 1 时，查询可以已经返回，却没有后续模型步骤写出最终文字；改成 2 后，再检查是否完成整理。\n父助手拿到空文字时，不应替子任务假装已经核对完成。本例把空交接替换成明确的未完成说明，并保留子任务日志供检查。",
+          "table": {
+            "headers": [
+              "模式",
+              "子任务预算",
+              "观察重点"
+            ],
+            "rows": [
+              [
+                "1",
+                "默认一步",
+                "查询已发生，结果整理是否缺失"
+              ],
+              [
+                "2",
+                "默认两步",
+                "查询后能否依据结果回答"
+              ],
+              [
+                "覆盖",
+                "默认一步，钩子改为两步",
+                "程序修改预算与模型请求预算的区别"
+              ],
+              [
+                "取消",
+                "执行工具时发出取消",
+                "子调用是否收到信号，后续是否停止"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "模型提出的预算与程序覆盖不同",
+          "body": "子助手的 **defaultOptions.maxSteps** 提供默认预算。主模型在委派参数里提出 maxSteps 时，框架会按子助手默认上限约束它；模型可以缩小，不能借此扩大开发者设定的上限。\n**modifiedMaxSteps** 则来自应用钩子，在该约束之后应用，可以提高或降低本次预算。把它当作维护者明确的配置决定，不能直接转交任意用户输入。"
+        },
+        {
+          "title": "沿调用链发送取消信号",
+          "body": "父运行的 **abortSignal** 会传给正在委派的子运行。示例通过 AbortController，在子工具执行中触发取消，并打印工具上下文里的信号状态。\n真实工具里的网络、文件或其他操作仍需配合信号处理。取消是停止推进的请求，不会自动撤销已经写入的文件或已提交的外部动作。",
+          "codeBlocks": [
+            {
+              "label": "src/06-budgets.ts",
+              "language": "typescript",
+              "code": "import { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { makeReviewer, makeCoordinator, logStep } from './shared.ts'\n\n// 数字模式比较子任务步数，覆盖模式演示程序改预算，取消模式观察信号。\nconst mode = process.argv[2] || '2'\nif (!['1', '2', '覆盖', '取消'].includes(mode)) throw new Error('请使用“1”“2”“覆盖”或“取消”。')\n// 一个控制器负责向父运行及正在执行的子运行发送取消信号。\nconst controller = new AbortController()\n// 查询只返回本地教学数据，取消模式在执行中触发信号。\nconst lookup = createTool({\n  id: 'lookup', description: '读取教学入口。', inputSchema: z.object({}),\n  execute: async (_input, context) => {\n    if (mode === '取消') controller.abort()\n    console.dir({ 工具收到取消: context.abortSignal?.aborted })\n    return { venue: '南门', source: '教学通知' }\n  }\n})\n// 子任务先查询再整理，默认预算为一步或两步。\nconst reviewer = makeReviewer({\n  tools: { lookup }, instructions: '查询教学入口，再根据工具结果回答并注明来源。',\n  defaultOptions: {\n    maxSteps: mode === '1' || mode === '覆盖' ? 1 : 2,\n    onStepFinish: logStep('核对助手'),\n    prepareStep: ({ stepNumber }) => ({ toolChoice: stepNumber === 0 ? { type: 'tool', toolName: 'lookup' } : 'none' })\n  }\n})\n// 父运行的预算与子运行分开设置。\nconst parent = makeCoordinator({ reviewer })\ntry {\n  const result = await parent.generate('委派核对助手查询教学入口，取得结果后如实回答。', {\n    maxSteps: 2, abortSignal: AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]),\n    onStepFinish: logStep('主助手'),\n    prepareStep: ({ stepNumber }) => ({ toolChoice: stepNumber === 0 ? { type: 'tool', toolName: 'agent-reviewer' } : 'none' }),\n    delegation: {\n      onDelegationStart: () => mode === '覆盖' ? { modifiedMaxSteps: 2 } : { proceed: true },\n      onDelegationComplete: ({ result }) => {\n        console.dir({ 子任务结束原因: result?.finishReason, 子任务文本: result?.text })\n        if (!result?.text?.trim()) return { resultText: '子任务没有形成最终文字。可能已有查询结果，请保留未完成状态并检查记录。' }\n      }\n    }\n  })\n  console.dir({ text: result.text, 已发出取消: controller.signal.aborted })\n} catch (error) {\n  console.error('运行中断或失败：', error.message)\n  process.exitCode = 1\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/06-budgets.ts 1\nnode --env-file=.env src/06-budgets.ts 2\nnode --env-file=.env src/06-budgets.ts 覆盖\nnode --env-file=.env src/06-budgets.ts 取消"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：运行预算与取消",
+              "href": "https://mastra.ai/docs/subagents#cancellation"
+            }
+          ]
+        },
+        {
+          "title": "有用户确认时，继续保留审批边界",
+          "body": "子工具需要用户批准时，审批信息可以沿委派链向父运行呈现；应用仍需展示具体动作、接收决定，并使用对应恢复接口。把任务交给子助手，不会自动取得批准。\n这章先用只读查询观察运行。一次执行结束后，还要知道父子各自保存了什么，下一节进入会话与记忆。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "父子步数分别约束各自的循环。总开销要看整条调用链，完成情况要看各自的结果。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

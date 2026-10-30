@@ -1,0 +1,96 @@
+{
+  "title": "数据集（Datasets）",
+  "lead": "把输入、参考结果与典型反例保存成有版本的样本，便于重复比较。",
+  "sections": [
+    {
+      "title": "让一次问题成为下一次的检查项",
+      "body": "发现“入口未公布却补成南门”后，把这次输入与正确处理方式一起保存，后续改动就能重新检查它。**数据集（Dataset）**集中管理这些样本，供评估重复使用。\n本章保存三种情况：南门检查正常返回，东门检查是否误用默认入口，入口未公布检查是否保留待确认。每条样本都对应一项具体行为。",
+      "codeBlocks": [
+        {
+          "label": "src/samples.js",
+          "language": "javascript",
+          "code": "// 三种通知资料覆盖已知入口、不同入口和入口尚未公布的情况。\nexport const samples = [\n  { input: { notice: { venue: '南门', source: '场馆通知' } }, groundTruth: { status: '已确认', venue: '南门', source: '场馆通知' } },\n  { input: { notice: { venue: '东门', source: '场馆通知' } }, groundTruth: { status: '已确认', venue: '东门', source: '场馆通知' } },\n  { input: { notice: { venue: null, source: '场馆通知' } }, groundTruth: { status: '待确认', venue: null, source: '场馆通知' } }\n]"
+        }
+      ]
+    },
+    {
+      "title": "参考结果用于评分，输入用于执行",
+      "body": "样本中的 **input** 交给被测工作流，**groundTruth** 留给评分器核对。需要检验模型能否根据通知作答时，应让它读取原始通知，参考答案则单独保存。\n实际数据还应覆盖通知变更、来源冲突等使用情况。选入生产记录前，去除不需要的个人信息，并人工确认参考结果。"
+    },
+    {
+      "title": "样本修改，也要留下版本",
+      "body": "Mastra 通过 **mastra.datasets** 管理数据集，所用存储需要支持 **datasets 存储域**。本章用 LibSQL 保存样本；脚本先加入三条资料、读取版本，再修改一条样本的审核标记。\n修改样本会生成新的数据集版本。随后指定原版本查询，可以读取修改前的记录。代码使用 page 与 perPage 取得带 items 的分页结果；样本较多时，按同样的版本和筛选条件继续读取后续页面。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/05-datasets.js"
+        },
+        {
+          "label": "src/05-datasets.js",
+          "language": "javascript",
+          "code": "import { createLab } from './lab.js'\nimport { samples } from './samples.js'\n\n// 数据集存入框架存储，保留原始版本后再修改一个样本。\nconst mastra = createLab()\ntry {\n  const dataset = await mastra.datasets.create({ name: '入场通知核对', description: '覆盖已知入口与入口未公布' })\n  const added = await dataset.addItems({ items: samples })\n  const before = await dataset.getDetails()\n  const updated = await dataset.updateItem({ itemId: added[0].id, metadata: { reviewed: true } })\n  const after = await dataset.getDetails()\n  const snapshot = await dataset.listItems({ version: before.version, page: 0, perPage: 10 })\n  console.log('原版本：', before.version, '修改后版本：', after.version)\n  const original = snapshot.items.find(item => item.id === updated.id)\n  console.log('原版本已审核：', original.metadata?.reviewed ?? false, '新版本已审核：', updated.metadata.reviewed)\n  console.table(snapshot.items.map(item => ({ id: item.id, input: JSON.stringify(item.input), groundTruth: JSON.stringify(item.groundTruth) })))\n} finally {\n  await mastra.shutdown()\n}"
+        }
+      ]
+    },
+    {
+      "title": "把比较条件一起记录下来",
+      "body": "样本版本之外，还要记录目标代码、提示词、模型与评分规则，才能解释两次评估为什么不同。\n本章独立脚本使用内存存储，退出后清空；需要保留样本和结果时，配置文件或服务端存储。Studio 的 Datasets 入口也可以管理样本与版本。准备好资料后，下一节用 runEvals 批量运行。",
+      "links": [
+        {
+          "label": "Mastra：数据集",
+          "href": "https://mastra.ai/docs/evals/datasets"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "要把一条错误入场通知加入回归数据集，input 与 groundTruth 应分别保存什么？修改参考结果后，怎样保证仍能比较修改前的评估？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "让一次问题成为下一次的检查项",
+          "body": "发现“入口未公布却补成南门”后，把这次输入与正确处理方式一起保存，后续改动就能重新检查它。**数据集（Dataset）**集中管理这些样本，供评估重复使用。\n本章保存三种情况：南门检查正常返回，东门检查是否误用默认入口，入口未公布检查是否保留待确认。每条样本都对应一项具体行为。",
+          "codeBlocks": [
+            {
+              "label": "src/samples.ts",
+              "language": "typescript",
+              "code": "// 三种通知资料覆盖已知入口、不同入口和入口尚未公布的情况。\nexport const samples = [\n  { input: { notice: { venue: '南门', source: '场馆通知' } }, groundTruth: { status: '已确认', venue: '南门', source: '场馆通知' } },\n  { input: { notice: { venue: '东门', source: '场馆通知' } }, groundTruth: { status: '已确认', venue: '东门', source: '场馆通知' } },\n  { input: { notice: { venue: null, source: '场馆通知' } }, groundTruth: { status: '待确认', venue: null, source: '场馆通知' } }\n]"
+            }
+          ]
+        },
+        {
+          "title": "参考结果用于评分，输入用于执行",
+          "body": "样本中的 **input** 交给被测工作流，**groundTruth** 留给评分器核对。需要检验模型能否根据通知作答时，应让它读取原始通知，参考答案则单独保存。\n实际数据还应覆盖通知变更、来源冲突等使用情况。选入生产记录前，去除不需要的个人信息，并人工确认参考结果。"
+        },
+        {
+          "title": "样本修改，也要留下版本",
+          "body": "Mastra 通过 **mastra.datasets** 管理数据集，所用存储需要支持 **datasets 存储域**。本章用 LibSQL 保存样本；脚本先加入三条资料、读取版本，再修改一条样本的审核标记。\n修改样本会生成新的数据集版本。随后指定原版本查询，可以读取修改前的记录。代码使用 page 与 perPage 取得带 items 的分页结果；样本较多时，按同样的版本和筛选条件继续读取后续页面。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/05-datasets.ts"
+            },
+            {
+              "label": "src/05-datasets.ts",
+              "language": "typescript",
+              "code": "import { createLab } from './lab.ts'\nimport { samples } from './samples.ts'\n\n// 数据集存入框架存储，保留原始版本后再修改一个样本。\nconst mastra = createLab()\ntry {\n  const dataset = await mastra.datasets.create({ name: '入场通知核对', description: '覆盖已知入口与入口未公布' })\n  const added = await dataset.addItems({ items: samples })\n  const before = await dataset.getDetails()\n  const updated = await dataset.updateItem({ itemId: added[0].id, metadata: { reviewed: true } })\n  const after = await dataset.getDetails()\n  const snapshot = await dataset.listItems({ version: before.version, page: 0, perPage: 10 })\n  console.log('原版本：', before.version, '修改后版本：', after.version)\n  const original = snapshot.items.find(item => item.id === updated.id)\n  console.log('原版本已审核：', original.metadata?.reviewed ?? false, '新版本已审核：', updated.metadata.reviewed)\n  console.table(snapshot.items.map(item => ({ id: item.id, input: JSON.stringify(item.input), groundTruth: JSON.stringify(item.groundTruth) })))\n} finally {\n  await mastra.shutdown()\n}"
+            }
+          ]
+        },
+        {
+          "title": "把比较条件一起记录下来",
+          "body": "样本版本之外，还要记录目标代码、提示词、模型与评分规则，才能解释两次评估为什么不同。\n本章独立脚本使用内存存储，退出后清空；需要保留样本和结果时，配置文件或服务端存储。Studio 的 Datasets 入口也可以管理样本与版本。准备好资料后，下一节用 runEvals 批量运行。",
+          "links": [
+            {
+              "label": "Mastra：数据集",
+              "href": "https://mastra.ai/docs/evals/datasets"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

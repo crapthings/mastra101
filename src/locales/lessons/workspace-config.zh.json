@@ -55,7 +55,7 @@
         },
         {
           "title": "先读回一份活动资料",
-          "body": "下载示例，进入 12-workspace-ts 文件夹，使用 Node.ts 24 或更高版本安装依赖。所有入口只操作本地教学文件，不调用模型。\n本例使用 lab/01-workspace 目录，写入活动资料后直接读回，并打印是否配置了 Sandbox。文件操作可以在没有执行环境的情况下完成。",
+          "body": "下载示例，进入 12-workspace-ts 文件夹，使用 Node.js 24 或更高版本安装依赖。所有入口只操作本地教学文件，不调用模型。\n本例使用 lab/01-workspace 目录，写入活动资料后直接读回，并打印是否配置了 Sandbox。文件操作可以在没有执行环境的情况下完成。",
           "download": {
             "href": "/downloads/12-workspace-ts.zip",
             "label": "下载 TypeScript 示例（ZIP）"

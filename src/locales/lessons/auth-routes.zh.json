@@ -1,0 +1,74 @@
+{
+  "title": "路由保护（Route Protection）",
+  "lead": "核对公开和受保护路径，覆盖内置 API 与自定义业务入口。",
+  "sections": [
+    {
+      "title": "公开内容与成员操作分别声明",
+      "body": "公开通知应允许访客读取，成员资料与发布操作则需要认证。**protected** 与 **public** 配置按路径表达范围，自定义路由也可以通过 **requiresAuth: false** 明确公开。\n框架还保留少量公共认证入口，例如让 Studio 判断登录能力的接口。公开路径应返回适合公开的数据，不能只靠前端隐藏按钮限制访问。"
+    },
+    {
+      "title": "直接请求每类入口",
+      "body": "本例依次访问公开通知、成员通知和内置工作流目录，再携带成员令牌读取通知。预期前三条分别为 200、401、401，有效凭证的成员请求为 200。\n测试既包含业务路径，也包含 /api 下的框架能力。只验证登录页面或一个业务接口，不能说明其他入口采用了相同策略。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/05-routes.js"
+        },
+        {
+          "label": "src/05-routes.js",
+          "language": "javascript",
+          "code": "import { createLab, request } from './lab.js'\n\n// 核对公开、成员与内置路径，不能只检查一个登录入口。\nconst lab = await createLab()\ntry {\n  await request(lab, '/public/notices')\n  await request(lab, '/member/notices')\n  await request(lab, '/api/workflows')\n  await request(lab, '/member/notices', 'demo-member-a')\n} finally { await lab.close() }"
+        }
+      ]
+    },
+    {
+      "title": "前缀改变时，保护规则也要改变",
+      "body": "内置 API 前缀与认证路径匹配是两项配置。将 /api 换为 /api/v2 或其他前缀后，需要重新核对实际公开、受保护的路径。\nStudio 也需要自己的访问策略。默认可沿用 server.auth；若配置 **studio.auth**，Studio 请求使用其认证机制。明确入口和身份之后，下一节检查成员能否执行某项操作。",
+      "links": [
+        {
+          "label": "Mastra：认证覆盖范围",
+          "href": "https://mastra.ai/docs/auth/overview"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "网页不显示发布按钮，但直接请求发布接口仍能到达服务端。应该由哪一层拒绝？修改 API 前缀后，又应重新验证哪些入口？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "公开内容与成员操作分别声明",
+          "body": "公开通知应允许访客读取，成员资料与发布操作则需要认证。**protected** 与 **public** 配置按路径表达范围，自定义路由也可以通过 **requiresAuth: false** 明确公开。\n框架还保留少量公共认证入口，例如让 Studio 判断登录能力的接口。公开路径应返回适合公开的数据，不能只靠前端隐藏按钮限制访问。"
+        },
+        {
+          "title": "直接请求每类入口",
+          "body": "本例依次访问公开通知、成员通知和内置工作流目录，再携带成员令牌读取通知。预期前三条分别为 200、401、401，有效凭证的成员请求为 200。\n测试既包含业务路径，也包含 /api 下的框架能力。只验证登录页面或一个业务接口，不能说明其他入口采用了相同策略。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/05-routes.ts"
+            },
+            {
+              "label": "src/05-routes.ts",
+              "language": "typescript",
+              "code": "import { createLab, request } from './lab.ts'\n\n// 核对公开、成员与内置路径，不能只检查一个登录入口。\nconst lab = await createLab()\ntry {\n  await request(lab, '/public/notices')\n  await request(lab, '/member/notices')\n  await request(lab, '/api/workflows')\n  await request(lab, '/member/notices', 'demo-member-a')\n} finally { await lab.close() }"
+            }
+          ]
+        },
+        {
+          "title": "前缀改变时，保护规则也要改变",
+          "body": "内置 API 前缀与认证路径匹配是两项配置。将 /api 换为 /api/v2 或其他前缀后，需要重新核对实际公开、受保护的路径。\nStudio 也需要自己的访问策略。默认可沿用 server.auth；若配置 **studio.auth**，Studio 请求使用其认证机制。明确入口和身份之后，下一节检查成员能否执行某项操作。",
+          "links": [
+            {
+              "label": "Mastra：认证覆盖范围",
+              "href": "https://mastra.ai/docs/auth/overview"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "title": "先采集，再导出，最后才能查询",
+  "caption": "本章只写入本地存储：应用状态留在 LibSQL，观测记录进入 DuckDB。flush 等待导出；shutdown 在关闭存储前完成收尾。",
+  "one": "运行中的工作流或智能体",
+  "oneDetail": "采集片段、日志与指标",
+  "two": "MastraStorageExporter",
+  "twoDetail": "缓冲与批量写入",
+  "left": "LibSQL · 应用状态",
+  "leftDetail": "由组合存储的默认域承接",
+  "right": "DuckDB · 观测域",
+  "rightDetail": "追踪、日志与指标查询"
+}

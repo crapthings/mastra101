@@ -1,0 +1,3 @@
+# 本章不使用依赖中的打包命令，无需运行 esbuild 安装脚本。
+allowBuilds:
+  esbuild: false

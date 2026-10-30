@@ -175,5 +175,125 @@ export const chapters = [
       { id: 'sandbox-isolation', path: '/sandbox/isolation' },
       { id: 'sandbox-lifecycle', path: '/sandbox/lifecycle' }
     ]
+  },
+  {
+    id: 'subagents',
+    lessons: [
+      { id: 'subagent-config', path: '/subagents' },
+      { id: 'subagent-description', path: '/subagents/description' },
+      { id: 'subagent-context', path: '/subagents/context' },
+      { id: 'subagent-results', path: '/subagents/results' },
+      { id: 'subagent-hooks', path: '/subagents/hooks' },
+      { id: 'subagent-budgets', path: '/subagents/budgets' },
+      { id: 'subagent-memory', path: '/subagents/memory' },
+      { id: 'subagent-verification', path: '/subagents/review' }
+    ]
+  },
+  {
+    id: 'connections',
+    lessons: [
+      { id: 'connection-types', path: '/connections' },
+      { id: 'connection-tools', path: '/connections/mcp' },
+      { id: 'connection-transports', path: '/connections/transports' },
+      { id: 'connection-resources', path: '/connections/resources' },
+      { id: 'connection-credentials', path: '/connections/credentials' },
+      { id: 'connection-approval', path: '/connections/approval' },
+      { id: 'connection-server', path: '/connections/server' },
+      { id: 'connection-a2a', path: '/connections/a2a' },
+      { id: 'connection-runtimes', path: '/connections/runtimes' }
+    ]
+  },
+  {
+    id: 'observability',
+    lessons: [
+      { id: 'observe-config', path: '/observability' },
+      { id: 'observe-spans', path: '/observability/spans' },
+      { id: 'observe-context', path: '/observability/context' },
+      { id: 'observe-outcomes', path: '/observability/outcomes' },
+      { id: 'observe-logs', path: '/observability/logs' },
+      { id: 'observe-capture', path: '/observability/capture' },
+      { id: 'observe-metrics', path: '/observability/metrics' },
+      { id: 'observe-diagnosis', path: '/observability/diagnosis' }
+    ]
+  },
+  {
+    id: 'evals',
+    lessons: [
+      { id: 'eval-criteria', path: '/evals' },
+      { id: 'eval-checks', path: '/evals/checks' },
+      { id: 'eval-scorers', path: '/evals/scorers' },
+      { id: 'eval-judges', path: '/evals/judges' },
+      { id: 'eval-datasets', path: '/evals/datasets' },
+      { id: 'eval-batch', path: '/evals/batch' },
+      { id: 'eval-gates', path: '/evals/gates' },
+      { id: 'eval-live', path: '/evals/live' },
+      { id: 'eval-experiments', path: '/evals/experiments' }
+    ]
+  },
+  {
+    id: 'server',
+    lessons: [
+      { id: 'server-config', path: '/server' },
+      { id: 'server-routes', path: '/server/routes' },
+      { id: 'server-client', path: '/server/client' },
+      { id: 'server-context', path: '/server/context' },
+      { id: 'server-streaming', path: '/server/streaming' },
+      { id: 'server-workflows', path: '/server/workflows' },
+      { id: 'server-custom', path: '/server/custom' },
+      { id: 'server-middleware', path: '/server/middleware' },
+      { id: 'server-cancellation', path: '/server/cancellation' }
+    ]
+  },
+  {
+    id: 'auth',
+    lessons: [
+      { id: 'auth-boundaries', path: '/auth' },
+      { id: 'auth-provider', path: '/auth/provider' },
+      { id: 'auth-tokens', path: '/auth/tokens' },
+      { id: 'auth-context', path: '/auth/context' },
+      { id: 'auth-routes', path: '/auth/routes' },
+      { id: 'auth-roles', path: '/auth/roles' },
+      { id: 'auth-scope', path: '/auth/scope' }
+    ]
+  },
+  {
+    id: 'deployment',
+    lessons: [
+      { id: 'deploy-runtime', path: '/deployment' },
+      { id: 'deploy-config', path: '/deployment/config' },
+      { id: 'deploy-artifact', path: '/deployment/artifact' },
+      { id: 'deploy-persistence', path: '/deployment/persistence' },
+      { id: 'deploy-workers', path: '/deployment/workers' },
+      { id: 'deploy-health', path: '/deployment/health' },
+      { id: 'deploy-shutdown', path: '/deployment/shutdown' },
+      { id: 'deploy-release', path: '/deployment/release' }
+    ]
+  },
+  {
+    id: 'rag',
+    lessons: [
+      { id: 'rag-pipeline', path: '/rag' },
+      { id: 'rag-documents', path: '/rag/documents' },
+      { id: 'rag-chunking', path: '/rag/chunking' },
+      { id: 'rag-embedding', path: '/rag/embedding' },
+      { id: 'rag-index', path: '/rag/index' },
+      { id: 'rag-retrieval', path: '/rag/retrieval' },
+      { id: 'rag-reranking', path: '/rag/reranking' },
+      { id: 'rag-grounding', path: '/rag/grounding' },
+      { id: 'rag-evaluation', path: '/rag/evaluation' }
+    ]
+  },
+  {
+    id: 'harness',
+    lessons: [
+      { id: 'harness-runtime', path: '/harness' },
+      { id: 'harness-durable', path: '/harness/durable' },
+      { id: 'harness-observe', path: '/harness/observe' },
+      { id: 'harness-goals', path: '/harness/goals' },
+      { id: 'harness-background', path: '/harness/background' },
+      { id: 'harness-schedules', path: '/harness/schedules' },
+      { id: 'harness-controller', path: '/harness/controller' },
+      { id: 'harness-recovery', path: '/harness/recovery' }
+    ]
   }
 ]

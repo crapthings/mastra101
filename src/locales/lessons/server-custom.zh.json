@@ -1,0 +1,88 @@
+{
+  "title": "自定义路由（registerApiRoute）",
+  "lead": "为调用方提供清晰的业务接口，在路由入口完成解析与校验，再复用已有工作流。",
+  "sections": [
+    {
+      "title": "网页可以只提交通知资料",
+      "body": "业务页面可以使用 **POST /notice-preview**：提交通知入口，返回整理结果与运行标识。这样可以把页面所需的请求与响应约定集中到一个业务入口。\n**registerApiRoute()** 在 server.apiRoutes 中注册路由。处理器取得 Mastra 实例与请求上下文，再调用已有工作流，继续使用同一套通知处理逻辑。"
+    },
+    {
+      "title": "先验证请求，再启动执行",
+      "body": "共享路由先解析 JSON，再用 **Zod** 检查 venue。非空文字是已提供的入口，null 表示明确缺少入口资料，可以返回待确认；空字符串不符合约定，返回 400。\n调用方据此区分如何处理：请求格式有误时修改参数，入口未公布时保留业务上的不确定性。",
+      "codeBlocks": [
+        {
+          "label": "src/routes.js",
+          "language": "javascript",
+          "code": "import { registerApiRoute } from '@mastra/core/server'\nimport { z } from 'zod'\nimport { createCancellationRoute } from './cancellation-route.js'\n\n// 三条业务路由分别演示健康响应、输入校验与可取消的等待任务。\nexport function createRoutes (state) {\n  const schema = z.object({ venue: z.string().min(1).nullable() })\n  return [\n    registerApiRoute('/health', {\n      method: 'GET', handler: async c => c.json({ status: '服务可响应' })\n    }),\n    registerApiRoute('/notice-preview', {\n      method: 'POST', handler: async c => {\n        let body\n        try { body = await c.req.json() } catch { return c.json({ error: '请求体必须是 JSON' }, 400) }\n        const parsed = schema.safeParse(body)\n        if (!parsed.success) return c.json({ error: 'venue 必须是非空文字或 null' }, 400)\n        const run = await c.get('mastra').getWorkflow('noticeCheck').createRun()\n        const result = await run.start({ inputData: parsed.data, requestContext: c.get('requestContext') })\n        return c.json({ runId: run.runId, status: result.status, result: result.status === 'success' ? result.result : null })\n      }\n    }),\n    createCancellationRoute(state)\n  ]\n}"
+        }
+      ]
+    },
+    {
+      "title": "核对状态码与实际交付字段",
+      "body": "脚本依次提交南门、null 和空字符串。前两条执行工作流，最后一条在入口被拒绝。响应保留 **runId**、执行 **status** 与业务 **result**，供调用方按前面的三层含义读取。\n本例业务路由位于根路径，内置接口使用 /api 前缀。新增入口后，还要核对哪些中间件会作用于它，下一节继续观察这个顺序。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/07-custom.js"
+        },
+        {
+          "label": "src/07-custom.js",
+          "language": "javascript",
+          "code": "import { createLab } from './lab.js'\n\n// 自定义业务接口先验证 JSON，再调用共享的通知工作流。\nconst lab = await createLab()\ntry {\n  for (const venue of ['南门', null, '']) {\n    const response = await fetch(`${lab.baseUrl}/notice-preview`, {\n      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ venue })\n    })\n    console.log('输入入口：', venue, 'HTTP 状态：', response.status, '内容：', await response.json())\n  }\n} finally {\n  await lab.close()\n}"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：自定义路由",
+          "href": "https://mastra.ai/docs/server/custom-api-routes"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "venue 为 null 时，接口返回 200，业务结果待确认；空字符串则返回 400。调用方应分别怎样处理？后续 Agent 使用结果前还应核对哪些字段？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "网页可以只提交通知资料",
+          "body": "业务页面可以使用 **POST /notice-preview**：提交通知入口，返回整理结果与运行标识。这样可以把页面所需的请求与响应约定集中到一个业务入口。\n**registerApiRoute()** 在 server.apiRoutes 中注册路由。处理器取得 Mastra 实例与请求上下文，再调用已有工作流，继续使用同一套通知处理逻辑。"
+        },
+        {
+          "title": "先验证请求，再启动执行",
+          "body": "共享路由先解析 JSON，再用 **Zod** 检查 venue。非空文字是已提供的入口，null 表示明确缺少入口资料，可以返回待确认；空字符串不符合约定，返回 400。\n调用方据此区分如何处理：请求格式有误时修改参数，入口未公布时保留业务上的不确定性。",
+          "codeBlocks": [
+            {
+              "label": "src/routes.ts",
+              "language": "typescript",
+              "code": "import { registerApiRoute } from '@mastra/core/server'\nimport { z } from 'zod'\nimport { createCancellationRoute } from './cancellation-route.ts'\n\n// 三条业务路由分别演示健康响应、输入校验与可取消的等待任务。\nexport function createRoutes (state) {\n  const schema = z.object({ venue: z.string().min(1).nullable() })\n  return [\n    registerApiRoute('/health', {\n      method: 'GET', handler: async c => c.json({ status: '服务可响应' })\n    }),\n    registerApiRoute('/notice-preview', {\n      method: 'POST', handler: async c => {\n        let body\n        try { body = await c.req.json() } catch { return c.json({ error: '请求体必须是 JSON' }, 400) }\n        const parsed = schema.safeParse(body)\n        if (!parsed.success) return c.json({ error: 'venue 必须是非空文字或 null' }, 400)\n        const run = await c.get('mastra').getWorkflow('noticeCheck').createRun()\n        const result = await run.start({ inputData: parsed.data, requestContext: c.get('requestContext') })\n        return c.json({ runId: run.runId, status: result.status, result: result.status === 'success' ? result.result : null })\n      }\n    }),\n    createCancellationRoute(state)\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "title": "核对状态码与实际交付字段",
+          "body": "脚本依次提交南门、null 和空字符串。前两条执行工作流，最后一条在入口被拒绝。响应保留 **runId**、执行 **status** 与业务 **result**，供调用方按前面的三层含义读取。\n本例业务路由位于根路径，内置接口使用 /api 前缀。新增入口后，还要核对哪些中间件会作用于它，下一节继续观察这个顺序。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/07-custom.ts"
+            },
+            {
+              "label": "src/07-custom.ts",
+              "language": "typescript",
+              "code": "import { createLab } from './lab.ts'\n\n// 自定义业务接口先验证 JSON，再调用共享的通知工作流。\nconst lab = await createLab()\ntry {\n  for (const venue of ['南门', null, '']) {\n    const response = await fetch(`${lab.baseUrl}/notice-preview`, {\n      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ venue })\n    })\n    console.log('输入入口：', venue, 'HTTP 状态：', response.status, '内容：', await response.json())\n  }\n} finally {\n  await lab.close()\n}"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：自定义路由",
+              "href": "https://mastra.ai/docs/server/custom-api-routes"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

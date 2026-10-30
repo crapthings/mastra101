@@ -1,0 +1,100 @@
+{
+  "title": "追踪关联（Trace Context）",
+  "lead": "把业务任务、应用请求与框架运行关联起来，找到每次尝试对应的执行记录。",
+  "sections": [
+    {
+      "title": "从业务单号找到执行记录",
+      "body": "执行树能解释一次运行，但客服收到的可能是“活动查询单 001 一直没返回”。要定位问题，需要把这个业务单号关联到本次请求和实际运行。\n应用请求、框架运行与观测记录各有自己的标识。一次请求可能触发多个运行，同一个业务任务重试后也可能留下多条追踪，因此应保留它们之间的对应关系。",
+      "table": {
+        "headers": [
+          "标识",
+          "用于定位"
+        ],
+        "rows": [
+          [
+            "业务单号",
+            "用户关心的同一项任务"
+          ],
+          [
+            "requestId",
+            "应用接收的一次请求"
+          ],
+          [
+            "runId",
+            "框架中的一次运行"
+          ],
+          [
+            "traceId / spanId",
+            "一条追踪及其中的具体片段"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "把请求标识带进追踪",
+      "body": "共享配置通过 **requestContextKeys** 从 RequestContext 提取 requestId。运行入口再用 **tracingOptions** 添加 tags 与 metadata，记录“活动查询”分类和网页入口。\n只提取排查所需的字段即可。RequestContext 中的凭证和完整用户资料，应继续留在各自的使用范围内。这里的演示标识只用于关联记录，访问权限仍由应用控制。",
+      "codeBlocks": [
+        {
+          "label": "src/03-context.js",
+          "language": "javascript",
+          "code": "import { createLab, runActivity } from './lab.js'\n\n// 用业务请求标识关联执行记录，而不是把完整用户资料放进元数据。\nconst lab = await createLab()\ntry {\n  const { result, runId } = await runActivity(lab, {\n    requestId: 'activity-query-001',\n    tracingOptions: { tags: ['活动查询'], metadata: { channel: '网页' } }\n  })\n  const trace = await lab.store.getTrace({ traceId: result.traceId })\n  console.log('运行标识：', runId, '追踪标识：', result.traceId)\n  console.table(trace.spans.map(span => ({\n    spanId: span.spanId, requestId: span.requestId,\n    metadata: JSON.stringify(span.metadata), tags: span.tags\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+        }
+      ]
+    },
+    {
+      "title": "标签帮助筛选，标识帮助定位",
+      "body": "**tags** 适合“活动查询”“回归检查”等分类，**metadata** 适合补充入口、版本等业务背景。检索时先按分类缩小范围，再用请求与追踪标识定位具体执行。\n同一查询需要重试时，保留业务单号，并记录每次尝试对应的请求、运行和追踪。这样既能找齐相关记录，也能分清每次执行的结果。下一节继续看：找到记录后，怎样判断它完成了什么？"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "同一活动查询重试后成功，第一次却停在通知服务。你会保存哪些关联信息，让排查者既能找到这项任务的全部记录，又能分清两次尝试？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "从业务单号找到执行记录",
+          "body": "执行树能解释一次运行，但客服收到的可能是“活动查询单 001 一直没返回”。要定位问题，需要把这个业务单号关联到本次请求和实际运行。\n应用请求、框架运行与观测记录各有自己的标识。一次请求可能触发多个运行，同一个业务任务重试后也可能留下多条追踪，因此应保留它们之间的对应关系。",
+          "table": {
+            "headers": [
+              "标识",
+              "用于定位"
+            ],
+            "rows": [
+              [
+                "业务单号",
+                "用户关心的同一项任务"
+              ],
+              [
+                "requestId",
+                "应用接收的一次请求"
+              ],
+              [
+                "runId",
+                "框架中的一次运行"
+              ],
+              [
+                "traceId / spanId",
+                "一条追踪及其中的具体片段"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "把请求标识带进追踪",
+          "body": "共享配置通过 **requestContextKeys** 从 RequestContext 提取 requestId。运行入口再用 **tracingOptions** 添加 tags 与 metadata，记录“活动查询”分类和网页入口。\n只提取排查所需的字段即可。RequestContext 中的凭证和完整用户资料，应继续留在各自的使用范围内。这里的演示标识只用于关联记录，访问权限仍由应用控制。",
+          "codeBlocks": [
+            {
+              "label": "src/03-context.ts",
+              "language": "typescript",
+              "code": "import { createLab, runActivity } from './lab.ts'\n\n// 用业务请求标识关联执行记录，而不是把完整用户资料放进元数据。\nconst lab = await createLab()\ntry {\n  const { result, runId } = await runActivity(lab, {\n    requestId: 'activity-query-001',\n    tracingOptions: { tags: ['活动查询'], metadata: { channel: '网页' } }\n  })\n  const trace = await lab.store.getTrace({ traceId: result.traceId })\n  console.log('运行标识：', runId, '追踪标识：', result.traceId)\n  console.table(trace.spans.map(span => ({\n    spanId: span.spanId, requestId: span.requestId,\n    metadata: JSON.stringify(span.metadata), tags: span.tags\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+            }
+          ]
+        },
+        {
+          "title": "标签帮助筛选，标识帮助定位",
+          "body": "**tags** 适合“活动查询”“回归检查”等分类，**metadata** 适合补充入口、版本等业务背景。检索时先按分类缩小范围，再用请求与追踪标识定位具体执行。\n同一查询需要重试时，保留业务单号，并记录每次尝试对应的请求、运行和追踪。这样既能找齐相关记录，也能分清每次执行的结果。下一节继续看：找到记录后，怎样判断它完成了什么？"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "title": "令牌与会话（Token & Session）",
+  "lead": "分清持有凭证、验证令牌和维护登录会话，检查过期与失效后的实际请求。",
+  "sections": [
+    {
+      "title": "携带令牌，只是提交凭证",
+      "body": "客户端通常用 **Authorization: Bearer …**提交令牌，服务端再验证它。令牌内容可读取、格式看起来正确，都不能代替验证。\n**JWT（JSON Web Token）**可以携带声明并通过签名检验完整性。JWT 的常见编码不是加密，敏感资料不应因为放进令牌就被认为已经隐藏。"
+    },
+    {
+      "title": "用签名和过期时间做实际检查",
+      "body": "本例用 **MastraJwtAuth** 接入 JWT 校验，在进程内生成临时签名密钥，再分别提交有效、已过期和使用另一密钥签名的令牌。预期只有第一条通过。\n代码中的 jsonwebtoken 负责创建教学令牌，提供方负责验证。真实身份系统还需要按约定校验算法、签发者、受众等条件；不能从这个小例子推定所有条件都已经配置。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/03-tokens.js"
+        },
+        {
+          "label": "src/03-tokens.js",
+          "language": "javascript",
+          "code": "import { randomBytes } from 'node:crypto'\nimport jwt from 'jsonwebtoken'\nimport { MastraJwtAuth } from '@mastra/auth'\nimport { createLab, request } from './lab.js'\n\n// 临时签名密钥只存在于当前实验进程，不打印或保存。\nconst secret = randomBytes(32).toString('hex')\n// 教学 JWT 仍由服务端校验签名和过期时间。\nconst auth = new MastraJwtAuth({ secret, mapUserToResourceId: user => user.sub, protected: ['/member/*', '/staff/*', '/api/*'], public: ['/public/*', '/api/auth/*'] })\n// 使用与其他示例相同的业务接口观察 JWT 校验结果。\nconst lab = await createLab(auth)\ntry {\n  const claims = { sub: 'member-a', id: 'member-a', name: '成员甲', role: 'member', teamId: 'team-a' }\n  const valid = jwt.sign(claims, secret, { expiresIn: '5m', algorithm: 'HS256' })\n  const expired = jwt.sign(claims, secret, { expiresIn: -1, algorithm: 'HS256' })\n  const forged = jwt.sign(claims, randomBytes(32).toString('hex'), { algorithm: 'HS256' })\n  await request(lab, '/member/me', valid)\n  await request(lab, '/member/me', expired)\n  await request(lab, '/member/me', forged)\n} finally { await lab.close() }"
+        }
+      ]
+    },
+    {
+      "title": "会话管理还包括退出与失效",
+      "body": "**会话（Session）**描述登录状态如何被保存和继续使用，可能通过 Cookie 关联服务端记录，也可能配合访问令牌与刷新令牌。Cookie 是携带数据的机制，JWT 是令牌格式，它们可以配合。\n过期、退出、撤销与刷新需要按实际身份系统设计。客户端删掉本地令牌，只改变了当前客户端的持有状态；令牌是否仍可被其他持有者使用，要看服务端的验证与失效机制。\n令牌验证完成后，下一节看得到的身份怎样进入请求上下文。",
+      "links": [
+        {
+          "label": "Mastra：JWT",
+          "href": "https://mastra.ai/docs/auth/jwt"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "JWT 的内容能被解码，是否已经证明身份有效？用户退出后，原令牌还能不能调用接口，需要检查哪一侧的失效规则？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "携带令牌，只是提交凭证",
+          "body": "客户端通常用 **Authorization: Bearer …**提交令牌，服务端再验证它。令牌内容可读取、格式看起来正确，都不能代替验证。\n**JWT（JSON Web Token）**可以携带声明并通过签名检验完整性。JWT 的常见编码不是加密，敏感资料不应因为放进令牌就被认为已经隐藏。"
+        },
+        {
+          "title": "用签名和过期时间做实际检查",
+          "body": "本例用 **MastraJwtAuth** 接入 JWT 校验，在进程内生成临时签名密钥，再分别提交有效、已过期和使用另一密钥签名的令牌。预期只有第一条通过。\n代码中的 jsonwebtoken 负责创建教学令牌，提供方负责验证。真实身份系统还需要按约定校验算法、签发者、受众等条件；不能从这个小例子推定所有条件都已经配置。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/03-tokens.ts"
+            },
+            {
+              "label": "src/03-tokens.ts",
+              "language": "typescript",
+              "code": "import { randomBytes } from 'node:crypto'\nimport jwt from 'jsonwebtoken'\nimport { MastraJwtAuth } from '@mastra/auth'\nimport { createLab, request } from './lab.ts'\n\n// 临时签名密钥只存在于当前实验进程，不打印或保存。\nconst secret = randomBytes(32).toString('hex')\n// 教学 JWT 仍由服务端校验签名和过期时间。\nconst auth = new MastraJwtAuth({ secret, mapUserToResourceId: user => user.sub, protected: ['/member/*', '/staff/*', '/api/*'], public: ['/public/*', '/api/auth/*'] })\n// 使用与其他示例相同的业务接口观察 JWT 校验结果。\nconst lab = await createLab(auth)\ntry {\n  const claims = { sub: 'member-a', id: 'member-a', name: '成员甲', role: 'member', teamId: 'team-a' }\n  const valid = jwt.sign(claims, secret, { expiresIn: '5m', algorithm: 'HS256' })\n  const expired = jwt.sign(claims, secret, { expiresIn: -1, algorithm: 'HS256' })\n  const forged = jwt.sign(claims, randomBytes(32).toString('hex'), { algorithm: 'HS256' })\n  await request(lab, '/member/me', valid)\n  await request(lab, '/member/me', expired)\n  await request(lab, '/member/me', forged)\n} finally { await lab.close() }"
+            }
+          ]
+        },
+        {
+          "title": "会话管理还包括退出与失效",
+          "body": "**会话（Session）**描述登录状态如何被保存和继续使用，可能通过 Cookie 关联服务端记录，也可能配合访问令牌与刷新令牌。Cookie 是携带数据的机制，JWT 是令牌格式，它们可以配合。\n过期、退出、撤销与刷新需要按实际身份系统设计。客户端删掉本地令牌，只改变了当前客户端的持有状态；令牌是否仍可被其他持有者使用，要看服务端的验证与失效机制。\n令牌验证完成后，下一节看得到的身份怎样进入请求上下文。",
+          "links": [
+            {
+              "label": "Mastra：JWT",
+              "href": "https://mastra.ai/docs/auth/jwt"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

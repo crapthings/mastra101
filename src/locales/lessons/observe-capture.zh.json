@@ -1,0 +1,72 @@
+{
+  "title": "采集范围（Data Capture）",
+  "lead": "控制留下哪些数据，并理解隐藏、脱敏与采样各自的边界。",
+  "sections": [
+    {
+      "title": "先确定排查需要什么",
+      "body": "前几节已经能关联请求、步骤与日志。现在回头看：为了定位一次通知查询，真的需要保存完整消息、整份文档和所有请求字段吗？\n记录下来的资料同样需要管理访问权限、保留周期与删除方式。先列出排查所需的信息，再决定采集范围，可以减少不必要的数据副本。"
+    },
+    {
+      "title": "隐藏追踪中的输入输出",
+      "body": "**hideInput** 与 **hideOutput** 控制导出的追踪是否包含输入输出，实际执行仍使用原本的资料。示例开启两者后，通知核对正常完成，查询到的 span.input 与 span.output 则为空。\n独立日志和业务数据库有各自的记录方式，需要分别检查。配置完成后，查看真正保存下来的数据，才能确认隐藏是否符合预期。",
+      "codeBlocks": [
+        {
+          "label": "src/06-capture.js",
+          "language": "javascript",
+          "code": "import { createLab, runActivity } from './lab.js'\n\n// 隐藏输入输出后检查实际落库内容，元数据只使用虚构资料。\nconst lab = await createLab()\ntry {\n  const { result } = await runActivity(lab, { tracingOptions: {\n    hideInput: true, hideOutput: true,\n    metadata: { password: '演示口令', note: '演示备注，不含个人资料' }\n  } })\n  const trace = await lab.store.getTrace({ traceId: result.traceId })\n  console.table(trace.spans.map(span => ({\n    type: span.spanType, input: span.input, output: span.output,\n    metadata: JSON.stringify(span.metadata)\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+        }
+      ]
+    },
+    {
+      "title": "按字段脱敏，再检查实际内容",
+      "body": "**SensitiveDataFilter** 按敏感字段规则处理数据。Observability 的普通配置默认启用它；示例中的虚构 password 被替换成 [REDACTED]，普通 note 保留原文。\n因此，若手机号写在 note 的自由文本中，不能指望字段规则自动识别。自定义 **sensitiveFields** 还会替换默认列表，需要保留的字段规则应一并列出。\n少采集、按规则处理、检查实际记录，这三步需要配合完成。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "隐藏追踪输入输出，不代表独立日志也已隐藏；字段脱敏也不保证识别自由文本中的所有敏感内容。"
+        }
+      ]
+    },
+    {
+      "title": "采样也会改变能看到的范围",
+      "body": "**采样（Sampling）**决定哪些追踪被采集。开发排查时可以完整记录，流量增加后再按比例或规则控制。本章保持完整采集，便于核对每次运行。\n未采集的请求可能没有 traceId，因此查不到追踪时，也要检查采样配置。Mastra 会从片段派生自动指标，采样还可能影响这些指标的覆盖范围；解释统计结果前，应先确认它代表哪些运行。下一节就从这个范围开始读指标。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "追踪输入已经隐藏，手机号却出现在 note 日志中。你会怎样修改日志内容和采集规则，并验证新记录适合继续保存、查询或交给后续 Agent？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先确定排查需要什么",
+          "body": "前几节已经能关联请求、步骤与日志。现在回头看：为了定位一次通知查询，真的需要保存完整消息、整份文档和所有请求字段吗？\n记录下来的资料同样需要管理访问权限、保留周期与删除方式。先列出排查所需的信息，再决定采集范围，可以减少不必要的数据副本。"
+        },
+        {
+          "title": "隐藏追踪中的输入输出",
+          "body": "**hideInput** 与 **hideOutput** 控制导出的追踪是否包含输入输出，实际执行仍使用原本的资料。示例开启两者后，通知核对正常完成，查询到的 span.input 与 span.output 则为空。\n独立日志和业务数据库有各自的记录方式，需要分别检查。配置完成后，查看真正保存下来的数据，才能确认隐藏是否符合预期。",
+          "codeBlocks": [
+            {
+              "label": "src/06-capture.ts",
+              "language": "typescript",
+              "code": "import { createLab, runActivity } from './lab.ts'\n\n// 隐藏输入输出后检查实际落库内容，元数据只使用虚构资料。\nconst lab = await createLab()\ntry {\n  const { result } = await runActivity(lab, { tracingOptions: {\n    hideInput: true, hideOutput: true,\n    metadata: { password: '演示口令', note: '演示备注，不含个人资料' }\n  } })\n  const trace = await lab.store.getTrace({ traceId: result.traceId })\n  console.table(trace.spans.map(span => ({\n    type: span.spanType, input: span.input, output: span.output,\n    metadata: JSON.stringify(span.metadata)\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+            }
+          ]
+        },
+        {
+          "title": "按字段脱敏，再检查实际内容",
+          "body": "**SensitiveDataFilter** 按敏感字段规则处理数据。Observability 的普通配置默认启用它；示例中的虚构 password 被替换成 [REDACTED]，普通 note 保留原文。\n因此，若手机号写在 note 的自由文本中，不能指望字段规则自动识别。自定义 **sensitiveFields** 还会替换默认列表，需要保留的字段规则应一并列出。\n少采集、按规则处理、检查实际记录，这三步需要配合完成。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "隐藏追踪输入输出，不代表独立日志也已隐藏；字段脱敏也不保证识别自由文本中的所有敏感内容。"
+            }
+          ]
+        },
+        {
+          "title": "采样也会改变能看到的范围",
+          "body": "**采样（Sampling）**决定哪些追踪被采集。开发排查时可以完整记录，流量增加后再按比例或规则控制。本章保持完整采集，便于核对每次运行。\n未采集的请求可能没有 traceId，因此查不到追踪时，也要检查采样配置。Mastra 会从片段派生自动指标，采样还可能影响这些指标的覆盖范围；解释统计结果前，应先确认它代表哪些运行。下一节就从这个范围开始读指标。"
+        }
+      ]
+    }
+  }
+}

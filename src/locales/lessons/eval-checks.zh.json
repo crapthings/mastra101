@@ -1,0 +1,82 @@
+{
+  "title": "规则检查（Quick Checks）",
+  "lead": "用确定性检查验证明确条件，同时认识字符串和工具检查各自能证明什么。",
+  "sections": [
+    {
+      "title": "有些要求可以直接检查",
+      "body": "要求输出包含活动名、不出现内部占位符，或调用指定查询工具，都可以写成确定的检查。**Quick Checks** 提供现成的文本与工具使用检查，无需请求评审模型。\n常用的文本检查有 **checks.includes()**、**checks.excludes()**、**checks.matches()**；工具检查有 **checks.calledTool()**、**checks.noToolErrors()** 等。每项检查只回答它所定义的问题。"
+    },
+    {
+      "title": "下载后，先比较两句回答",
+      "body": "使用 Node.js 24 或更高版本，解压后进入 17-evals 文件夹。下面的入口只评分两条人工保存的回答，不运行智能体。\nchecks.includes('南门') 对两句话都返回 1，但“从南门入场”和“不要按南门安排出发”表达的意思不同。这项检查只证明出现了字符串，不能代替对通知依据和肯定、否定关系的判断。",
+      "download": {
+        "href": "/downloads/17-evals.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install --frozen-lockfile\nnode src/02-checks.js"
+        },
+        {
+          "label": "src/02-checks.js",
+          "language": "javascript",
+          "code": "import { checks } from '@mastra/evals/checks'\n\n// 两条人工保存的回答用于观察字符串检查的判断范围，不调用智能体。\nconst answers = ['请从南门入场。', '入口尚未公布，请不要按南门安排出发。']\n// 关键词存在只是一项局部检查，两条回答都会得到 1 分。\nconst scorer = checks.includes('南门')\nfor (const text of answers) {\n  const result = await scorer.run({ output: [{\n    id: 'saved-answer', role: 'assistant',\n    content: { format: 2, parts: [{ type: 'text', text }] }\n  }] })\n  console.log('回答：', text, '关键词检查：', result.score)\n}"
+        }
+      ]
+    },
+    {
+      "title": "检查工具调用，也要继续读结果",
+      "body": "calledTool 检查调用记录中是否出现指定工具，noToolErrors 检查是否记录了工具错误。工具正常返回“未查到”时，也可能通过无错误检查；接下来仍要看回答有没有保留这个业务结果。\n本例按 Agent 输出消息格式评分已保存的回答。工作流的普通对象需要使用相应格式的评分器，下一节就直接核对通知输出中的字段。",
+      "links": [
+        {
+          "label": "Mastra：Quick Checks",
+          "href": "https://mastra.ai/docs/evals/quick-checks"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "“包含南门”和“调用过通知工具”都通过了，回答仍可能写错什么？你会增加哪项检查，才能判断它是否适合交给后续 Agent？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "有些要求可以直接检查",
+          "body": "要求输出包含活动名、不出现内部占位符，或调用指定查询工具，都可以写成确定的检查。**Quick Checks** 提供现成的文本与工具使用检查，无需请求评审模型。\n常用的文本检查有 **checks.includes()**、**checks.excludes()**、**checks.matches()**；工具检查有 **checks.calledTool()**、**checks.noToolErrors()** 等。每项检查只回答它所定义的问题。"
+        },
+        {
+          "title": "下载后，先比较两句回答",
+          "body": "使用 Node.js 24 或更高版本，解压后进入 17-evals-ts 文件夹。下面的入口只评分两条人工保存的回答，不运行智能体。\nchecks.includes('南门') 对两句话都返回 1，但“从南门入场”和“不要按南门安排出发”表达的意思不同。这项检查只证明出现了字符串，不能代替对通知依据和肯定、否定关系的判断。",
+          "download": {
+            "href": "/downloads/17-evals-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install --frozen-lockfile\nnode src/02-checks.ts"
+            },
+            {
+              "label": "src/02-checks.ts",
+              "language": "typescript",
+              "code": "import { checks } from '@mastra/evals/checks'\n\n// 两条人工保存的回答用于观察字符串检查的判断范围，不调用智能体。\nconst answers = ['请从南门入场。', '入口尚未公布，请不要按南门安排出发。']\n// 关键词存在只是一项局部检查，两条回答都会得到 1 分。\nconst scorer = checks.includes('南门')\nfor (const text of answers) {\n  const result = await scorer.run({ output: [{\n    id: 'saved-answer', role: 'assistant',\n    content: { format: 2, parts: [{ type: 'text', text }] }\n  }] })\n  console.log('回答：', text, '关键词检查：', result.score)\n}"
+            }
+          ]
+        },
+        {
+          "title": "检查工具调用，也要继续读结果",
+          "body": "calledTool 检查调用记录中是否出现指定工具，noToolErrors 检查是否记录了工具错误。工具正常返回“未查到”时，也可能通过无错误检查；接下来仍要看回答有没有保留这个业务结果。\n本例按 Agent 输出消息格式评分已保存的回答。工作流的普通对象需要使用相应格式的评分器，下一节就直接核对通知输出中的字段。",
+          "links": [
+            {
+              "label": "Mastra：Quick Checks",
+              "href": "https://mastra.ai/docs/evals/quick-checks"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -11,7 +11,8 @@ const grammars = {
   yaml: () => import('shiki/langs/yaml.mjs'),
   xml: () => import('shiki/langs/xml.mjs'),
   csv: () => import('shiki/langs/csv.mjs'),
-  bash: () => import('shiki/langs/bash.mjs')
+  bash: () => import('shiki/langs/bash.mjs'),
+  dockerfile: () => import('shiki/langs/dockerfile.mjs')
 }
 
 // Reuse one theme and regex engine across all mounted code blocks.

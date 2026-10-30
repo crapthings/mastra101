@@ -1,0 +1,130 @@
+{
+  "title": "检索评估（Retrieval Evaluation）",
+  "lead": "分别验证必要资料的召回、范围和最终回答，按失败位置调整系统。",
+  "sections": [
+    {
+      "title": "先检查依据有没有进入候选",
+      "body": "沿用 17 的评估思路，先为问题标出必要文档，再观察候选是否包含它。检索没找到关键材料时，后面的生成模型无法凭空补上可靠依据。\n本例为住宿、交通与提交期限各设一个问题，按 docId 去重统计必要文档是否出现，避免把同一文档的多个片段重复算作覆盖。"
+    },
+    {
+      "title": "命中只是这一项评估的结果",
+      "body": "脚本输出三个问题的命中情况和比例，同时拒绝出现其他团队或失效资料。这是一组小样本的必要文档检查，不是整体知识库的质量分数。\n**Recall@K**通常衡量前 K 个结果覆盖了多少标注相关材料；**MRR** 关注首个相关结果出现的位置。使用这些指标前，应先说明标注单位是文档还是片段，以及哪些材料被认为相关。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/09-evaluation.js"
+        },
+        {
+          "label": "src/09-evaluation.js",
+          "language": "javascript",
+          "code": "import { createIndex, retrieve } from './index.js'\n\n// 先评估检索是否找回必要文档，再把生成内容交给独立的质量评估。\nconst cases = [\n  { question: '北京住酒店一晚能报多少？', expectedDoc: 'lodging-a' },\n  { question: '高铁允许报什么座位？', expectedDoc: 'transport-a' },\n  { question: '出差结束后几天内提交报销？', expectedDoc: 'submission-a' }\n]\n// 本轮按文档去重统计命中，不把同一文档的多个片段重复计数。\nconst index = await createIndex()\ntry {\n  let found = 0\n  for (const item of cases) {\n    const hits = await retrieve(index, item.question, 'team-a')\n    const docs = new Set(hits.map(hit => hit.metadata.docId))\n    const passed = docs.has(item.expectedDoc)\n    if (passed) found++\n    console.log('问题：', item.question, '必要文档命中：', passed, '返回文档：', [...docs])\n    if (hits.some(hit => hit.metadata.teamId !== 'team-a' || !hit.metadata.active)) throw new Error('检索包含越界或失效资料')\n  }\n  console.log('当前三个样本的必要文档命中比例：', found / cases.length)\n} finally { await index.store.close() }"
+        }
+      ]
+    },
+    {
+      "title": "把检索问题与生成问题分开定位",
+      "body": "必要文档未召回时，检查抽取、分片、向量、过滤与候选数量；资料已在候选中却未被使用时，再检查重排、上下文组织和生成提示。\n生成评估还要覆盖条件遗漏、引用不支持、资料不足与恶意指令等情况。只有检索命中率升高，不能说明最终回答也更可靠。",
+      "table": {
+        "headers": [
+          "观察结果",
+          "优先核对"
+        ],
+        "rows": [
+          [
+            "关键资料没有入库",
+            "原文抽取、分片与索引更新"
+          ],
+          [
+            "已入库但候选没有",
+            "问题表示、过滤条件与检索参数"
+          ],
+          [
+            "候选有依据，回答错误",
+            "重排、上下文组织与生成判断"
+          ],
+          [
+            "引用存在但不支持",
+            "原文条件、引用支持关系与评估规则"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "让知识库更新也接受同一组检查",
+      "body": "制度更换版本、资料重新分片或 Embedding 模型改变后，都重新运行范围与召回样本，并抽查最终回答。保留输入版本和失败记录，才容易比较改动。\n到这里，资料已经能进入一次可追踪的回答。后续进入持续执行时，还要让智能体在任务进行中获取新资料、保留进度，并按人的反馈继续或停止；这些问题将在 Harness 中继续展开。",
+      "links": [
+        {
+          "label": "Mastra：检索",
+          "href": "https://mastra.ai/reference/rag/retrieval"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "必要文档命中比例提高，回答却更常遗漏限制条件。你会怎样分别检查检索、上下文和生成？制度换版后，还必须复测哪些范围与引用案例？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先检查依据有没有进入候选",
+          "body": "沿用 17 的评估思路，先为问题标出必要文档，再观察候选是否包含它。检索没找到关键材料时，后面的生成模型无法凭空补上可靠依据。\n本例为住宿、交通与提交期限各设一个问题，按 docId 去重统计必要文档是否出现，避免把同一文档的多个片段重复算作覆盖。"
+        },
+        {
+          "title": "命中只是这一项评估的结果",
+          "body": "脚本输出三个问题的命中情况和比例，同时拒绝出现其他团队或失效资料。这是一组小样本的必要文档检查，不是整体知识库的质量分数。\n**Recall@K**通常衡量前 K 个结果覆盖了多少标注相关材料；**MRR** 关注首个相关结果出现的位置。使用这些指标前，应先说明标注单位是文档还是片段，以及哪些材料被认为相关。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/09-evaluation.ts"
+            },
+            {
+              "label": "src/09-evaluation.ts",
+              "language": "typescript",
+              "code": "import { createIndex, retrieve } from './index.ts'\n\n// 先评估检索是否找回必要文档，再把生成内容交给独立的质量评估。\nconst cases = [\n  { question: '北京住酒店一晚能报多少？', expectedDoc: 'lodging-a' },\n  { question: '高铁允许报什么座位？', expectedDoc: 'transport-a' },\n  { question: '出差结束后几天内提交报销？', expectedDoc: 'submission-a' }\n]\n// 本轮按文档去重统计命中，不把同一文档的多个片段重复计数。\nconst index = await createIndex()\ntry {\n  let found = 0\n  for (const item of cases) {\n    const hits = await retrieve(index, item.question, 'team-a')\n    const docs = new Set(hits.map(hit => hit.metadata.docId))\n    const passed = docs.has(item.expectedDoc)\n    if (passed) found++\n    console.log('问题：', item.question, '必要文档命中：', passed, '返回文档：', [...docs])\n    if (hits.some(hit => hit.metadata.teamId !== 'team-a' || !hit.metadata.active)) throw new Error('检索包含越界或失效资料')\n  }\n  console.log('当前三个样本的必要文档命中比例：', found / cases.length)\n} finally { await index.store.close() }"
+            }
+          ]
+        },
+        {
+          "title": "把检索问题与生成问题分开定位",
+          "body": "必要文档未召回时，检查抽取、分片、向量、过滤与候选数量；资料已在候选中却未被使用时，再检查重排、上下文组织和生成提示。\n生成评估还要覆盖条件遗漏、引用不支持、资料不足与恶意指令等情况。只有检索命中率升高，不能说明最终回答也更可靠。",
+          "table": {
+            "headers": [
+              "观察结果",
+              "优先核对"
+            ],
+            "rows": [
+              [
+                "关键资料没有入库",
+                "原文抽取、分片与索引更新"
+              ],
+              [
+                "已入库但候选没有",
+                "问题表示、过滤条件与检索参数"
+              ],
+              [
+                "候选有依据，回答错误",
+                "重排、上下文组织与生成判断"
+              ],
+              [
+                "引用存在但不支持",
+                "原文条件、引用支持关系与评估规则"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "让知识库更新也接受同一组检查",
+          "body": "制度更换版本、资料重新分片或 Embedding 模型改变后，都重新运行范围与召回样本，并抽查最终回答。保留输入版本和失败记录，才容易比较改动。\n到这里，资料已经能进入一次可追踪的回答。后续进入持续执行时，还要让智能体在任务进行中获取新资料、保留进度，并按人的反馈继续或停止；这些问题将在 Harness 中继续展开。",
+          "links": [
+            {
+              "label": "Mastra：检索",
+              "href": "https://mastra.ai/reference/rag/retrieval"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

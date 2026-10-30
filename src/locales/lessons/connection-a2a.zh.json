@@ -1,0 +1,138 @@
+{
+  "title": "远程智能体（A2A）",
+  "lead": "通过能力卡发现远程助手，用消息、任务状态与产物判断一次远程委派。",
+  "sections": [
+    {
+      "title": "从调用一个操作，到交出一段任务",
+      "body": "主办方可以只提供查通知的工具，也可以提供完整的资料核对助手，自己管理模型、工具与内部流程。调用方只需要交出任务，再接回进度和结果。\n**A2A（Agent-to-Agent）**连接这类远程智能体。Mastra 的 **A2AAgent** 将远端适配为可 generate()、stream() 或委派的对象；具体任务运行仍由远端系统负责。"
+    },
+    {
+      "title": "先读取能力卡，再访问执行入口",
+      "body": "**Agent Card** 描述名称、能力、执行地址与支持的交互方式。能力卡地址与真正接收任务的地址可以不同，需要按实际卡片提供的入口调用。\n卡片里的 skills 是对外能力描述，不等同于 11 章的 SKILL.md 文件技能。列出“核对通知”只表示服务声称提供这项能力，结果仍要通过任务验证。"
+    },
+    {
+      "title": "任务状态比结束文字更具体",
+      "body": "A2A 可以返回消息，也可以返回带标识的 **Task**。completed 是远端报告的完成状态，input-required 表示等待输入，failed 表示任务失败；接回状态后，还要检查实际产物。\n本章所用版本将等待输入映射为 suspended，而完成与失败都可能对应 finishReason: stop。收到 Task 时，使用 **result.task.status.state** 判断远端状态，再决定交付、等待还是处理失败。",
+      "table": {
+        "headers": [
+          "远端状态",
+          "本例如何处理",
+          "后续含义"
+        ],
+        "rows": [
+          [
+            "completed",
+            "读取核对产物",
+            "再对照资料判断是否可用"
+          ],
+          [
+            "input-required",
+            "得到 suspended 与任务标识",
+            "收集需要的信息，再按原任务恢复"
+          ],
+          [
+            "failed",
+            "保留失败说明并以非零退出码提示",
+            "核对原因，不生成虚构的核对结果"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "用本地远端观察三条路径",
+      "body": "local-a2a.js 提供回环地址上的 A2A 0.3 教学远端，按模式返回完成、等待或失败。入口文件只保留客户端调用：取得能力卡地址，创建 A2AAgent，再发送任务并读取结果。\n运行三种模式，比较 text、finishReason、远程状态与 taskId。这份远端不调用模型；等待分支让程序取得暂停信息。后续若要恢复，需要保留原任务标识，并连接支持恢复的远端实现。",
+      "codeBlocks": [
+        {
+          "label": "src/08-a2a.js",
+          "language": "javascript",
+          "code": "import { A2AAgent } from '@mastra/core/a2a'\nimport { startLocalA2A } from './local-a2a.js'\n\n// 三种受控任务状态用来观察远程结果映射，不运行真实远程模型。\nconst mode = process.argv[2] || '完成'\nif (!['完成', '等待', '失败'].includes(mode)) throw new Error('请使用“完成”“等待”或“失败”。')\n// 先准备一个本地远端，再把能力卡地址交给客户端。\nconst remote = await startLocalA2A(mode)\ntry {\n  const agent = new A2AAgent({ url: remote.cardUrl, retries: 0, timeoutMs: 3000 })\n  const result = await agent.generate('核对这份活动安排。')\n  console.dir({\n    text: result.text,\n    finishReason: result.finishReason,\n    远程任务状态: result.task?.status.state,\n    taskId: result.task?.id,\n    suspendPayload: result.suspendPayload\n  }, { depth: 5 })\n  if (result.task?.status.state === 'failed') process.exitCode = 1\n} catch (error) {\n  console.error('远程任务没有正常交付：', error.message)\n  process.exitCode = 1\n} finally {\n  await remote.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/08-a2a.js 完成\nnode src/08-a2a.js 等待\nnode src/08-a2a.js 失败"
+        }
+      ]
+    },
+    {
+      "title": "接进委派链，仍沿用任务交接规则",
+      "body": "A2AAgent 可以放进主助手的 agents，继续使用上一章的委派说明、输入筛选与结果核对。远端的工具与记忆不会因为连接成功，就全部变成本地可随意访问的配置。\n远程服务是一种运行边界。本机程序和已有 SDK 也可能保留自己的运行方式，最后一节把它们区分开。",
+      "links": [
+        {
+          "label": "Mastra：远程智能体",
+          "href": "https://mastra.ai/docs/connections/a2a"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "远端报告 failed，适配结果却是 stop。界面应该显示哪种任务状态？如果改为 input-required，继续处理前要保留什么？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "从调用一个操作，到交出一段任务",
+          "body": "主办方可以只提供查通知的工具，也可以提供完整的资料核对助手，自己管理模型、工具与内部流程。调用方只需要交出任务，再接回进度和结果。\n**A2A（Agent-to-Agent）**连接这类远程智能体。Mastra 的 **A2AAgent** 将远端适配为可 generate()、stream() 或委派的对象；具体任务运行仍由远端系统负责。"
+        },
+        {
+          "title": "先读取能力卡，再访问执行入口",
+          "body": "**Agent Card** 描述名称、能力、执行地址与支持的交互方式。能力卡地址与真正接收任务的地址可以不同，需要按实际卡片提供的入口调用。\n卡片里的 skills 是对外能力描述，不等同于 11 章的 SKILL.md 文件技能。列出“核对通知”只表示服务声称提供这项能力，结果仍要通过任务验证。"
+        },
+        {
+          "title": "任务状态比结束文字更具体",
+          "body": "A2A 可以返回消息，也可以返回带标识的 **Task**。completed 是远端报告的完成状态，input-required 表示等待输入，failed 表示任务失败；接回状态后，还要检查实际产物。\n本章所用版本将等待输入映射为 suspended，而完成与失败都可能对应 finishReason: stop。收到 Task 时，使用 **result.task.status.state** 判断远端状态，再决定交付、等待还是处理失败。",
+          "table": {
+            "headers": [
+              "远端状态",
+              "本例如何处理",
+              "后续含义"
+            ],
+            "rows": [
+              [
+                "completed",
+                "读取核对产物",
+                "再对照资料判断是否可用"
+              ],
+              [
+                "input-required",
+                "得到 suspended 与任务标识",
+                "收集需要的信息，再按原任务恢复"
+              ],
+              [
+                "failed",
+                "保留失败说明并以非零退出码提示",
+                "核对原因，不生成虚构的核对结果"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "用本地远端观察三条路径",
+          "body": "local-a2a.ts 提供回环地址上的 A2A 0.3 教学远端，按模式返回完成、等待或失败。入口文件只保留客户端调用：取得能力卡地址，创建 A2AAgent，再发送任务并读取结果。\n运行三种模式，比较 text、finishReason、远程状态与 taskId。这份远端不调用模型；等待分支让程序取得暂停信息。后续若要恢复，需要保留原任务标识，并连接支持恢复的远端实现。",
+          "codeBlocks": [
+            {
+              "label": "src/08-a2a.ts",
+              "language": "typescript",
+              "code": "import { A2AAgent } from '@mastra/core/a2a'\nimport { startLocalA2A } from './local-a2a.ts'\n\n// 三种受控任务状态用来观察远程结果映射，不运行真实远程模型。\nconst mode = process.argv[2] || '完成'\nif (!['完成', '等待', '失败'].includes(mode)) throw new Error('请使用“完成”“等待”或“失败”。')\n// 先准备一个本地远端，再把能力卡地址交给客户端。\nconst remote = await startLocalA2A(mode)\ntry {\n  const agent = new A2AAgent({ url: remote.cardUrl, retries: 0, timeoutMs: 3000 })\n  const result = await agent.generate('核对这份活动安排。')\n  console.dir({\n    text: result.text,\n    finishReason: result.finishReason,\n    远程任务状态: result.task?.status.state,\n    taskId: result.task?.id,\n    suspendPayload: result.suspendPayload\n  }, { depth: 5 })\n  if (result.task?.status.state === 'failed') process.exitCode = 1\n} catch (error) {\n  console.error('远程任务没有正常交付：', error.message)\n  process.exitCode = 1\n} finally {\n  await remote.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/08-a2a.ts 完成\nnode src/08-a2a.ts 等待\nnode src/08-a2a.ts 失败"
+            }
+          ]
+        },
+        {
+          "title": "接进委派链，仍沿用任务交接规则",
+          "body": "A2AAgent 可以放进主助手的 agents，继续使用上一章的委派说明、输入筛选与结果核对。远端的工具与记忆不会因为连接成功，就全部变成本地可随意访问的配置。\n远程服务是一种运行边界。本机程序和已有 SDK 也可能保留自己的运行方式，最后一节把它们区分开。",
+          "links": [
+            {
+              "label": "Mastra：远程智能体",
+              "href": "https://mastra.ai/docs/connections/a2a"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

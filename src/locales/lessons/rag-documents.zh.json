@@ -1,0 +1,90 @@
+{
+  "title": "文档准备（MDocument）",
+  "lead": "保留可读原文与来源属性，再将文档交给后续处理。",
+  "sections": [
+    {
+      "title": "先确认系统实际读到了什么",
+      "body": "知识库的第一份输入不是文件名，而是实际可处理的内容。**MDocument** 接收文本、Markdown、HTML 等内容，提供后续分片接口；这里使用 Markdown 文件，便于直接核对原文。\nPDF、DOCX 或扫描件需要先按文件能力解析、抽取或识别。延续 06 的文档理解概念，处理后仍应核对表格、标题、单位与页码等信息有没有保留。"
+    },
+    {
+      "title": "原文与元数据一起准备",
+      "body": "每份材料同时记录 **docId**、**version**、**teamId**、来源文件与 **active**。这些**元数据（Metadata）**用于定位、筛选和维护资料，不能靠模型看到正文后再猜。\nactive 表示当前教学目录指定的有效状态，并不是系统自动识别的最新版。真实应用需要有明确的发布和失效流程，维护这项属性。"
+    },
+    {
+      "title": "下载后检查材料目录",
+      "body": "使用 Node.js 24 或更新版本，解压后进入 21-rag 文件夹。02、03 两个入口只处理本地材料；后续入口请求 Vercel 网关，运行前再填写环境变量。\n下面先打印五份材料的归属与版本，再读取当前住宿原文。代码从文件所在位置定位 materials，避免把工作目录误当成资料来源。",
+      "download": {
+        "href": "/downloads/21-rag.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install --frozen-lockfile\nnode src/02-documents.js"
+        },
+        {
+          "label": "src/02-documents.js",
+          "language": "javascript",
+          "code": "import { loadDocuments } from './documents.js'\n\n// 先核对来源、归属与版本，再考虑怎样把原文放入检索系统。\nconst documents = await loadDocuments()\nconsole.table(documents.map(doc => ({ docId: doc.docId, version: doc.version, teamId: doc.teamId, active: doc.active, source: doc.file })))\nconsole.log('当前住宿原文：', documents.find(doc => doc.file === 'lodging-a-v2.md').text)"
+        }
+      ]
+    },
+    {
+      "title": "用自己的资料时，也保留核对入口",
+      "body": "可搜索内容应来自调用方有权处理的资料。原始文件、来源标识与处理版本要能够对应，后续才能定位抽取错误或过期内容。\n准备好原文后，下一步是把它划分为可检索的片段。",
+      "links": [
+        {
+          "label": "Mastra：MDocument",
+          "href": "https://mastra.ai/reference/rag/document"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "一份 PDF 抽取后遗漏了表格单位，却已成功入库。应在哪一步发现问题？为了追查它，需要保留哪些来源和版本信息？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先确认系统实际读到了什么",
+          "body": "知识库的第一份输入不是文件名，而是实际可处理的内容。**MDocument** 接收文本、Markdown、HTML 等内容，提供后续分片接口；这里使用 Markdown 文件，便于直接核对原文。\nPDF、DOCX 或扫描件需要先按文件能力解析、抽取或识别。延续 06 的文档理解概念，处理后仍应核对表格、标题、单位与页码等信息有没有保留。"
+        },
+        {
+          "title": "原文与元数据一起准备",
+          "body": "每份材料同时记录 **docId**、**version**、**teamId**、来源文件与 **active**。这些**元数据（Metadata）**用于定位、筛选和维护资料，不能靠模型看到正文后再猜。\nactive 表示当前教学目录指定的有效状态，并不是系统自动识别的最新版。真实应用需要有明确的发布和失效流程，维护这项属性。"
+        },
+        {
+          "title": "下载后检查材料目录",
+          "body": "使用 Node.js 24 或更新版本，解压后进入 21-rag-ts 文件夹。02、03 两个入口只处理本地材料；后续入口请求 Vercel 网关，运行前再填写环境变量。\n下面先打印五份材料的归属与版本，再读取当前住宿原文。代码从文件所在位置定位 materials，避免把工作目录误当成资料来源。",
+          "download": {
+            "href": "/downloads/21-rag-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install --frozen-lockfile\nnode src/02-documents.ts"
+            },
+            {
+              "label": "src/02-documents.ts",
+              "language": "typescript",
+              "code": "import { loadDocuments } from './documents.ts'\n\n// 先核对来源、归属与版本，再考虑怎样把原文放入检索系统。\nconst documents = await loadDocuments()\nconsole.table(documents.map(doc => ({ docId: doc.docId, version: doc.version, teamId: doc.teamId, active: doc.active, source: doc.file })))\nconsole.log('当前住宿原文：', documents.find(doc => doc.file === 'lodging-a-v2.md').text)"
+            }
+          ]
+        },
+        {
+          "title": "用自己的资料时，也保留核对入口",
+          "body": "可搜索内容应来自调用方有权处理的资料。原始文件、来源标识与处理版本要能够对应，后续才能定位抽取错误或过期内容。\n准备好原文后，下一步是把它划分为可检索的片段。",
+          "links": [
+            {
+              "label": "Mastra：MDocument",
+              "href": "https://mastra.ai/reference/rag/document"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

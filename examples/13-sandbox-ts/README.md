@@ -1,6 +1,6 @@
 # 13 沙箱：执行活动处理代码
 
-Node.ts >=24，此包使用 TypeScript。先执行 pnpm install。全部入口只运行本章固定教学代码，无需模型密钥。
+Node.js >=24，此包使用 TypeScript。先执行 pnpm install。全部入口只运行本章固定教学代码，无需模型密钥。
 
 ```bash
 node src/01-runtime.ts

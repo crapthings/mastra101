@@ -1,0 +1,118 @@
+{
+  "title": "委派说明（Description）",
+  "lead": "让主助手知道何时找谁，让子助手知道接到任务后怎样处理。",
+  "sections": [
+    {
+      "title": "同一份通知，有两种不同的工作",
+      "body": "核对通知需要区分时间含义、找出缺口；编写提醒需要把已核对内容组织得简短自然。两位助手都叫“活动专家”，主助手就很难据此选择。\n**description** 面向调用方，说明这位子助手适合什么任务、需要什么材料、会返回什么。写成“核对活动事实与缺口”，比“帮助处理活动”更容易判断。"
+    },
+    {
+      "title": "对外说用途，对内写规则",
+      "body": "**instructions** 是子助手的系统提示词，说明接到任务后怎样处理。例如核对助手要保留未知地点，文案助手要保留待确认事项。\ndescription 可以说明“接收已核对资料”；真正调用时，仍要交付这些资料。描述职责不会自动查询数据，也不会自动建立固定执行顺序。",
+      "table": {
+        "headers": [
+          "位置",
+          "读者是谁",
+          "要回答什么"
+        ],
+        "rows": [
+          [
+            "description",
+            "主模型与维护者",
+            "什么时候应该委派给它"
+          ],
+          [
+            "instructions",
+            "子模型",
+            "接到任务后按什么原则处理"
+          ],
+          [
+            "委派 prompt",
+            "本次子任务",
+            "这次具体处理哪些材料、交付什么"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "先列出两位助手的职责",
+      "body": "本例通过 **listAgents()** 查看注册的子助手，再读取 getDescription() 与 getInstructions()。只检查配置，不发起模型请求。\n将两份用途与规则放在一起看：核对助手不编写虚构安排，文案助手不把缺少的事实补完整。当前主助手仍沿用核对指令；完整的两阶段协作在章末再接起来。",
+      "codeBlocks": [
+        {
+          "label": "src/02-description.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { model, makeReviewer, makeCoordinator } from './shared.js'\n\n// description 对外说明核对任务，instructions 对内说明处理原则。\nconst reviewer = makeReviewer()\n// 文案助手接收已核对资料，负责组织表达，不负责查证新事实。\nconst writer = new Agent({\n  id: 'reminder-writer', name: '提醒文案助手', model,\n  description: '根据已核对的事实与待确认清单编写简短提醒，不查询或补充活动规定。',\n  instructions: '只根据收到的核对结果编写中文提醒，保留待确认事项，不把未完成预约写成已完成。'\n})\n// 配置多个子智能体后，先在不调用模型的情况下核对职责目录。\nconst parent = makeCoordinator({ reviewer, writer })\nfor (const [key, agent] of Object.entries(await parent.listAgents())) {\n  console.dir({ 注册键: key, Agent标识: agent.id, 用途: agent.getDescription(), 系统提示词: await agent.getInstructions() })\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/02-description.js"
+        }
+      ]
+    },
+    {
+      "title": "职责不能靠名称代替",
+      "body": "先用一项明确任务检查选择是否合理，再逐渐增加职责。两个 description 大量重叠时，先收紧工作范围，不急着再加一位“协调专家”。\n能选对人以后，还要把材料交对。下一节看主会话中的哪些内容应该跟随委派进入子任务。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "把两位助手的 description 都改成“处理所有活动问题”，会让哪一步更难判断？怎样分别说明核对与文案的输入和交付？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "同一份通知，有两种不同的工作",
+          "body": "核对通知需要区分时间含义、找出缺口；编写提醒需要把已核对内容组织得简短自然。两位助手都叫“活动专家”，主助手就很难据此选择。\n**description** 面向调用方，说明这位子助手适合什么任务、需要什么材料、会返回什么。写成“核对活动事实与缺口”，比“帮助处理活动”更容易判断。"
+        },
+        {
+          "title": "对外说用途，对内写规则",
+          "body": "**instructions** 是子助手的系统提示词，说明接到任务后怎样处理。例如核对助手要保留未知地点，文案助手要保留待确认事项。\ndescription 可以说明“接收已核对资料”；真正调用时，仍要交付这些资料。描述职责不会自动查询数据，也不会自动建立固定执行顺序。",
+          "table": {
+            "headers": [
+              "位置",
+              "读者是谁",
+              "要回答什么"
+            ],
+            "rows": [
+              [
+                "description",
+                "主模型与维护者",
+                "什么时候应该委派给它"
+              ],
+              [
+                "instructions",
+                "子模型",
+                "接到任务后按什么原则处理"
+              ],
+              [
+                "委派 prompt",
+                "本次子任务",
+                "这次具体处理哪些材料、交付什么"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "先列出两位助手的职责",
+          "body": "本例通过 **listAgents()** 查看注册的子助手，再读取 getDescription() 与 getInstructions()。只检查配置，不发起模型请求。\n将两份用途与规则放在一起看：核对助手不编写虚构安排，文案助手不把缺少的事实补完整。当前主助手仍沿用核对指令；完整的两阶段协作在章末再接起来。",
+          "codeBlocks": [
+            {
+              "label": "src/02-description.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { model, makeReviewer, makeCoordinator } from './shared.ts'\n\n// description 对外说明核对任务，instructions 对内说明处理原则。\nconst reviewer = makeReviewer()\n// 文案助手接收已核对资料，负责组织表达，不负责查证新事实。\nconst writer = new Agent({\n  id: 'reminder-writer', name: '提醒文案助手', model,\n  description: '根据已核对的事实与待确认清单编写简短提醒，不查询或补充活动规定。',\n  instructions: '只根据收到的核对结果编写中文提醒，保留待确认事项，不把未完成预约写成已完成。'\n})\n// 配置多个子智能体后，先在不调用模型的情况下核对职责目录。\nconst parent = makeCoordinator({ reviewer, writer })\nfor (const [key, agent] of Object.entries(await parent.listAgents())) {\n  console.dir({ 注册键: key, Agent标识: agent.id, 用途: agent.getDescription(), 系统提示词: await agent.getInstructions() })\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/02-description.ts"
+            }
+          ]
+        },
+        {
+          "title": "职责不能靠名称代替",
+          "body": "先用一项明确任务检查选择是否合理，再逐渐增加职责。两个 description 大量重叠时，先收紧工作范围，不急着再加一位“协调专家”。\n能选对人以后，还要把材料交对。下一节看主会话中的哪些内容应该跟随委派进入子任务。"
+        }
+      ]
+    }
+  }
+}

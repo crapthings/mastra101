@@ -1,0 +1,15 @@
+{
+  "name": "mastra-observability-journey",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@mastra/core": "1.80.0",
+    "@mastra/observability": "1.22.0",
+    "@mastra/duckdb": "1.16.0",
+    "@mastra/libsql": "1.27.1",
+    "zod": "4.6.7"
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "title": "认证提供方（Auth Provider）",
+  "lead": "用 SimpleAuth 观察凭证如何变成已认证身份，并理解替换认证系统时应保留的接口。",
+  "sections": [
+    {
+      "title": "先用可观察的凭证映射",
+      "body": "**SimpleAuth** 把令牌映射到用户对象，适合本地开发、测试或简单 API key 场景。本章使用公开的教学令牌，分别对应成员甲、成员乙和工作人员甲，不连接真实登录系统。\n令牌有效时，认证提供方返回对应身份；缺少或使用未知令牌时，请求应被拒绝。业务路由从认证结果读取身份，而不是从用户填写的名字猜测是谁。"
+    },
+    {
+      "title": "运行三种凭证情况",
+      "body": "使用 Node.js 24 或更新版本，解压后进入 19-auth 文件夹。本章所有示例都在回环地址启动独立服务，不请求模型，也不需要外部账号。\n共享模块用 **server.auth** 安装提供方，并明确受保护与公开的路径。脚本依次发送无凭证、错误凭证和有效教学凭证，预期为 401、401、200。",
+      "download": {
+        "href": "/downloads/19-auth.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install --frozen-lockfile\nnode src/02-provider.js"
+        },
+        {
+          "label": "src/lab.js",
+          "language": "javascript",
+          "code": "import { once } from 'node:events'\nimport { Mastra } from '@mastra/core/mastra'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { SimpleAuth } from '@mastra/core/server'\nimport { MastraServer } from '@mastra/hono'\nimport { Hono } from 'hono'\nimport { serve } from '@hono/node-server'\nimport { tokens, createNotices } from './policy.js'\nimport { createRoutes } from './routes.js'\n\n// 以实际 Mastra 认证保护两组业务路径，公开路由单独声明。\nexport async function createLab (provider) {\n  const auth = provider ?? new SimpleAuth({\n    tokens, protected: ['/member/*', '/staff/*', '/api/*'], public: ['/public/*', '/api/auth/*'],\n    mapUserToResourceId: user => user.id\n  })\n  const mastra = new Mastra({ storage: new LibSQLStore({ id: 'auth-lab', url: ':memory:' }), server: { auth, apiRoutes: createRoutes(createNotices()) } })\n  const app = new Hono()\n  await new MastraServer({ app, mastra, prefix: '/api' }).init()\n  const http = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 })\n  await once(http, 'listening')\n  return { baseUrl: `http://127.0.0.1:${http.address().port}`, close: async () => {\n    await new Promise((resolve, reject) => http.close(error => error ? reject(error) : resolve()))\n    await mastra.shutdown()\n  } }\n}\n\n// 用一条明确的 HTTP 请求打印状态与结果，不记录完整令牌。\nexport async function request (lab, path, token, options = {}) {\n  const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers }\n  const response = await fetch(lab.baseUrl + path, { ...options, headers })\n  const body = await response.json()\n  console.log(path, response.status, body)\n  return { status: response.status, body }\n}"
+        },
+        {
+          "label": "src/02-provider.js",
+          "language": "javascript",
+          "code": "import { createLab, request } from './lab.js'\n\n// 分别验证缺少凭证、错误凭证与已知教学凭证的处理。\nconst lab = await createLab()\ntry {\n  await request(lab, '/member/me')\n  await request(lab, '/member/me', 'not-a-valid-token')\n  await request(lab, '/member/me', 'demo-member-a')\n} finally { await lab.close() }"
+        }
+      ]
+    },
+    {
+      "title": "更换提供方，不改变业务身份约定",
+      "body": "接入已有身份系统时，可以选择相应集成，或扩展 **MastraAuthProvider** 验证自己的令牌并返回用户。业务层仍需要稳定的用户标识及必要属性。\nSimpleAuth 的静态映射不会自动提供过期、刷新、撤销或完整登录会话。下一节分别解释这些生命周期问题，以及 JWT 验证能解决其中的哪一部分。",
+      "links": [
+        {
+          "label": "Mastra：SimpleAuth",
+          "href": "https://mastra.ai/docs/auth/simple-auth"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "一个未知令牌被拒绝，有效成员令牌被接受，分别证明了什么？更换真实认证系统后，业务代码仍应从哪里取得用户身份？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先用可观察的凭证映射",
+          "body": "**SimpleAuth** 把令牌映射到用户对象，适合本地开发、测试或简单 API key 场景。本章使用公开的教学令牌，分别对应成员甲、成员乙和工作人员甲，不连接真实登录系统。\n令牌有效时，认证提供方返回对应身份；缺少或使用未知令牌时，请求应被拒绝。业务路由从认证结果读取身份，而不是从用户填写的名字猜测是谁。"
+        },
+        {
+          "title": "运行三种凭证情况",
+          "body": "使用 Node.js 24 或更新版本，解压后进入 19-auth-ts 文件夹。本章所有示例都在回环地址启动独立服务，不请求模型，也不需要外部账号。\n共享模块用 **server.auth** 安装提供方，并明确受保护与公开的路径。脚本依次发送无凭证、错误凭证和有效教学凭证，预期为 401、401、200。",
+          "download": {
+            "href": "/downloads/19-auth-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install --frozen-lockfile\nnode src/02-provider.ts"
+            },
+            {
+              "label": "src/lab.ts",
+              "language": "typescript",
+              "code": "import { once } from 'node:events'\nimport { Mastra } from '@mastra/core/mastra'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { SimpleAuth } from '@mastra/core/server'\nimport { MastraServer } from '@mastra/hono'\nimport { Hono } from 'hono'\nimport { serve } from '@hono/node-server'\nimport { tokens, createNotices } from './policy.ts'\nimport { createRoutes } from './routes.ts'\n\n// 以实际 Mastra 认证保护两组业务路径，公开路由单独声明。\nexport async function createLab (provider) {\n  const auth = provider ?? new SimpleAuth({\n    tokens, protected: ['/member/*', '/staff/*', '/api/*'], public: ['/public/*', '/api/auth/*'],\n    mapUserToResourceId: user => user.id\n  })\n  const mastra = new Mastra({ storage: new LibSQLStore({ id: 'auth-lab', url: ':memory:' }), server: { auth, apiRoutes: createRoutes(createNotices()) } })\n  const app = new Hono()\n  await new MastraServer({ app, mastra, prefix: '/api' }).init()\n  const http = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 })\n  await once(http, 'listening')\n  return { baseUrl: `http://127.0.0.1:${http.address().port}`, close: async () => {\n    await new Promise((resolve, reject) => http.close(error => error ? reject(error) : resolve()))\n    await mastra.shutdown()\n  } }\n}\n\n// 用一条明确的 HTTP 请求打印状态与结果，不记录完整令牌。\nexport async function request (lab, path, token, options = {}) {\n  const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers }\n  const response = await fetch(lab.baseUrl + path, { ...options, headers })\n  const body = await response.json()\n  console.log(path, response.status, body)\n  return { status: response.status, body }\n}"
+            },
+            {
+              "label": "src/02-provider.ts",
+              "language": "typescript",
+              "code": "import { createLab, request } from './lab.ts'\n\n// 分别验证缺少凭证、错误凭证与已知教学凭证的处理。\nconst lab = await createLab()\ntry {\n  await request(lab, '/member/me')\n  await request(lab, '/member/me', 'not-a-valid-token')\n  await request(lab, '/member/me', 'demo-member-a')\n} finally { await lab.close() }"
+            }
+          ]
+        },
+        {
+          "title": "更换提供方，不改变业务身份约定",
+          "body": "接入已有身份系统时，可以选择相应集成，或扩展 **MastraAuthProvider** 验证自己的令牌并返回用户。业务层仍需要稳定的用户标识及必要属性。\nSimpleAuth 的静态映射不会自动提供过期、刷新、撤销或完整登录会话。下一节分别解释这些生命周期问题，以及 JWT 验证能解决其中的哪一部分。",
+          "links": [
+            {
+              "label": "Mastra：SimpleAuth",
+              "href": "https://mastra.ai/docs/auth/simple-auth"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "title": "角色与权限（RBAC）",
+  "lead": "把角色映射成业务操作权限，并在真正执行前核对。",
+  "sections": [
+    {
+      "title": "登录成功之后，继续判断能做什么",
+      "body": "**基于角色的访问控制（RBAC）**用角色组织允许的操作。本例成员可以读取通知，工作人员还能发布通知。先定义权限，再由业务接口检查，便于让不同入口遵守同一约定。\n角色名本身不执行限制。实际处理发布请求时，需要从已认证身份取得角色，确认包含 **notice:publish** 权限后，才能进行写入。",
+      "codeBlocks": [
+        {
+          "label": "src/policy.js",
+          "language": "javascript",
+          "code": "// 公开教学令牌仅用于本地实验，不包含真实账号凭证。\nexport const tokens = {\n  'demo-member-a': { id: 'member-a', name: '成员甲', role: 'member', teamId: 'team-a' },\n  'demo-member-b': { id: 'member-b', name: '成员乙', role: 'member', teamId: 'team-b' },\n  'demo-staff-a': { id: 'staff-a', name: '工作人员甲', role: 'staff', teamId: 'team-a' }\n}\n\n// 应用业务权限表将角色映射到允许的操作。\nexport const permissions = { member: ['notice:read'], staff: ['notice:read', 'notice:publish'] }\n\n// 每次实验建立独立资料，避免跨入口遗留发布结果。\nexport function createNotices () {\n  return [\n    { id: 'notice-a', teamId: 'team-a', text: '阅读分享会从南门入场。', published: true },\n    { id: 'notice-b', teamId: 'team-b', text: '展览从东门入场。', published: false }\n  ]\n}"
+        }
+      ]
+    },
+    {
+      "title": "用同一个操作比较不同角色",
+      "body": "成员与工作人员都向同一条通知发起发布请求，预期成员得到 403，工作人员得到 200。示例只修改当前进程中的教学记录，不向真实用户发送通知。\n本章演示的是应用自己维护的业务权限表。Mastra 另有企业版的 **server.rbac** 与角色权限提供方，用于框架和 Studio 等能力控制，接入时应按相应版本与许可要求配置，不能把本例表格当成已启用该机制。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/06-roles.js"
+        },
+        {
+          "label": "src/06-roles.js",
+          "language": "javascript",
+          "code": "import { createLab, request } from './lab.js'\n\n// 同一发布操作需要角色权限，登录成功并不自动允许写入。\nconst lab = await createLab()\ntry {\n  await request(lab, '/staff/notices/notice-a/publish', 'demo-member-a', { method: 'POST' })\n  await request(lab, '/staff/notices/notice-a/publish', 'demo-staff-a', { method: 'POST' })\n} finally { await lab.close() }"
+        }
+      ]
+    },
+    {
+      "title": "操作允许之后，还要检查记录归属",
+      "body": "工作人员可以发布通知，并不等于可以发布所有团队的通知。发布处理器需要在写入前继续查找属于当前团队的记录。\n下一节把角色检查和记录范围放到同一条路径中，同时检查列表、单条读取与写入。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "授权规则需要落实到实际操作入口。模型提示词、页面按钮和角色字段，都不能代替执行前的检查。"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：认证与权限扩展",
+          "href": "https://mastra.ai/docs/auth/overview"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "工作人员有 notice:publish 权限，为什么仍不能直接按客户端给出的通知 id 写入？权限检查应该发生在发布操作的什么位置？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "登录成功之后，继续判断能做什么",
+          "body": "**基于角色的访问控制（RBAC）**用角色组织允许的操作。本例成员可以读取通知，工作人员还能发布通知。先定义权限，再由业务接口检查，便于让不同入口遵守同一约定。\n角色名本身不执行限制。实际处理发布请求时，需要从已认证身份取得角色，确认包含 **notice:publish** 权限后，才能进行写入。",
+          "codeBlocks": [
+            {
+              "label": "src/policy.ts",
+              "language": "typescript",
+              "code": "// 公开教学令牌仅用于本地实验，不包含真实账号凭证。\nexport const tokens = {\n  'demo-member-a': { id: 'member-a', name: '成员甲', role: 'member', teamId: 'team-a' },\n  'demo-member-b': { id: 'member-b', name: '成员乙', role: 'member', teamId: 'team-b' },\n  'demo-staff-a': { id: 'staff-a', name: '工作人员甲', role: 'staff', teamId: 'team-a' }\n}\n\n// 应用业务权限表将角色映射到允许的操作。\nexport const permissions = { member: ['notice:read'], staff: ['notice:read', 'notice:publish'] }\n\n// 每次实验建立独立资料，避免跨入口遗留发布结果。\nexport function createNotices () {\n  return [\n    { id: 'notice-a', teamId: 'team-a', text: '阅读分享会从南门入场。', published: true },\n    { id: 'notice-b', teamId: 'team-b', text: '展览从东门入场。', published: false }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "title": "用同一个操作比较不同角色",
+          "body": "成员与工作人员都向同一条通知发起发布请求，预期成员得到 403，工作人员得到 200。示例只修改当前进程中的教学记录，不向真实用户发送通知。\n本章演示的是应用自己维护的业务权限表。Mastra 另有企业版的 **server.rbac** 与角色权限提供方，用于框架和 Studio 等能力控制，接入时应按相应版本与许可要求配置，不能把本例表格当成已启用该机制。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/06-roles.ts"
+            },
+            {
+              "label": "src/06-roles.ts",
+              "language": "typescript",
+              "code": "import { createLab, request } from './lab.ts'\n\n// 同一发布操作需要角色权限，登录成功并不自动允许写入。\nconst lab = await createLab()\ntry {\n  await request(lab, '/staff/notices/notice-a/publish', 'demo-member-a', { method: 'POST' })\n  await request(lab, '/staff/notices/notice-a/publish', 'demo-staff-a', { method: 'POST' })\n} finally { await lab.close() }"
+            }
+          ]
+        },
+        {
+          "title": "操作允许之后，还要检查记录归属",
+          "body": "工作人员可以发布通知，并不等于可以发布所有团队的通知。发布处理器需要在写入前继续查找属于当前团队的记录。\n下一节把角色检查和记录范围放到同一条路径中，同时检查列表、单条读取与写入。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "授权规则需要落实到实际操作入口。模型提示词、页面按钮和角色字段，都不能代替执行前的检查。"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：认证与权限扩展",
+              "href": "https://mastra.ai/docs/auth/overview"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "title": "候选重排（Reranking）",
+  "lead": "对已召回候选重新判断相关性，保留各项分数的含义和成本边界。",
+  "sections": [
+    {
+      "title": "从接近的问题，走向能回答的片段",
+      "body": "向量检索快速找出候选，**重排（Reranking）**再结合问题与候选原文，比较哪些更能提供答案。它只处理已召回的集合，必要文档根本没有进入候选时，还要回到检索阶段修正。\n本例问题同时问住宿上限和超额处理，需要把含批准条件的标准片段排在只讲住宿凭证的片段之前。"
+    },
+    {
+      "title": "明确本例怎样组合分数",
+      "body": "Mastra 的 **rerank()** 可以组合语义相关性、向量分数与原始位置。本例用生成模型判断语义，再与向量分数按 0.7、0.3 组合，位置权重为 0。\n这些权重是演示配置，不是通用最优值。代码保留 **details**，方便区分最终分数由哪些部分组成；混合后的数值也不能直接当作统一的正确率或拒答阈值。",
+      "codeBlocks": [
+        {
+          "label": "src/ranking.js",
+          "language": "javascript",
+          "code": "import { rerank } from '@mastra/rag'\nimport { ModelRouterLanguageModel } from '@mastra/core/llm'\n\n// 只对已授权候选重排；模型判断、向量相似度与原始位置的权重明确分开。\nexport async function rankCandidates (question, candidates) {\n  if (!candidates.length) return []\n  const model = new ModelRouterLanguageModel('vercel/openai/gpt-6.1-sol')\n  return rerank(candidates, question, model, { weights: { semantic: 0.7, vector: 0.3, position: 0 }, topK: 3 })\n}"
+        }
+      ]
+    },
+    {
+      "title": "控制进入重排的候选数量",
+      "body": "本例使用 Vercel 下的 gpt-6.1-sol，为候选逐段判断相关性，因此会增加模型调用。专用重排模型则有自己的输入与批量接口，应按实际需求接入。\n脚本打印重排后的顺序、分数和原文。先看候选是否包含必要事实，再比较重排是否把它们提前，避免只看最后一个总分。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/07-reranking.js"
+        },
+        {
+          "label": "src/07-reranking.js",
+          "language": "javascript",
+          "code": "import { createIndex, retrieve } from './index.js'\nimport { rankCandidates } from './ranking.js'\n\n// 重排只改变已召回候选的顺序，不能找回未进入候选的资料。\nconst index = await createIndex()\ntry {\n  const question = '甲团队到北京住宿，上限是多少，超出要怎么办？'\n  const candidates = await retrieve(index, question, 'team-a')\n  const ranked = await rankCandidates(question, candidates)\n  console.table(ranked.map(hit => ({ id: hit.result.id, score: hit.score, details: JSON.stringify(hit.details), text: hit.result.metadata.text })))\n} finally { await index.store.close() }"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：rerank",
+          "href": "https://mastra.ai/reference/rag/rerank"
+        }
+      ]
+    },
+    {
+      "title": "整理给生成模型的上下文",
+      "body": "重排后仍可去重、补充必要的相邻段落，并按生成模型的输入预算组织材料。本例资料较短，取前三个候选，同时保留各自来源。\n下一节将它们交给 Agent，要求回答引用本次片段，并保留资料不足的结果。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "需要的住宿条件未进入最初四个候选，调整重排权重能找回它吗？你会先检查哪一段链路，再决定是否增加候选或修改分片？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "从接近的问题，走向能回答的片段",
+          "body": "向量检索快速找出候选，**重排（Reranking）**再结合问题与候选原文，比较哪些更能提供答案。它只处理已召回的集合，必要文档根本没有进入候选时，还要回到检索阶段修正。\n本例问题同时问住宿上限和超额处理，需要把含批准条件的标准片段排在只讲住宿凭证的片段之前。"
+        },
+        {
+          "title": "明确本例怎样组合分数",
+          "body": "Mastra 的 **rerank()** 可以组合语义相关性、向量分数与原始位置。本例用生成模型判断语义，再与向量分数按 0.7、0.3 组合，位置权重为 0。\n这些权重是演示配置，不是通用最优值。代码保留 **details**，方便区分最终分数由哪些部分组成；混合后的数值也不能直接当作统一的正确率或拒答阈值。",
+          "codeBlocks": [
+            {
+              "label": "src/ranking.ts",
+              "language": "typescript",
+              "code": "import { rerank } from '@mastra/rag'\nimport { ModelRouterLanguageModel } from '@mastra/core/llm'\n\n// 只对已授权候选重排；模型判断、向量相似度与原始位置的权重明确分开。\nexport async function rankCandidates (question, candidates) {\n  if (!candidates.length) return []\n  const model = new ModelRouterLanguageModel('vercel/openai/gpt-6.1-sol')\n  return rerank(candidates, question, model, { weights: { semantic: 0.7, vector: 0.3, position: 0 }, topK: 3 })\n}"
+            }
+          ]
+        },
+        {
+          "title": "控制进入重排的候选数量",
+          "body": "本例使用 Vercel 下的 gpt-6.1-sol，为候选逐段判断相关性，因此会增加模型调用。专用重排模型则有自己的输入与批量接口，应按实际需求接入。\n脚本打印重排后的顺序、分数和原文。先看候选是否包含必要事实，再比较重排是否把它们提前，避免只看最后一个总分。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/07-reranking.ts"
+            },
+            {
+              "label": "src/07-reranking.ts",
+              "language": "typescript",
+              "code": "import { createIndex, retrieve } from './index.ts'\nimport { rankCandidates } from './ranking.ts'\n\n// 重排只改变已召回候选的顺序，不能找回未进入候选的资料。\nconst index = await createIndex()\ntry {\n  const question = '甲团队到北京住宿，上限是多少，超出要怎么办？'\n  const candidates = await retrieve(index, question, 'team-a')\n  const ranked = await rankCandidates(question, candidates)\n  console.table(ranked.map(hit => ({ id: hit.result.id, score: hit.score, details: JSON.stringify(hit.details), text: hit.result.metadata.text })))\n} finally { await index.store.close() }"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：rerank",
+              "href": "https://mastra.ai/reference/rag/rerank"
+            }
+          ]
+        },
+        {
+          "title": "整理给生成模型的上下文",
+          "body": "重排后仍可去重、补充必要的相邻段落，并按生成模型的输入预算组织材料。本例资料较短，取前三个候选，同时保留各自来源。\n下一节将它们交给 Agent，要求回答引用本次片段，并保留资料不足的结果。"
+        }
+      ]
+    }
+  }
+}

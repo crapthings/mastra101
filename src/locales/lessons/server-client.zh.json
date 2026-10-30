@@ -1,0 +1,74 @@
+{
+  "title": "客户端（MastraClient）",
+  "lead": "用 SDK 调用服务，并分清客户端代理、HTTP 地址与服务端运行对象。",
+  "sections": [
+    {
+      "title": "调用方只需要接口入口",
+      "body": "**MastraClient** 为 HTTP 接口提供调用方法，可用于浏览器或支持 fetch 的服务端环境。配置 **baseUrl** 后，就可以取得 Agent、Workflow 的客户端对象。\nclient.getWorkflow() 返回调用代理，执行仍发生在远端 Mastra 服务中。模型配置、网关密钥与存储留在服务端，网页只提交需要处理的资料。"
+    },
+    {
+      "title": "配置地址，再读取能力",
+      "body": "本例使用新启动的本地地址，读取智能体列表与工作流详情，再请求一个未知智能体，观察 SDK 抛出的 HTTP 错误。\n服务地址与 API 前缀都要对应正确。本章沿用 SDK 默认的 /api 前缀；服务改变前缀时，客户端也要同步调整。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/03-client.js"
+        },
+        {
+          "label": "src/03-client.js",
+          "language": "javascript",
+          "code": "import { MastraClient } from '@mastra/client-js'\nimport { createLab } from './lab.js'\n\n// 客户端 SDK 通过 HTTP 读取服务端能力，不把本地对象传进调用方。\nconst lab = await createLab()\ntry {\n  const client = new MastraClient({ baseUrl: lab.baseUrl, retries: 0 })\n  console.log('智能体标识：', Object.keys(await client.listAgents()))\n  const workflow = client.getWorkflow('notice-check')\n  const details = await workflow.details()\n  console.log('工作流名称：', details.name)\n  try {\n    await client.getAgent('not-registered').details()\n  } catch (error) {\n    console.log('未知智能体：', error.message)\n  }\n} finally {\n  await lab.close()\n}"
+        }
+      ]
+    },
+    {
+      "title": "重试需要结合操作含义",
+      "body": "**retries** 控制客户端重试，本章设为 0，方便观察一次调用。读取目录、创建运行和发送通知的重复执行后果不同，安排重试前，应先确认是否可能造成重复操作。\n地址与路由接通之后，下一步是把本次调用所需的数据带入执行。",
+      "links": [
+        {
+          "label": "Mastra：客户端",
+          "href": "https://mastra.ai/docs/server/mastra-client"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "网页已取得 Workflow 客户端对象，服务器随后离线。这个对象还能完成任务吗？如果一次发送请求超时，为什么不能马上按查询目录的方式重试？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "调用方只需要接口入口",
+          "body": "**MastraClient** 为 HTTP 接口提供调用方法，可用于浏览器或支持 fetch 的服务端环境。配置 **baseUrl** 后，就可以取得 Agent、Workflow 的客户端对象。\nclient.getWorkflow() 返回调用代理，执行仍发生在远端 Mastra 服务中。模型配置、网关密钥与存储留在服务端，网页只提交需要处理的资料。"
+        },
+        {
+          "title": "配置地址，再读取能力",
+          "body": "本例使用新启动的本地地址，读取智能体列表与工作流详情，再请求一个未知智能体，观察 SDK 抛出的 HTTP 错误。\n服务地址与 API 前缀都要对应正确。本章沿用 SDK 默认的 /api 前缀；服务改变前缀时，客户端也要同步调整。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/03-client.ts"
+            },
+            {
+              "label": "src/03-client.ts",
+              "language": "typescript",
+              "code": "import { MastraClient } from '@mastra/client-js'\nimport { createLab } from './lab.ts'\n\n// 客户端 SDK 通过 HTTP 读取服务端能力，不把本地对象传进调用方。\nconst lab = await createLab()\ntry {\n  const client = new MastraClient({ baseUrl: lab.baseUrl, retries: 0 })\n  console.log('智能体标识：', Object.keys(await client.listAgents()))\n  const workflow = client.getWorkflow('notice-check')\n  const details = await workflow.details()\n  console.log('工作流名称：', details.name)\n  try {\n    await client.getAgent('not-registered').details()\n  } catch (error) {\n    console.log('未知智能体：', error.message)\n  }\n} finally {\n  await lab.close()\n}"
+            }
+          ]
+        },
+        {
+          "title": "重试需要结合操作含义",
+          "body": "**retries** 控制客户端重试，本章设为 0，方便观察一次调用。读取目录、创建运行和发送通知的重复执行后果不同，安排重试前，应先确认是否可能造成重复操作。\n地址与路由接通之后，下一步是把本次调用所需的数据带入执行。",
+          "links": [
+            {
+              "label": "Mastra：客户端",
+              "href": "https://mastra.ai/docs/server/mastra-client"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

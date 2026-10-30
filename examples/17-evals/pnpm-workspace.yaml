@@ -1,0 +1,3 @@
+# 本章不使用打包命令。
+allowBuilds:
+  esbuild: false

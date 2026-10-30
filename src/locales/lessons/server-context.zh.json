@@ -1,0 +1,86 @@
+{
+  "title": "请求上下文（RequestContext）",
+  "lead": "沿 HTTP 请求传递当前调用所需的数据，并区分调用方参数与服务端确定的信息。",
+  "sections": [
+    {
+      "title": "把本次请求信息带进执行",
+      "body": "通知入口属于业务输入，当前请求标识等信息则需要随调用一起传递。**RequestContext** 把这些请求级数据带给 Agent、工具与工作流。\n服务端为本次请求建立上下文，执行步骤按需要读取。历史资料继续由记忆或业务存储保存。"
+    },
+    {
+      "title": "由服务端生成本次请求标识",
+      "body": "共享中间件为每次 HTTP 请求生成 **requestId**，写入 RequestContext，并在最终响应中加入 **X-Request-Id** 头。通知步骤也将它带进输出，便于对照请求与结果。\n脚本故意从客户端提交另一个 requestId，服务端仍重新生成自己的值。两次执行应返回不同标识，且都与客户端提交值不同。\n创建、启动和查询同一工作流，会产生多个 HTTP 请求。**runId** 用于关联这次运行，requestId 则定位其中某一次接口调用。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/04-context.js"
+        },
+        {
+          "label": "src/04-context.js",
+          "language": "javascript",
+          "code": "import { MastraClient } from '@mastra/client-js'\nimport { createLab } from './lab.js'\n\n// 即使调用方提交 requestId，服务端中间件也为每次请求重新生成标识。\nconst lab = await createLab()\ntry {\n  const client = new MastraClient({ baseUrl: lab.baseUrl, retries: 0 })\n  const workflow = client.getWorkflow('notice-check')\n  for (const venue of ['南门', null]) {\n    const run = await workflow.createRun()\n    const result = await run.startAsync({ inputData: { venue }, requestContext: { requestId: '调用方提交的标识' } })\n    console.log('运行标识：', run.runId, '工作流状态：', result.status, '交付结果：', result.result)\n  }\n} finally {\n  await lab.close()\n}"
+        }
+      ]
+    },
+    {
+      "title": "按数据来源决定如何使用",
+      "body": "客户端上下文字段与请求参数一样，需要校验。用户身份与可访问范围应来自可信的认证、授权结果；requestId 只用于关联记录。\n明确了数据怎样进入执行后，下一节继续看生成结果怎样逐步传回调用方。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "客户端参数、服务端请求标识和认证后的身份各有来源。把它们放入上下文，不会自动改变其可信程度。"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：请求上下文",
+          "href": "https://mastra.ai/docs/server/request-context"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "创建、启动、查询同一任务时，请求标识各不相同，应该怎样关联这项运行？调用方自己填写的 userId，又为什么不能直接作为读取资料的依据？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "把本次请求信息带进执行",
+          "body": "通知入口属于业务输入，当前请求标识等信息则需要随调用一起传递。**RequestContext** 把这些请求级数据带给 Agent、工具与工作流。\n服务端为本次请求建立上下文，执行步骤按需要读取。历史资料继续由记忆或业务存储保存。"
+        },
+        {
+          "title": "由服务端生成本次请求标识",
+          "body": "共享中间件为每次 HTTP 请求生成 **requestId**，写入 RequestContext，并在最终响应中加入 **X-Request-Id** 头。通知步骤也将它带进输出，便于对照请求与结果。\n脚本故意从客户端提交另一个 requestId，服务端仍重新生成自己的值。两次执行应返回不同标识，且都与客户端提交值不同。\n创建、启动和查询同一工作流，会产生多个 HTTP 请求。**runId** 用于关联这次运行，requestId 则定位其中某一次接口调用。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/04-context.ts"
+            },
+            {
+              "label": "src/04-context.ts",
+              "language": "typescript",
+              "code": "import { MastraClient } from '@mastra/client-js'\nimport { createLab } from './lab.ts'\n\n// 即使调用方提交 requestId，服务端中间件也为每次请求重新生成标识。\nconst lab = await createLab()\ntry {\n  const client = new MastraClient({ baseUrl: lab.baseUrl, retries: 0 })\n  const workflow = client.getWorkflow('notice-check')\n  for (const venue of ['南门', null]) {\n    const run = await workflow.createRun()\n    const result = await run.startAsync({ inputData: { venue }, requestContext: { requestId: '调用方提交的标识' } })\n    console.log('运行标识：', run.runId, '工作流状态：', result.status, '交付结果：', result.result)\n  }\n} finally {\n  await lab.close()\n}"
+            }
+          ]
+        },
+        {
+          "title": "按数据来源决定如何使用",
+          "body": "客户端上下文字段与请求参数一样，需要校验。用户身份与可访问范围应来自可信的认证、授权结果；requestId 只用于关联记录。\n明确了数据怎样进入执行后，下一节继续看生成结果怎样逐步传回调用方。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "客户端参数、服务端请求标识和认证后的身份各有来源。把它们放入上下文，不会自动改变其可信程度。"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：请求上下文",
+              "href": "https://mastra.ai/docs/server/request-context"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

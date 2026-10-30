@@ -1,0 +1,104 @@
+{
+  "title": "观测配置（Observability）",
+  "lead": "让一次运行留下可查询的记录，分清采集、导出与存储各自负责什么。",
+  "sections": [
+    {
+      "title": "回答慢了，先去哪里找原因",
+      "body": "上一章把活动查询接到了外部服务。现在用户问：“从哪个门入场？”回答却迟迟没有回来。只看最后一句“南门入场”，无法判断时间花在模型、工具，还是远端服务上。\n**可观测性（Observability）**让我们根据运行时留下的记录，了解系统内部发生了什么。要回答这次为什么慢，先让应用留下可查询的执行记录。"
+    },
+    {
+      "title": "记录怎样进入存储",
+      "body": "**采集**在执行时产生记录；**导出器（Exporter）**把记录送往目标；**存储**负责保存和查询。要在运行结束后查到数据，这条路径需要完整接通。\n本章用 **MastraStorageExporter** 写入本地存储。LibSQL 保存工作流等应用状态，DuckDB 接管 **observability 存储域**，保存追踪、日志与指标。**MastraCompositeStore** 把两者组合到同一个配置中。\n这里增加 DuckDB，是因为后面要查询指标。LibSQL 支持追踪等观测数据，但当前不提供指标存储与查询能力。"
+    },
+    {
+      "title": "先跑通一次通知核对",
+      "body": "使用 Node.js 24 或更新版本，解压后进入 16-observability 文件夹，按下面的命令安装并运行。除下一节的智能体示例外，本章都使用固定的活动核对工作流，不请求模型。\n共享模块 src/lab.js 配置存储与观测，src/workflow.js 定义核对步骤。每个入口启动独立的内存实验，退出后数据清空；需要跨进程查询时，再将数据库改为文件存储。",
+      "download": {
+        "href": "/downloads/16-observability.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install --frozen-lockfile\nnode src/01-tracing.js"
+        },
+        {
+          "label": "src/lab.js",
+          "language": "javascript",
+          "code": "import { Mastra } from '@mastra/core/mastra'\nimport { MastraCompositeStore } from '@mastra/core/storage'\nimport { RequestContext } from '@mastra/core/request-context'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { DuckDBStore } from '@mastra/duckdb'\nimport { Observability, MastraStorageExporter } from '@mastra/observability'\nimport { createActivityWorkflow } from './workflow.js'\n\n// 每次实验使用独立的内存数据库，避免上一次的数据混入统计。\nexport async function createLab () {\n  const analytics = new DuckDBStore({ id: 'activity-analytics', path: ':memory:' })\n  const observabilityStore = await analytics.getStore('observability')\n  const mastra = new Mastra({\n    workflows: { activityCheck: createActivityWorkflow() },\n    storage: new MastraCompositeStore({\n      id: 'activity-storage',\n      default: new LibSQLStore({ id: 'activity-state', url: ':memory:' }),\n      domains: { observability: observabilityStore }\n    }),\n    observability: new Observability({ configs: { default: {\n      serviceName: 'activity-assistant',\n      requestContextKeys: ['requestId'],\n      logging: { enabled: true, level: 'info' },\n      exporters: [new MastraStorageExporter()]\n    } } })\n  })\n  return { mastra, store: observabilityStore }\n}\n\n// 运行一次确定性的活动核对，并在查询前等待观测数据导出。\nexport async function runActivity (lab, { mode = 'ok', delayMs = 5, requestId = 'request-demo', tracingOptions = {} } = {}) {\n  const requestContext = new RequestContext()\n  requestContext.set('requestId', requestId)\n  const run = await lab.mastra.getWorkflow('activityCheck').createRun()\n  const result = await run.start({\n    inputData: { venue: '南门', delayMs, mode },\n    requestContext,\n    tracingOptions\n  })\n  await lab.mastra.observability.flush()\n  return { result, runId: run.runId }\n}"
+        }
+      ]
+    },
+    {
+      "title": "等待导出，再读取记录",
+      "body": "入口先运行工作流，再通过 **traceId** 查询完整追踪。导出器可能批量写入，因此查询前要等待 **flush()**，让尚在缓冲中的记录写入存储。\n查询结束后，finally 中的 **mastra.shutdown()** 完成导出收尾，再关闭存储。这些操作有先后顺序：先结束运行，再完成导出，最后回收资源。\n运行脚本后，表格会列出整个工作流与内部步骤的标识和时间。下一节就从这两层记录开始，读懂执行树。",
+      "codeBlocks": [
+        {
+          "label": "src/01-tracing.js",
+          "language": "javascript",
+          "code": "import { createLab, runActivity } from './lab.js'\n\n// 注册观测配置后，通过真实工作流生成并查询一条执行记录。\nconst lab = await createLab()\ntry {\n  const { result, runId } = await runActivity(lab)\n  console.log('运行标识：', runId)\n  console.log('追踪标识：', result.traceId)\n  const trace = await lab.store.getTrace({ traceId: result.traceId })\n  console.table(trace.spans.map(span => ({\n    name: span.name, spanId: span.spanId, parentSpanId: span.parentSpanId,\n    startedAt: span.startedAt, endedAt: span.endedAt\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra 观测文档",
+          "href": "https://mastra.ai/docs/observability/overview"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "通知核对已完成，getTrace 却查不到记录。你会怎样沿采集、导出和存储逐项排查？如果只在重启后查不到，原因又可能是什么？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "回答慢了，先去哪里找原因",
+          "body": "上一章把活动查询接到了外部服务。现在用户问：“从哪个门入场？”回答却迟迟没有回来。只看最后一句“南门入场”，无法判断时间花在模型、工具，还是远端服务上。\n**可观测性（Observability）**让我们根据运行时留下的记录，了解系统内部发生了什么。要回答这次为什么慢，先让应用留下可查询的执行记录。"
+        },
+        {
+          "title": "记录怎样进入存储",
+          "body": "**采集**在执行时产生记录；**导出器（Exporter）**把记录送往目标；**存储**负责保存和查询。要在运行结束后查到数据，这条路径需要完整接通。\n本章用 **MastraStorageExporter** 写入本地存储。LibSQL 保存工作流等应用状态，DuckDB 接管 **observability 存储域**，保存追踪、日志与指标。**MastraCompositeStore** 把两者组合到同一个配置中。\n这里增加 DuckDB，是因为后面要查询指标。LibSQL 支持追踪等观测数据，但当前不提供指标存储与查询能力。"
+        },
+        {
+          "title": "先跑通一次通知核对",
+          "body": "使用 Node.js 24 或更新版本，解压后进入 16-observability-ts 文件夹，按下面的命令安装并运行。除下一节的智能体示例外，本章都使用固定的活动核对工作流，不请求模型。\n共享模块 src/lab.ts 配置存储与观测，src/workflow.ts 定义核对步骤。每个入口启动独立的内存实验，退出后数据清空；需要跨进程查询时，再将数据库改为文件存储。",
+          "download": {
+            "href": "/downloads/16-observability-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install --frozen-lockfile\nnode src/01-tracing.ts"
+            },
+            {
+              "label": "src/lab.ts",
+              "language": "typescript",
+              "code": "import { Mastra } from '@mastra/core/mastra'\nimport { MastraCompositeStore } from '@mastra/core/storage'\nimport { RequestContext } from '@mastra/core/request-context'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { DuckDBStore } from '@mastra/duckdb'\nimport { Observability, MastraStorageExporter } from '@mastra/observability'\nimport { createActivityWorkflow } from './workflow.ts'\n\n// 每次实验使用独立的内存数据库，避免上一次的数据混入统计。\nexport async function createLab () {\n  const analytics = new DuckDBStore({ id: 'activity-analytics', path: ':memory:' })\n  const observabilityStore = await analytics.getStore('observability')\n  const mastra = new Mastra({\n    workflows: { activityCheck: createActivityWorkflow() },\n    storage: new MastraCompositeStore({\n      id: 'activity-storage',\n      default: new LibSQLStore({ id: 'activity-state', url: ':memory:' }),\n      domains: { observability: observabilityStore }\n    }),\n    observability: new Observability({ configs: { default: {\n      serviceName: 'activity-assistant',\n      requestContextKeys: ['requestId'],\n      logging: { enabled: true, level: 'info' },\n      exporters: [new MastraStorageExporter()]\n    } } })\n  })\n  return { mastra, store: observabilityStore }\n}\n\n// 运行一次确定性的活动核对，并在查询前等待观测数据导出。\nexport async function runActivity (lab, { mode = 'ok', delayMs = 5, requestId = 'request-demo', tracingOptions = {} } = {}) {\n  const requestContext = new RequestContext()\n  requestContext.set('requestId', requestId)\n  const run = await lab.mastra.getWorkflow('activityCheck').createRun()\n  const result = await run.start({\n    inputData: { venue: '南门', delayMs, mode },\n    requestContext,\n    tracingOptions\n  })\n  await lab.mastra.observability.flush()\n  return { result, runId: run.runId }\n}"
+            }
+          ]
+        },
+        {
+          "title": "等待导出，再读取记录",
+          "body": "入口先运行工作流，再通过 **traceId** 查询完整追踪。导出器可能批量写入，因此查询前要等待 **flush()**，让尚在缓冲中的记录写入存储。\n查询结束后，finally 中的 **mastra.shutdown()** 完成导出收尾，再关闭存储。这些操作有先后顺序：先结束运行，再完成导出，最后回收资源。\n运行脚本后，表格会列出整个工作流与内部步骤的标识和时间。下一节就从这两层记录开始，读懂执行树。",
+          "codeBlocks": [
+            {
+              "label": "src/01-tracing.ts",
+              "language": "typescript",
+              "code": "import { createLab, runActivity } from './lab.ts'\n\n// 注册观测配置后，通过真实工作流生成并查询一条执行记录。\nconst lab = await createLab()\ntry {\n  const { result, runId } = await runActivity(lab)\n  console.log('运行标识：', runId)\n  console.log('追踪标识：', result.traceId)\n  const trace = await lab.store.getTrace({ traceId: result.traceId })\n  console.table(trace.spans.map(span => ({\n    name: span.name, spanId: span.spanId, parentSpanId: span.parentSpanId,\n    startedAt: span.startedAt, endedAt: span.endedAt\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra 观测文档",
+              "href": "https://mastra.ai/docs/observability/overview"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

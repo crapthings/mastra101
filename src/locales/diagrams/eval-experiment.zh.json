@@ -1,0 +1,14 @@
+{
+  "title": "固定样本和评分方式，再比较版本",
+  "caption": "两个版本都能完成执行，但基线版会在入口缺失时编造地点。比较要看逐条分数与理由，不能只看 completed 或平均值。",
+  "one": "同一数据集版本",
+  "oneDetail": "南门、东门、入口未公布",
+  "left": "baseline · 基线版",
+  "leftDetail": "缺少入口时填入南门",
+  "right": "revised · 修改版",
+  "rightDetail": "缺少入口时保留待确认",
+  "middle": "同一依据一致性评分器",
+  "middleDetail": "评分标准保持不变",
+  "bottom": "比较逐条结果",
+  "bottomDetail": "基线版有一条 0 分，修改版全为 1 分"
+}

@@ -1,0 +1,88 @@
+{
+  "title": "索引管理（Vector Store）",
+  "lead": "把向量与片段来源一起保存，并验证重复写入、删除和版本变更的结果。",
+  "sections": [
+    {
+      "title": "向量还需要能找到对应原文",
+      "body": "**向量存储（Vector Store）**保存向量与片段标识，支持后续相似度查询。本例使用 **LibSQLVector**，将正文和来源属性写入 metadata。\n索引里的数值帮助查找候选，**metadata.text** 则让后续重排和回答能够读取原文。只保存向量，却丢掉来源与正文，会使结果难以核对。"
+    },
+    {
+      "title": "先创建索引，再写入对应片段",
+      "body": "共享模块先准备片段、调用 Embedding，再根据返回维数 **createIndex()**，最后用 **upsert()** 写入 id、向量与元数据。\n每个入口创建独立的内存索引，结束后 close；真实应用可配置持久存储并复用入库结果，避免每次查询都重新生成整套文档向量。",
+      "codeBlocks": [
+        {
+          "label": "src/index.js",
+          "language": "javascript",
+          "code": "import { LibSQLVector } from '@mastra/libsql'\nimport { prepareChunks } from './documents.js'\nimport { embedTexts, embeddingModel } from './embedding.js'\n\n// 每个入口独立建立内存索引；真实入库与检索使用同一种 Embedding 配置。\nexport async function createIndex () {\n  const chunks = await prepareChunks()\n  const vectors = await embedTexts(chunks.map(chunk => chunk.text))\n  const store = new LibSQLVector({ id: 'travel-vectors', url: ':memory:' })\n  const indexName = 'travel_policy'\n  try {\n    await store.createIndex({ indexName, dimension: vectors[0].length })\n    await store.upsert({ indexName, ids: chunks.map(c => c.id), vectors, metadata: chunks.map(c => ({ ...c.metadata, embeddingModel })) })\n    return { store, indexName, chunks, vectors }\n  } catch (error) { await store.close(); throw error }\n}\n\n// 团队范围来自调用侧已确认的身份，检索时同时排除失效制度。\nexport async function retrieve (index, question, teamId) {\n  const [queryVector] = await embedTexts([question])\n  return index.store.query({ indexName: index.indexName, queryVector, topK: 4, filter: { teamId, active: true } })\n}"
+        }
+      ]
+    },
+    {
+      "title": "用实际数量检查写入与删除",
+      "body": "下面以相同 id 再次 upsert 一个片段，核对数量没有增加；随后删除一个旧版片段，再检查数量减少。稳定的标识有助于更新，但仍要决定何时使用原 id、何时产生新版本。\n如果重切后片段数量或 id 改变，单纯写入新片段不会自动删除旧记录。需要同时维护失效状态、旧 id 清单或独立索引版本，并验证查询范围。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/05-index.js"
+        },
+        {
+          "label": "src/05-index.js",
+          "language": "javascript",
+          "code": "import { createIndex } from './index.js'\nimport { embeddingModel } from './embedding.js'\n\n// 核对真实索引状态，并删除已失效制度的一个片段。\nconst index = await createIndex()\ntry {\n  const before = await index.store.describeIndex({ indexName: index.indexName })\n  const chunk = index.chunks[0]\n  await index.store.upsert({ indexName: index.indexName, ids: [chunk.id], vectors: [index.vectors[0]], metadata: [{ ...chunk.metadata, embeddingModel }] })\n  const repeated = await index.store.describeIndex({ indexName: index.indexName })\n  console.log('同一片段 id 再写入后的数量：', repeated.count)\n  await index.store.deleteVector({ indexName: index.indexName, id: chunk.id })\n  const after = await index.store.describeIndex({ indexName: index.indexName })\n  console.log('入库片段数：', index.chunks.length, '索引状态：', before)\n  console.log('删除一个旧版片段后：', after)\n} finally { await index.store.close() }"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：向量存储",
+          "href": "https://mastra.ai/reference/rag/vector-databases"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "制度重切后从五段变为三段，只写入三个新 id，会留下什么问题？应怎样验证旧片段已经从可查询范围中移除？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "向量还需要能找到对应原文",
+          "body": "**向量存储（Vector Store）**保存向量与片段标识，支持后续相似度查询。本例使用 **LibSQLVector**，将正文和来源属性写入 metadata。\n索引里的数值帮助查找候选，**metadata.text** 则让后续重排和回答能够读取原文。只保存向量，却丢掉来源与正文，会使结果难以核对。"
+        },
+        {
+          "title": "先创建索引，再写入对应片段",
+          "body": "共享模块先准备片段、调用 Embedding，再根据返回维数 **createIndex()**，最后用 **upsert()** 写入 id、向量与元数据。\n每个入口创建独立的内存索引，结束后 close；真实应用可配置持久存储并复用入库结果，避免每次查询都重新生成整套文档向量。",
+          "codeBlocks": [
+            {
+              "label": "src/index.ts",
+              "language": "typescript",
+              "code": "import { LibSQLVector } from '@mastra/libsql'\nimport { prepareChunks } from './documents.ts'\nimport { embedTexts, embeddingModel } from './embedding.ts'\n\n// 每个入口独立建立内存索引；真实入库与检索使用同一种 Embedding 配置。\nexport async function createIndex () {\n  const chunks = await prepareChunks()\n  const vectors = await embedTexts(chunks.map(chunk => chunk.text))\n  const store = new LibSQLVector({ id: 'travel-vectors', url: ':memory:' })\n  const indexName = 'travel_policy'\n  try {\n    await store.createIndex({ indexName, dimension: vectors[0].length })\n    await store.upsert({ indexName, ids: chunks.map(c => c.id), vectors, metadata: chunks.map(c => ({ ...c.metadata, embeddingModel })) })\n    return { store, indexName, chunks, vectors }\n  } catch (error) { await store.close(); throw error }\n}\n\n// 团队范围来自调用侧已确认的身份，检索时同时排除失效制度。\nexport async function retrieve (index, question, teamId) {\n  const [queryVector] = await embedTexts([question])\n  return index.store.query({ indexName: index.indexName, queryVector, topK: 4, filter: { teamId, active: true } })\n}"
+            }
+          ]
+        },
+        {
+          "title": "用实际数量检查写入与删除",
+          "body": "下面以相同 id 再次 upsert 一个片段，核对数量没有增加；随后删除一个旧版片段，再检查数量减少。稳定的标识有助于更新，但仍要决定何时使用原 id、何时产生新版本。\n如果重切后片段数量或 id 改变，单纯写入新片段不会自动删除旧记录。需要同时维护失效状态、旧 id 清单或独立索引版本，并验证查询范围。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/05-index.ts"
+            },
+            {
+              "label": "src/05-index.ts",
+              "language": "typescript",
+              "code": "import { createIndex } from './index.ts'\nimport { embeddingModel } from './embedding.ts'\n\n// 核对真实索引状态，并删除已失效制度的一个片段。\nconst index = await createIndex()\ntry {\n  const before = await index.store.describeIndex({ indexName: index.indexName })\n  const chunk = index.chunks[0]\n  await index.store.upsert({ indexName: index.indexName, ids: [chunk.id], vectors: [index.vectors[0]], metadata: [{ ...chunk.metadata, embeddingModel }] })\n  const repeated = await index.store.describeIndex({ indexName: index.indexName })\n  console.log('同一片段 id 再写入后的数量：', repeated.count)\n  await index.store.deleteVector({ indexName: index.indexName, id: chunk.id })\n  const after = await index.store.describeIndex({ indexName: index.indexName })\n  console.log('入库片段数：', index.chunks.length, '索引状态：', before)\n  console.log('删除一个旧版片段后：', after)\n} finally { await index.store.close() }"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：向量存储",
+              "href": "https://mastra.ai/reference/rag/vector-databases"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

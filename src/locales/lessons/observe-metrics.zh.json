@@ -1,0 +1,72 @@
+{
+  "title": "指标查询（Metrics）",
+  "lead": "在明确时间范围与样本口径后，查询多次运行的耗时、数量与资源消耗。",
+  "sections": [
+    {
+      "title": "单次执行正常，整体也可能变慢",
+      "body": "追踪解释一次执行，**指标（Metric）**帮助比较多次执行。活动查询今天是否普遍变慢，需要放到一批运行中观察。\n本节连续运行三次核对，设置不同的模拟等待。Mastra 在片段结束时自动派生 **mastra_workflow_duration_ms**，后面的统计直接查询这些耗时记录。"
+    },
+    {
+      "title": "先限定时间和指标，再聚合",
+      "body": "**getMetricAggregate()** 接收指标名称、聚合方式和筛选条件。示例限定同一时间范围，再分别查询 **count**、**avg**、**max**，得到记录数、平均耗时与最大耗时。\n本实验每次工作流产生一条对应的耗时记录，所以 count 应为 3。它统计的是匹配记录；要回答用户数、请求数或其他问题，需要另选对应的统计方式。\n**listMetrics()** 返回原始指标，带有 traceId 与 spanId，可用于回查执行过程。三个样本在一页内即可查看，真实流量则需要按相同筛选条件继续读取后续页面。",
+      "codeBlocks": [
+        {
+          "label": "src/07-metrics.js",
+          "language": "javascript",
+          "code": "import { createLab, runActivity } from './lab.js'\n\n// 使用框架自动记录的工作流耗时计算本次实验的样本数与平均值。\nconst lab = await createLab()\ntry {\n  const start = new Date()\n  for (const delayMs of [5, 15, 40]) await runActivity(lab, { delayMs })\n  const filters = { timestamp: { start, end: new Date() } }\n  for (const aggregation of ['count', 'avg', 'max']) {\n    const value = await lab.store.getMetricAggregate({ name: ['mastra_workflow_duration_ms'], aggregation, filters })\n    console.log(aggregation, value.value)\n  }\n  const page = await lab.store.listMetrics({ filters: { ...filters, name: ['mastra_workflow_duration_ms'] } })\n  console.table(page.metrics.map(metric => ({\n    name: metric.name, value: metric.value,\n    traceId: metric.traceId, spanId: metric.spanId\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+        }
+      ]
+    },
+    {
+      "title": "平均耗时下降，慢请求仍可能存在",
+      "body": "平均值便于比较趋势，但少量慢请求可能被大量快请求掩盖。**分位数（Percentile）**有助于观察这类情况：例如 P95 耗时，约表示 95% 的匹配样本耗时不超过该值。\n还可以按入口、模型或环境分组，区分是普遍变慢，还是某一类请求发生变化。本例只有三个模拟样本，用于理解查询方式；判断实际服务表现，需要足够的运行样本。"
+    },
+    {
+      "title": "分清用量缺失与实际为零",
+      "body": "固定工作流没有模型调用，因此不会产生模型 Token 用量。智能体运行中的使用量则依赖供应商报告，以及框架实际记录的数据。\n**mastra_model_total_input_tokens** 和 **mastra_model_total_output_tokens** 分别记录模型输入、输出的 Token 数。若相关数据缺失，应先检查调用与采集情况，再解释消耗；费用估算还需与供应商账单区分。\n指标帮助我们发现变化，原始记录中的关联标识则提供了回到具体执行的入口。下一节沿着这个入口排查一次慢运行。",
+      "links": [
+        {
+          "label": "Mastra：指标",
+          "href": "https://mastra.ai/docs/observability/metrics/overview"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "平均耗时下降，仍有用户反馈等待很久。你会查看哪些分位数或分组，并怎样找到值得进一步检查的执行样本？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "单次执行正常，整体也可能变慢",
+          "body": "追踪解释一次执行，**指标（Metric）**帮助比较多次执行。活动查询今天是否普遍变慢，需要放到一批运行中观察。\n本节连续运行三次核对，设置不同的模拟等待。Mastra 在片段结束时自动派生 **mastra_workflow_duration_ms**，后面的统计直接查询这些耗时记录。"
+        },
+        {
+          "title": "先限定时间和指标，再聚合",
+          "body": "**getMetricAggregate()** 接收指标名称、聚合方式和筛选条件。示例限定同一时间范围，再分别查询 **count**、**avg**、**max**，得到记录数、平均耗时与最大耗时。\n本实验每次工作流产生一条对应的耗时记录，所以 count 应为 3。它统计的是匹配记录；要回答用户数、请求数或其他问题，需要另选对应的统计方式。\n**listMetrics()** 返回原始指标，带有 traceId 与 spanId，可用于回查执行过程。三个样本在一页内即可查看，真实流量则需要按相同筛选条件继续读取后续页面。",
+          "codeBlocks": [
+            {
+              "label": "src/07-metrics.ts",
+              "language": "typescript",
+              "code": "import { createLab, runActivity } from './lab.ts'\n\n// 使用框架自动记录的工作流耗时计算本次实验的样本数与平均值。\nconst lab = await createLab()\ntry {\n  const start = new Date()\n  for (const delayMs of [5, 15, 40]) await runActivity(lab, { delayMs })\n  const filters = { timestamp: { start, end: new Date() } }\n  for (const aggregation of ['count', 'avg', 'max']) {\n    const value = await lab.store.getMetricAggregate({ name: ['mastra_workflow_duration_ms'], aggregation, filters })\n    console.log(aggregation, value.value)\n  }\n  const page = await lab.store.listMetrics({ filters: { ...filters, name: ['mastra_workflow_duration_ms'] } })\n  console.table(page.metrics.map(metric => ({\n    name: metric.name, value: metric.value,\n    traceId: metric.traceId, spanId: metric.spanId\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+            }
+          ]
+        },
+        {
+          "title": "平均耗时下降，慢请求仍可能存在",
+          "body": "平均值便于比较趋势，但少量慢请求可能被大量快请求掩盖。**分位数（Percentile）**有助于观察这类情况：例如 P95 耗时，约表示 95% 的匹配样本耗时不超过该值。\n还可以按入口、模型或环境分组，区分是普遍变慢，还是某一类请求发生变化。本例只有三个模拟样本，用于理解查询方式；判断实际服务表现，需要足够的运行样本。"
+        },
+        {
+          "title": "分清用量缺失与实际为零",
+          "body": "固定工作流没有模型调用，因此不会产生模型 Token 用量。智能体运行中的使用量则依赖供应商报告，以及框架实际记录的数据。\n**mastra_model_total_input_tokens** 和 **mastra_model_total_output_tokens** 分别记录模型输入、输出的 Token 数。若相关数据缺失，应先检查调用与采集情况，再解释消耗；费用估算还需与供应商账单区分。\n指标帮助我们发现变化，原始记录中的关联标识则提供了回到具体执行的入口。下一节沿着这个入口排查一次慢运行。",
+          "links": [
+            {
+              "label": "Mastra：指标",
+              "href": "https://mastra.ai/docs/observability/metrics/overview"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

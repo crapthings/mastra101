@@ -1,0 +1,96 @@
+{
+  "title": "分片策略（Chunking）",
+  "lead": "让片段有足够的独立含义，保留适用条件与回到文档的路径。",
+  "sections": [
+    {
+      "title": "片段太短，条件可能留在别处",
+      "body": "如果“每晚 500 元”和“超出须事先书面批准”被切到不同位置，检索可能只返回前半段。模型得到的上下文不完整，回答就可能遗漏条件。\n**分片（Chunking）**决定检索的基本单位。片段需要足够聚焦，也要保留理解这项规定所需的标题、主体与限制条件。"
+    },
+    {
+      "title": "按材料结构选择策略",
+      "body": "**recursive** 按分隔符逐步切分，可设置 **maxSize** 与 **overlap**；重叠可以减少边界处的信息断裂，但会增加重复内容与索引量。长度的含义取决于策略和长度函数，本例默认字符串长度，不等于模型 Token 数。\nMarkdown 已有清晰标题时，可以按标题组织片段，并提取 heading、section 等元数据。本例将住宿标准和批准条件放在同一小节，分片后继续保留它们。"
+    },
+    {
+      "title": "实际比较边界与原文",
+      "body": "入口先用较小的递归参数观察切分，再打印正式流程的标题片段。小参数用于看边界，不作为所有材料的推荐值。\n不同策略使用的参数也不同。例如带标题的 Markdown 分片不一定按 maxSize 限制每段长度；长章节仍需按实际内容继续细分。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/03-chunking.js"
+        },
+        {
+          "label": "src/03-chunking.js",
+          "language": "javascript",
+          "code": "import { MDocument } from '@mastra/rag'\nimport { loadDocuments, prepareChunks } from './documents.js'\n\n// 对照固定长度切分与标题切分，观察条件和来源是否保留。\nconst documents = await loadDocuments()\n// 小尺寸仅用于观察边界，不作为通用参数建议。\nconst recursive = await MDocument.fromMarkdown(documents[1].text).chunk({ strategy: 'recursive', maxSize: 70, overlap: 15 })\nconsole.table(recursive.map(chunk => ({ text: chunk.text })))\n// 实际流程使用带标题元数据的片段。\nconst chunks = await prepareChunks()\nconsole.table(chunks.filter(chunk => chunk.metadata.docId === 'lodging-a' && chunk.metadata.active).map(chunk => ({ id: chunk.id, section: chunk.metadata.section, text: chunk.text })))"
+        }
+      ]
+    },
+    {
+      "title": "给片段一个可追踪的身份",
+      "body": "共享模块将文档、版本、位置与内容哈希组成片段 **id**，同时保留来源与正文。后续向量、检索结果和引用，都用这个身份关联。\n片段改动或重切后，要检查旧片段怎样失效，避免新旧内容同时被使用。下一节先把这些片段变成可比较的向量。",
+      "codeBlocks": [
+        {
+          "label": "src/documents.js",
+          "language": "javascript",
+          "code": "import { readFile } from 'node:fs/promises'\nimport { createHash } from 'node:crypto'\nimport { MDocument } from '@mastra/rag'\n\n// 从教学目录读取原文与来源属性，不调用模型抽取元数据。\nexport async function loadDocuments () {\n  const catalog = JSON.parse(await readFile(new URL('../materials/catalog.json', import.meta.url), 'utf8'))\n  return Promise.all(catalog.map(async item => ({ ...item, text: await readFile(new URL('../materials/' + item.file, import.meta.url), 'utf8') })))\n}\n\n// 按 Markdown 标题切分并保留稳定来源，每个片段独立关联文档版本。\nexport async function prepareChunks () {\n  const documents = await loadDocuments()\n  const chunks = []\n  for (const document of documents) {\n    const parts = await MDocument.fromMarkdown(document.text).chunk({ strategy: 'markdown', headers: [['#', 'heading'], ['##', 'section']] })\n    for (const [position, part] of parts.entries()) {\n      const hash = createHash('sha256').update(part.text).digest('hex').slice(0, 12)\n      chunks.push({ id: `${document.docId}:${document.version}:${position}:${hash}`, text: part.text, metadata: {\n        ...part.metadata, docId: document.docId, version: document.version,\n        teamId: document.teamId, active: document.active,\n        source: document.file, title: document.title, text: part.text\n      } })\n    }\n  }\n  return chunks\n}"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：分片参数",
+          "href": "https://mastra.ai/reference/rag/chunk"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "检索返回“每晚 500 元”，却没有同节的超额批准条件。你会怎样检查分片与元数据？单纯增加 overlap 可能带来什么代价？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "片段太短，条件可能留在别处",
+          "body": "如果“每晚 500 元”和“超出须事先书面批准”被切到不同位置，检索可能只返回前半段。模型得到的上下文不完整，回答就可能遗漏条件。\n**分片（Chunking）**决定检索的基本单位。片段需要足够聚焦，也要保留理解这项规定所需的标题、主体与限制条件。"
+        },
+        {
+          "title": "按材料结构选择策略",
+          "body": "**recursive** 按分隔符逐步切分，可设置 **maxSize** 与 **overlap**；重叠可以减少边界处的信息断裂，但会增加重复内容与索引量。长度的含义取决于策略和长度函数，本例默认字符串长度，不等于模型 Token 数。\nMarkdown 已有清晰标题时，可以按标题组织片段，并提取 heading、section 等元数据。本例将住宿标准和批准条件放在同一小节，分片后继续保留它们。"
+        },
+        {
+          "title": "实际比较边界与原文",
+          "body": "入口先用较小的递归参数观察切分，再打印正式流程的标题片段。小参数用于看边界，不作为所有材料的推荐值。\n不同策略使用的参数也不同。例如带标题的 Markdown 分片不一定按 maxSize 限制每段长度；长章节仍需按实际内容继续细分。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/03-chunking.ts"
+            },
+            {
+              "label": "src/03-chunking.ts",
+              "language": "typescript",
+              "code": "import { MDocument } from '@mastra/rag'\nimport { loadDocuments, prepareChunks } from './documents.ts'\n\n// 对照固定长度切分与标题切分，观察条件和来源是否保留。\nconst documents = await loadDocuments()\n// 小尺寸仅用于观察边界，不作为通用参数建议。\nconst recursive = await MDocument.fromMarkdown(documents[1].text).chunk({ strategy: 'recursive', maxSize: 70, overlap: 15 })\nconsole.table(recursive.map(chunk => ({ text: chunk.text })))\n// 实际流程使用带标题元数据的片段。\nconst chunks = await prepareChunks()\nconsole.table(chunks.filter(chunk => chunk.metadata.docId === 'lodging-a' && chunk.metadata.active).map(chunk => ({ id: chunk.id, section: chunk.metadata.section, text: chunk.text })))"
+            }
+          ]
+        },
+        {
+          "title": "给片段一个可追踪的身份",
+          "body": "共享模块将文档、版本、位置与内容哈希组成片段 **id**，同时保留来源与正文。后续向量、检索结果和引用，都用这个身份关联。\n片段改动或重切后，要检查旧片段怎样失效，避免新旧内容同时被使用。下一节先把这些片段变成可比较的向量。",
+          "codeBlocks": [
+            {
+              "label": "src/documents.ts",
+              "language": "typescript",
+              "code": "import { readFile } from 'node:fs/promises'\nimport { createHash } from 'node:crypto'\nimport { MDocument } from '@mastra/rag'\n\n// 从教学目录读取原文与来源属性，不调用模型抽取元数据。\nexport async function loadDocuments () {\n  const catalog = JSON.parse(await readFile(new URL('../materials/catalog.json', import.meta.url), 'utf8'))\n  return Promise.all(catalog.map(async item => ({ ...item, text: await readFile(new URL('../materials/' + item.file, import.meta.url), 'utf8') })))\n}\n\n// 按 Markdown 标题切分并保留稳定来源，每个片段独立关联文档版本。\nexport async function prepareChunks () {\n  const documents = await loadDocuments()\n  const chunks = []\n  for (const document of documents) {\n    const parts = await MDocument.fromMarkdown(document.text).chunk({ strategy: 'markdown', headers: [['#', 'heading'], ['##', 'section']] })\n    for (const [position, part] of parts.entries()) {\n      const hash = createHash('sha256').update(part.text).digest('hex').slice(0, 12)\n      chunks.push({ id: `${document.docId}:${document.version}:${position}:${hash}`, text: part.text, metadata: {\n        ...part.metadata, docId: document.docId, version: document.version,\n        teamId: document.teamId, active: document.active,\n        source: document.file, title: document.title, text: part.text\n      } })\n    }\n  }\n  return chunks\n}"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：分片参数",
+              "href": "https://mastra.ai/reference/rag/chunk"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

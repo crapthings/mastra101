@@ -1,0 +1,7 @@
+[
+  { "docId": "lodging-a", "version": "2025", "teamId": "team-a", "active": false, "file": "lodging-a-v1.md", "title": "甲团队住宿制度（旧版）" },
+  { "docId": "lodging-a", "version": "2026", "teamId": "team-a", "active": true, "file": "lodging-a-v2.md", "title": "甲团队住宿制度" },
+  { "docId": "transport-a", "version": "2026", "teamId": "team-a", "active": true, "file": "transport-a.md", "title": "甲团队交通制度" },
+  { "docId": "submission-a", "version": "2026", "teamId": "team-a", "active": true, "file": "submission-a.md", "title": "甲团队报销提交说明" },
+  { "docId": "lodging-b", "version": "2026", "teamId": "team-b", "active": true, "file": "lodging-b.md", "title": "乙团队住宿制度" }
+]

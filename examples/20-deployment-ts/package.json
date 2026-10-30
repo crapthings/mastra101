@@ -1,0 +1,19 @@
+{
+  "name": "mastra-deployment-journey",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@hono/node-server": "1.19.11",
+    "@mastra/core": "1.80.0",
+    "@mastra/hono": "1.7.22",
+    "@mastra/libsql": "1.27.1",
+    "hono": "4.13.13",
+    "zod": "4.6.7",
+    "@mastra/observability": "1.22.0",
+    "@mastra/duckdb": "1.16.0"
+  },
+  "packageManager": "pnpm@12.4.1"
+}

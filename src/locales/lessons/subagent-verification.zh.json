@@ -1,0 +1,150 @@
+{
+  "title": "协作核对（Delegation Verification）",
+  "lead": "将资料核对与提醒文案连起来，检查委派、交接与最终结果各自是否完整。",
+  "sections": [
+    {
+      "title": "先核对，再根据结果编写提醒",
+      "body": "现在主助手可以把通知交给 reviewer，再把核对结果交给 writer。文案助手只整理已有结论，不负责填补缺少的地点或预约记录。\n本例仍使用教学通知，没有发送提醒。目标是交付一份忠实于原文的提醒文案与待确认清单。"
+    },
+    {
+      "title": "把先前结果明确交给下一位助手",
+      "body": "子任务结果默认作为工具返回给父模型，后续委派不会自动得到原样的前一个工具结果。父助手可以在新 prompt 中转述，也可以通过 **enableResultReferences** 使用本次运行内的结果引用。\n开启后，非空的成功结果会带上引用标识；后续委派通过 **contextFromRefs** 引用对应文本。应用的 resultText 替换会影响被引用的内容。引用保留文字，不会替你校验文字里的事实。\n这些引用只在当前父运行中有效，不会自动持久保存。未知引用可能被跳过并继续执行，不能把写出引用标识当成交接成功的证据。",
+      "links": [
+        {
+          "label": "Mastra：复用先前结果",
+          "href": "https://mastra.ai/docs/subagents#reusing-an-earlier-subagent-result"
+        }
+      ]
+    },
+    {
+      "title": "让交接状态有程序依据",
+      "body": "本例在完成回调里记录两位助手是否成功返回最终文字，核对阶段未完成时拒绝文案委派。最后再次检查阶段集合，缺少任一阶段就以非零退出码说明本轮未完成。\n这份检查证明阶段与文本是否存在，不证明全部语义正确。业务必须持久保存、严格恢复和依序执行的任务，应继续使用工作流；主助手指令只用于表达协作意图。",
+      "codeBlocks": [
+        {
+          "label": "src/08-verification.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { model, activity, makeReviewer, makeCoordinator, logStep } from './shared.js'\n\n// 保留同一套任务，比较资料齐全、缺少地点与委派失败。\nconst mode = process.argv[2] || '正常'\nif (!['正常', '缺少地点', '委派失败'].includes(mode)) throw new Error('请使用“正常”“缺少地点”或“委派失败”。')\n// 仅修改资料中的地点，不改变核对标准。\nconst material = mode === '缺少地点' ? activity.replace('南门进入', '地点尚未公布') : activity\n// 每次任务单独记录阶段，只有已完成的核对才允许进入文案阶段。\nconst completed = new Set()\n// 核对助手先处理事实与缺口。\nconst reviewer = makeReviewer()\n// 文案助手只处理交接结果，不添加新规定。\nconst writer = new Agent({\n  id: 'reminder-writer', name: '提醒文案助手', model,\n  description: '把核对结果写成简短提醒，保留待确认事项，不查询新事实。',\n  instructions: '根据收到的核对结果写一条中文提醒，不增加地点、入场规定或已预约声明。',\n  defaultOptions: { maxSteps: 1 }\n})\n// 主助手按职责委派，两阶段是否真的完成由下方程序记录核对。\nconst parent = makeCoordinator({ reviewer, writer }, {\n  instructions: '先委派 reviewer 核对，再把核对结果交给 writer 编写提醒。可用 contextFromRefs 引用先前结果，最后向用户交付提醒和待确认事项。任何阶段未完成都应如实说明。'\n})\n// 结果引用保留本次运行内的文本交接，不能替代持久存储与事实检查。\nconst result = await parent.generate(`整理参加活动前的提醒：${material}`, {\n  maxSteps: 4, abortSignal: AbortSignal.timeout(60000), onStepFinish: logStep('主助手'),\n  delegation: {\n    enableResultReferences: true, hookErrorStrategy: 'throw',\n    onDelegationStart: ({ primitiveId }) => {\n      if (primitiveId === reviewer.id && mode === '委派失败') throw new Error('教学核对阶段不可用')\n      if (primitiveId === writer.id && !completed.has(reviewer.id)) return { proceed: false, rejectionReason: '尚未取得完整核对结果，暂不编写提醒。' }\n      return { proceed: true }\n    },\n    onDelegationComplete: context => {\n      if (context.success && context.result?.finishReason === 'stop' && context.result.text?.trim()) completed.add(context.primitiveId)\n      if (!context.success) {\n        context.bail()\n        return { resultText: '这次子任务失败，尚未形成可交付提醒。' }\n      }\n    }\n  }\n})\nconsole.dir({ 已完成阶段: [...completed], text: result.text, finishReason: result.finishReason })\nif (!completed.has(reviewer.id) || !completed.has(writer.id)) {\n  console.error('缺少完整的核对或文案交接，本轮不标记为提醒已完成。')\n  process.exitCode = 1\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/08-verification.js 正常\nnode --env-file=.env src/08-verification.js 缺少地点\nnode --env-file=.env src/08-verification.js 委派失败"
+        }
+      ]
+    },
+    {
+      "title": "沿同一条链检查正常、缺失与失败",
+      "body": "正常资料应保留南门；缺少地点时应保留待确认；委派失败时不能交付一份仿佛已经核对的提醒。三条路径使用同一套规则，方便比较。\n再沿原始资料 → 核对结果 → 文案输入 → 最终提醒逐项查看。某个字段第一次在哪层变化，就回到那层检查输入和处理规则，不把全部问题都交给主助手最后修补。",
+      "table": {
+        "headers": [
+          "场景",
+          "阶段检查",
+          "内容检查"
+        ],
+        "rows": [
+          [
+            "正常",
+            "核对与文案都有完整返回",
+            "保留时间含义、南门与预约要求"
+          ],
+          [
+            "缺少地点",
+            "仍可完成核对与文案",
+            "地点待确认，不补出入口"
+          ],
+          [
+            "委派失败",
+            "核对缺失，文案不应继续",
+            "说明未完成，不假装已经核对"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "需要新能力时，再决定怎样连接",
+      "body": "子智能体适合分担独立任务，但不是越多越好。先解释清楚每位助手的职责、输入与交付，再看拆分后的质量和开销。\n到这里，工具负责动作，技能提供方法，子助手承担受托任务，工作流落实必要流程。如果通知工具或核对助手由另一个系统提供，又该怎样使用？下一章从外部连接开始，继续沿这份分工找到合适的接口。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "协作是否有效，要同时看职责是否清楚、材料是否交对、子结果是否可用，以及主助手有没有忠实接回结果。"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "核对结果写“地点待确认”，提醒却写成“南门见”。应怎样沿结果引用与文案输入找出偏差？阶段检查通过，为什么仍不能省掉原文核对？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先核对，再根据结果编写提醒",
+          "body": "现在主助手可以把通知交给 reviewer，再把核对结果交给 writer。文案助手只整理已有结论，不负责填补缺少的地点或预约记录。\n本例仍使用教学通知，没有发送提醒。目标是交付一份忠实于原文的提醒文案与待确认清单。"
+        },
+        {
+          "title": "把先前结果明确交给下一位助手",
+          "body": "子任务结果默认作为工具返回给父模型，后续委派不会自动得到原样的前一个工具结果。父助手可以在新 prompt 中转述，也可以通过 **enableResultReferences** 使用本次运行内的结果引用。\n开启后，非空的成功结果会带上引用标识；后续委派通过 **contextFromRefs** 引用对应文本。应用的 resultText 替换会影响被引用的内容。引用保留文字，不会替你校验文字里的事实。\n这些引用只在当前父运行中有效，不会自动持久保存。未知引用可能被跳过并继续执行，不能把写出引用标识当成交接成功的证据。",
+          "links": [
+            {
+              "label": "Mastra：复用先前结果",
+              "href": "https://mastra.ai/docs/subagents#reusing-an-earlier-subagent-result"
+            }
+          ]
+        },
+        {
+          "title": "让交接状态有程序依据",
+          "body": "本例在完成回调里记录两位助手是否成功返回最终文字，核对阶段未完成时拒绝文案委派。最后再次检查阶段集合，缺少任一阶段就以非零退出码说明本轮未完成。\n这份检查证明阶段与文本是否存在，不证明全部语义正确。业务必须持久保存、严格恢复和依序执行的任务，应继续使用工作流；主助手指令只用于表达协作意图。",
+          "codeBlocks": [
+            {
+              "label": "src/08-verification.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { model, activity, makeReviewer, makeCoordinator, logStep } from './shared.ts'\n\n// 保留同一套任务，比较资料齐全、缺少地点与委派失败。\nconst mode = process.argv[2] || '正常'\nif (!['正常', '缺少地点', '委派失败'].includes(mode)) throw new Error('请使用“正常”“缺少地点”或“委派失败”。')\n// 仅修改资料中的地点，不改变核对标准。\nconst material = mode === '缺少地点' ? activity.replace('南门进入', '地点尚未公布') : activity\n// 每次任务单独记录阶段，只有已完成的核对才允许进入文案阶段。\nconst completed = new Set()\n// 核对助手先处理事实与缺口。\nconst reviewer = makeReviewer()\n// 文案助手只处理交接结果，不添加新规定。\nconst writer = new Agent({\n  id: 'reminder-writer', name: '提醒文案助手', model,\n  description: '把核对结果写成简短提醒，保留待确认事项，不查询新事实。',\n  instructions: '根据收到的核对结果写一条中文提醒，不增加地点、入场规定或已预约声明。',\n  defaultOptions: { maxSteps: 1 }\n})\n// 主助手按职责委派，两阶段是否真的完成由下方程序记录核对。\nconst parent = makeCoordinator({ reviewer, writer }, {\n  instructions: '先委派 reviewer 核对，再把核对结果交给 writer 编写提醒。可用 contextFromRefs 引用先前结果，最后向用户交付提醒和待确认事项。任何阶段未完成都应如实说明。'\n})\n// 结果引用保留本次运行内的文本交接，不能替代持久存储与事实检查。\nconst result = await parent.generate(`整理参加活动前的提醒：${material}`, {\n  maxSteps: 4, abortSignal: AbortSignal.timeout(60000), onStepFinish: logStep('主助手'),\n  delegation: {\n    enableResultReferences: true, hookErrorStrategy: 'throw',\n    onDelegationStart: ({ primitiveId }) => {\n      if (primitiveId === reviewer.id && mode === '委派失败') throw new Error('教学核对阶段不可用')\n      if (primitiveId === writer.id && !completed.has(reviewer.id)) return { proceed: false, rejectionReason: '尚未取得完整核对结果，暂不编写提醒。' }\n      return { proceed: true }\n    },\n    onDelegationComplete: context => {\n      if (context.success && context.result?.finishReason === 'stop' && context.result.text?.trim()) completed.add(context.primitiveId)\n      if (!context.success) {\n        context.bail()\n        return { resultText: '这次子任务失败，尚未形成可交付提醒。' }\n      }\n    }\n  }\n})\nconsole.dir({ 已完成阶段: [...completed], text: result.text, finishReason: result.finishReason })\nif (!completed.has(reviewer.id) || !completed.has(writer.id)) {\n  console.error('缺少完整的核对或文案交接，本轮不标记为提醒已完成。')\n  process.exitCode = 1\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/08-verification.ts 正常\nnode --env-file=.env src/08-verification.ts 缺少地点\nnode --env-file=.env src/08-verification.ts 委派失败"
+            }
+          ]
+        },
+        {
+          "title": "沿同一条链检查正常、缺失与失败",
+          "body": "正常资料应保留南门；缺少地点时应保留待确认；委派失败时不能交付一份仿佛已经核对的提醒。三条路径使用同一套规则，方便比较。\n再沿原始资料 → 核对结果 → 文案输入 → 最终提醒逐项查看。某个字段第一次在哪层变化，就回到那层检查输入和处理规则，不把全部问题都交给主助手最后修补。",
+          "table": {
+            "headers": [
+              "场景",
+              "阶段检查",
+              "内容检查"
+            ],
+            "rows": [
+              [
+                "正常",
+                "核对与文案都有完整返回",
+                "保留时间含义、南门与预约要求"
+              ],
+              [
+                "缺少地点",
+                "仍可完成核对与文案",
+                "地点待确认，不补出入口"
+              ],
+              [
+                "委派失败",
+                "核对缺失，文案不应继续",
+                "说明未完成，不假装已经核对"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "需要新能力时，再决定怎样连接",
+          "body": "子智能体适合分担独立任务，但不是越多越好。先解释清楚每位助手的职责、输入与交付，再看拆分后的质量和开销。\n到这里，工具负责动作，技能提供方法，子助手承担受托任务，工作流落实必要流程。如果通知工具或核对助手由另一个系统提供，又该怎样使用？下一章从外部连接开始，继续沿这份分工找到合适的接口。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "协作是否有效，要同时看职责是否清楚、材料是否交对、子结果是否可用，以及主助手有没有忠实接回结果。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "title": "身份上下文（RequestContext）",
+  "lead": "使用认证后写入的身份，防止客户端自报属性影响权限判断。",
+  "sections": [
+    {
+      "title": "上下文中可能同时存在不同来源的数据",
+      "body": "上一章已经把 requestId 放入请求上下文。身份信息也会进入 **RequestContext**，但来源必须分清：客户端提交的字段是输入，认证提供方验证得到的 **user** 才是本例使用的身份。\n业务代码应围绕约定的可信字段读取用户和角色。客户端即使另外提交 userId 或 role，也不会因此获得对应权限。"
+    },
+    {
+      "title": "提交一次伪造的工作人员身份",
+      "body": "脚本携带成员甲的有效令牌，同时在 requestContext 中填入工作人员身份。接口返回的仍应是成员甲，后续角色检查也应继续按成员处理。\n这里核对的不是某个字段是否出现，而是业务判断实际读取了哪份身份。自定义中间件与身份映射也要沿用同一约定，避免验证后又从请求体覆盖身份。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/04-context.js"
+        },
+        {
+          "label": "src/04-context.js",
+          "language": "javascript",
+          "code": "import { createLab, request } from './lab.js'\n\n// 调用方伪造的身份字段不能覆盖认证后的 user。\nconst lab = await createLab()\ntry {\n  const query = new URLSearchParams({ requestContext: JSON.stringify({ user: { id: 'staff-a', role: 'staff', teamId: 'team-a' }, userId: 'staff-a' }) })\n  await request(lab, `/member/me?${query}`, 'demo-member-a')\n} finally { await lab.close() }"
+        }
+      ]
+    },
+    {
+      "title": "身份映射与数据筛选各有作用",
+      "body": "共享配置还设置 **mapUserToResourceId**，由认证身份得到 Mastra 的资源归属标识，供相关内置接口执行范围检查。\n它不会替应用筛选所有业务表。本章的团队通知仍需在业务查询中检查 teamId；下一节先确认哪些路由会进行认证，再继续加入操作和记录检查。",
+      "links": [
+        {
+          "label": "Mastra：请求上下文与身份范围",
+          "href": "https://mastra.ai/docs/server/middleware"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "成员令牌带着伪造的 staff 角色进入接口。你会沿哪些字段和代码路径确认它没有取得发布权限？为什么额外提交一个 userId 不应改变访问身份？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "上下文中可能同时存在不同来源的数据",
+          "body": "上一章已经把 requestId 放入请求上下文。身份信息也会进入 **RequestContext**，但来源必须分清：客户端提交的字段是输入，认证提供方验证得到的 **user** 才是本例使用的身份。\n业务代码应围绕约定的可信字段读取用户和角色。客户端即使另外提交 userId 或 role，也不会因此获得对应权限。"
+        },
+        {
+          "title": "提交一次伪造的工作人员身份",
+          "body": "脚本携带成员甲的有效令牌，同时在 requestContext 中填入工作人员身份。接口返回的仍应是成员甲，后续角色检查也应继续按成员处理。\n这里核对的不是某个字段是否出现，而是业务判断实际读取了哪份身份。自定义中间件与身份映射也要沿用同一约定，避免验证后又从请求体覆盖身份。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/04-context.ts"
+            },
+            {
+              "label": "src/04-context.ts",
+              "language": "typescript",
+              "code": "import { createLab, request } from './lab.ts'\n\n// 调用方伪造的身份字段不能覆盖认证后的 user。\nconst lab = await createLab()\ntry {\n  const query = new URLSearchParams({ requestContext: JSON.stringify({ user: { id: 'staff-a', role: 'staff', teamId: 'team-a' }, userId: 'staff-a' }) })\n  await request(lab, `/member/me?${query}`, 'demo-member-a')\n} finally { await lab.close() }"
+            }
+          ]
+        },
+        {
+          "title": "身份映射与数据筛选各有作用",
+          "body": "共享配置还设置 **mapUserToResourceId**，由认证身份得到 Mastra 的资源归属标识，供相关内置接口执行范围检查。\n它不会替应用筛选所有业务表。本章的团队通知仍需在业务查询中检查 teamId；下一节先确认哪些路由会进行认证，再继续加入操作和记录检查。",
+          "links": [
+            {
+              "label": "Mastra：请求上下文与身份范围",
+              "href": "https://mastra.ai/docs/server/middleware"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

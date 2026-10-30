@@ -1,0 +1,64 @@
+{
+  "title": "日志关联（Logging）",
+  "lead": "让日志补充具体现场，并通过追踪标识定位到产生它的执行片段。",
+  "sections": [
+    {
+      "title": "给执行片段补上现场信息",
+      "body": "执行树告诉我们通知核对花了多久，却未必说明为什么选择备用入口、是否命中缓存。这些影响执行分支的事实适合写进**日志（Log）**。\n共享步骤通过 mastra.getLogger().info 记录“开始核对活动通知”。在被追踪的操作中，日志可以关联当前片段，终端输出中的 **trace_id**、**span_id** 也能帮助找到对应位置。"
+    },
+    {
+      "title": "分别设置终端与观测日志级别",
+      "body": "终端输出与观测导出各有日志级别设置。当前观测日志的默认门槛是 **warn**；本章将 **logging.level** 显式设为 **info**，让核对步骤中的这条日志也进入存储。\n等待 flush 后，通过 **listLogs()** 按 traceId 查询，再用记录中的 spanId 找到具体步骤。追踪外的日志可能没有这些标识；排查“终端有、存储里没有”时，也要检查级别、调用位置和导出配置。",
+      "codeBlocks": [
+        {
+          "label": "src/05-logs.js",
+          "language": "javascript",
+          "code": "import { createLab, runActivity } from './lab.js'\n\n// 只查本次追踪中的日志，保留它与具体执行片段的关联。\nconst lab = await createLab()\ntry {\n  const { result } = await runActivity(lab)\n  const page = await lab.store.listLogs({ filters: { traceId: result.traceId } })\n  console.table(page.logs.map(log => ({\n    level: log.level, message: log.message,\n    traceId: log.traceId, spanId: log.spanId\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+        }
+      ]
+    },
+    {
+      "title": "记录影响分支的事实",
+      "body": "“启用备用入口”“服务返回 429”“未查到个人预约”都能帮助解释当时的决定。配上必要的请求标识，通常比记录整段消息更容易检索。\n普通 console.log 不会自动进入这套观测存储。业务日志应通过配置好的 logger 输出，并选择排查所需的字段。日志也可能成为用户资料的副本，下一节继续检查哪些内容应该留下。",
+      "links": [
+        {
+          "label": "Mastra：日志",
+          "href": "https://mastra.ai/docs/observability/logging"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "终端有“开始核对活动通知”，存储查询却没有。你会如何检查日志级别与导出配置？找到日志后，又怎样确认它属于哪次运行、哪个步骤？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "给执行片段补上现场信息",
+          "body": "执行树告诉我们通知核对花了多久，却未必说明为什么选择备用入口、是否命中缓存。这些影响执行分支的事实适合写进**日志（Log）**。\n共享步骤通过 mastra.getLogger().info 记录“开始核对活动通知”。在被追踪的操作中，日志可以关联当前片段，终端输出中的 **trace_id**、**span_id** 也能帮助找到对应位置。"
+        },
+        {
+          "title": "分别设置终端与观测日志级别",
+          "body": "终端输出与观测导出各有日志级别设置。当前观测日志的默认门槛是 **warn**；本章将 **logging.level** 显式设为 **info**，让核对步骤中的这条日志也进入存储。\n等待 flush 后，通过 **listLogs()** 按 traceId 查询，再用记录中的 spanId 找到具体步骤。追踪外的日志可能没有这些标识；排查“终端有、存储里没有”时，也要检查级别、调用位置和导出配置。",
+          "codeBlocks": [
+            {
+              "label": "src/05-logs.ts",
+              "language": "typescript",
+              "code": "import { createLab, runActivity } from './lab.ts'\n\n// 只查本次追踪中的日志，保留它与具体执行片段的关联。\nconst lab = await createLab()\ntry {\n  const { result } = await runActivity(lab)\n  const page = await lab.store.listLogs({ filters: { traceId: result.traceId } })\n  console.table(page.logs.map(log => ({\n    level: log.level, message: log.message,\n    traceId: log.traceId, spanId: log.spanId\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+            }
+          ]
+        },
+        {
+          "title": "记录影响分支的事实",
+          "body": "“启用备用入口”“服务返回 429”“未查到个人预约”都能帮助解释当时的决定。配上必要的请求标识，通常比记录整段消息更容易检索。\n普通 console.log 不会自动进入这套观测存储。业务日志应通过配置好的 logger 输出，并选择排查所需的字段。日志也可能成为用户资料的副本，下一节继续检查哪些内容应该留下。",
+          "links": [
+            {
+              "label": "Mastra：日志",
+              "href": "https://mastra.ai/docs/observability/logging"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

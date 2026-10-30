@@ -1,0 +1,17 @@
+{
+  "name": "mastra-server-journey",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@hono/node-server": "1.19.11",
+    "@mastra/client-js": "1.57.0",
+    "@mastra/core": "1.80.0",
+    "@mastra/hono": "1.7.22",
+    "@mastra/libsql": "1.27.1",
+    "hono": "4.13.13",
+    "zod": "4.6.7"
+  }
+}

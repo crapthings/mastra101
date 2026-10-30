@@ -1,0 +1,64 @@
+{
+  "title": "持久数据（Persistence）",
+  "lead": "让运行记录与观测数据跨进程保留，同时明确本地数据库的并发与迁移范围。",
+  "sections": [
+    {
+      "title": "进程退出，资料仍应有明确去处",
+      "body": "前面的内存实验退出即清空。本章用 **DATA_DIR** 承接两份文件数据库：LibSQL 保存应用运行等状态，DuckDB 保存追踪、日志与指标。\n应用由 **MastraCompositeStore** 路由到对应存储域，沿用 09 与 16 的职责划分。目录先创建、存储完成初始化后，才进入服务启动。",
+      "codeBlocks": [
+        {
+          "label": "src/application.js",
+          "language": "javascript",
+          "code": "import { mkdir } from 'node:fs/promises'\nimport { join } from 'node:path'\nimport { pathToFileURL } from 'node:url'\nimport { setTimeout as delay } from 'node:timers/promises'\nimport { Mastra } from '@mastra/core/mastra'\nimport { Agent } from '@mastra/core/agent'\nimport { SimpleAuth } from '@mastra/core/server'\nimport { MastraCompositeStore } from '@mastra/core/storage'\nimport { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { DuckDBStore } from '@mastra/duckdb'\nimport { Observability, MastraStorageExporter } from '@mastra/observability'\nimport { z } from 'zod'\n\n// 用持久存储、认证和观测组成一个可启动的通知应用。\nexport async function createApplication (config) {\n  await mkdir(config.dataDir, { recursive: true })\n  const analytics = new DuckDBStore({ id: 'runtime-observability', path: join(config.dataDir, 'observability.duckdb') })\n  const observability = await analytics.getStore('observability')\n  const storage = new MastraCompositeStore({\n    id: 'runtime-storage',\n    default: new LibSQLStore({ id: 'runtime-state', url: pathToFileURL(join(config.dataDir, 'application.db')).href }),\n    domains: { observability }\n  })\n  await storage.init()\n  const inputSchema = z.object({ venue: z.string().min(1).nullable(), waitMs: z.number().int().min(0).max(1000).default(0) })\n  const outputSchema = z.object({ status: z.string(), venue: z.string().nullable() })\n  const prepare = createStep({\n    id: 'prepare-notice', inputSchema, outputSchema,\n    execute: async ({ inputData, abortSignal }) => {\n      await delay(inputData.waitMs, undefined, { signal: abortSignal })\n      return { status: inputData.venue === null ? '待确认' : '已确认', venue: inputData.venue }\n    }\n  })\n  const workflow = createWorkflow({ id: 'notice-check', inputSchema, outputSchema }).then(prepare).commit()\n  const agent = new Agent({ id: 'notice-helper', name: '通知助手', model: 'vercel/openai/gpt-6.1-sol', instructions: '根据给定通知整理提醒。入口未公布时明确待确认，不补写入口。' })\n  return new Mastra({\n    agents: { noticeHelper: agent }, workflows: { noticeCheck: workflow }, storage,\n    observability: new Observability({ configs: { default: {\n      serviceName: 'notice-runtime', exporters: [new MastraStorageExporter()],\n      // 限制单个字符串的记录长度，敏感数据仍需按采集规则处理。\n      serializationOptions: { maxStringLength: 500 }\n    } } }),\n    server: { auth: new SimpleAuth({\n      tokens: { [config.token]: { id: 'service-caller', name: '内部调用方' } },\n      protected: ['/api/*'], public: ['/health/*', '/api/auth/*'],\n      mapUserToResourceId: user => user.id\n    }) }\n  })\n}"
+        }
+      ]
+    },
+    {
+      "title": "重启后读回同一项运行",
+      "body": "验证入口先完成一次通知核对并取得 runId，再关闭进程，用同一目录启动新版本，按原标识读回状态。它也查询此前留下的追踪，确认观测数据在关闭后完成保存。\n这证明当前部署路径中，运行资料与观测记录可以跨重启读取。容器环境则需要把目录放到卷或其他持久存储中，避免随着容器删除一起丢失。"
+    },
+    {
+      "title": "备份、迁移和扩容要覆盖真实存储",
+      "body": "本例采用单进程、本地文件数据库。增加副本时，要重新选择适合共享访问的存储与观测后端，不能把多个容器同时指向同一 DuckDB 文件当成通用扩容方案。\n发布前也要确认数据库格式、迁移和备份恢复方式。保留旧镜像只能恢复代码，不能自动撤销已经写入的数据变化。下一节继续区分保存状态与继续执行任务。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "运行进程、应用文件和持久数据有不同生命周期。更新代码时，数据保存位置与兼容方式需要单独确认。"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "替换容器后，旧 runId 查不到了，应该先检查哪些路径与卷？如果还要增加多个服务副本，需要重新核对哪两类存储能力？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "进程退出，资料仍应有明确去处",
+          "body": "前面的内存实验退出即清空。本章用 **DATA_DIR** 承接两份文件数据库：LibSQL 保存应用运行等状态，DuckDB 保存追踪、日志与指标。\n应用由 **MastraCompositeStore** 路由到对应存储域，沿用 09 与 16 的职责划分。目录先创建、存储完成初始化后，才进入服务启动。",
+          "codeBlocks": [
+            {
+              "label": "src/application.ts",
+              "language": "typescript",
+              "code": "import { mkdir } from 'node:fs/promises'\nimport { join } from 'node:path'\nimport { pathToFileURL } from 'node:url'\nimport { setTimeout as delay } from 'node:timers/promises'\nimport { Mastra } from '@mastra/core/mastra'\nimport { Agent } from '@mastra/core/agent'\nimport { SimpleAuth } from '@mastra/core/server'\nimport { MastraCompositeStore } from '@mastra/core/storage'\nimport { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { DuckDBStore } from '@mastra/duckdb'\nimport { Observability, MastraStorageExporter } from '@mastra/observability'\nimport { z } from 'zod'\n\n// 用持久存储、认证和观测组成一个可启动的通知应用。\nexport async function createApplication (config) {\n  await mkdir(config.dataDir, { recursive: true })\n  const analytics = new DuckDBStore({ id: 'runtime-observability', path: join(config.dataDir, 'observability.duckdb') })\n  const observability = await analytics.getStore('observability')\n  const storage = new MastraCompositeStore({\n    id: 'runtime-storage',\n    default: new LibSQLStore({ id: 'runtime-state', url: pathToFileURL(join(config.dataDir, 'application.db')).href }),\n    domains: { observability }\n  })\n  await storage.init()\n  const inputSchema = z.object({ venue: z.string().min(1).nullable(), waitMs: z.number().int().min(0).max(1000).default(0) })\n  const outputSchema = z.object({ status: z.string(), venue: z.string().nullable() })\n  const prepare = createStep({\n    id: 'prepare-notice', inputSchema, outputSchema,\n    execute: async ({ inputData, abortSignal }) => {\n      await delay(inputData.waitMs, undefined, { signal: abortSignal })\n      return { status: inputData.venue === null ? '待确认' : '已确认', venue: inputData.venue }\n    }\n  })\n  const workflow = createWorkflow({ id: 'notice-check', inputSchema, outputSchema }).then(prepare).commit()\n  const agent = new Agent({ id: 'notice-helper', name: '通知助手', model: 'vercel/openai/gpt-6.1-sol', instructions: '根据给定通知整理提醒。入口未公布时明确待确认，不补写入口。' })\n  return new Mastra({\n    agents: { noticeHelper: agent }, workflows: { noticeCheck: workflow }, storage,\n    observability: new Observability({ configs: { default: {\n      serviceName: 'notice-runtime', exporters: [new MastraStorageExporter()],\n      // 限制单个字符串的记录长度，敏感数据仍需按采集规则处理。\n      serializationOptions: { maxStringLength: 500 }\n    } } }),\n    server: { auth: new SimpleAuth({\n      tokens: { [config.token]: { id: 'service-caller', name: '内部调用方' } },\n      protected: ['/api/*'], public: ['/health/*', '/api/auth/*'],\n      mapUserToResourceId: user => user.id\n    }) }\n  })\n}"
+            }
+          ]
+        },
+        {
+          "title": "重启后读回同一项运行",
+          "body": "验证入口先完成一次通知核对并取得 runId，再关闭进程，用同一目录启动新版本，按原标识读回状态。它也查询此前留下的追踪，确认观测数据在关闭后完成保存。\n这证明当前部署路径中，运行资料与观测记录可以跨重启读取。容器环境则需要把目录放到卷或其他持久存储中，避免随着容器删除一起丢失。"
+        },
+        {
+          "title": "备份、迁移和扩容要覆盖真实存储",
+          "body": "本例采用单进程、本地文件数据库。增加副本时，要重新选择适合共享访问的存储与观测后端，不能把多个容器同时指向同一 DuckDB 文件当成通用扩容方案。\n发布前也要确认数据库格式、迁移和备份恢复方式。保留旧镜像只能恢复代码，不能自动撤销已经写入的数据变化。下一节继续区分保存状态与继续执行任务。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "运行进程、应用文件和持久数据有不同生命周期。更新代码时，数据保存位置与兼容方式需要单独确认。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

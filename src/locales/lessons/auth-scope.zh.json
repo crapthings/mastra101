@@ -1,0 +1,104 @@
+{
+  "title": "数据访问范围（Resource Authorization）",
+  "lead": "对列表、单条读取和写入同时限定记录范围，并区分应用规则与框架资源授权。",
+  "sections": [
+    {
+      "title": "同一操作，落到具体哪条记录",
+      "body": "成员甲与成员乙属于不同团队。读取通知列表时，查询先限定当前团队；读取单条或发布时，再同时匹配记录 id 与 teamId。\n这样，知道另一条通知的 id 也不能直接取得内容。过滤列表与检查单条入口需要配合，否则其中一条路径仍可能返回其他团队的资料。"
+    },
+    {
+      "title": "沿三类入口检查归属",
+      "body": "下面的业务模块从认证后的 user 读取 teamId，分别用于列表、单条读取和发布。跨团队请求返回 404；这是应用选择的响应约定，用于避免暴露不可访问的记录。\n将来换成数据库查询时，也应把归属条件带进实际查询或更新，而不只在读取后检查客户端传来的字段。",
+      "codeBlocks": [
+        {
+          "label": "src/routes.js",
+          "language": "javascript",
+          "code": "import { registerApiRoute } from '@mastra/core/server'\nimport { permissions } from './policy.js'\n\n// 业务接口分别演示公开内容、可信身份、角色权限与记录归属。\nexport function createRoutes (notices) {\n  return [\n    registerApiRoute('/public/notices', { method: 'GET', requiresAuth: false,\n      handler: async c => c.json(notices.filter(n => n.published).map(n => ({ id: n.id, text: n.text })))\n    }),\n    registerApiRoute('/member/me', { method: 'GET', handler: async c => {\n      const user = c.get('requestContext').get('user')\n      return c.json({ id: user.id, name: user.name, role: user.role, teamId: user.teamId })\n    } }),\n    registerApiRoute('/member/notices', { method: 'GET', handler: async c => {\n      const user = c.get('requestContext').get('user')\n      return c.json(notices.filter(n => n.teamId === user.teamId))\n    } }),\n    registerApiRoute('/member/notices/:id', { method: 'GET', handler: async c => {\n      const user = c.get('requestContext').get('user')\n      const notice = notices.find(n => n.id === c.req.param('id') && n.teamId === user.teamId)\n      return notice ? c.json(notice) : c.json({ error: '没有可读取的通知' }, 404)\n    } }),\n    registerApiRoute('/staff/notices/:id/publish', { method: 'POST', handler: async c => {\n      const user = c.get('requestContext').get('user')\n      if (!permissions[user.role]?.includes('notice:publish')) return c.json({ error: '没有发布通知的权限' }, 403)\n      const notice = notices.find(n => n.id === c.req.param('id') && n.teamId === user.teamId)\n      if (!notice) return c.json({ error: '没有可发布的通知' }, 404)\n      notice.published = true\n      return c.json({ id: notice.id, status: '已发布教学记录' })\n    } })\n  ]\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/07-scope.js"
+        },
+        {
+          "label": "src/07-scope.js",
+          "language": "javascript",
+          "code": "import { createLab, request } from './lab.js'\n\n// 列表、单条读取与发布都核对记录归属，角色权限不能替代此检查。\nconst lab = await createLab()\ntry {\n  await request(lab, '/member/notices', 'demo-member-a')\n  await request(lab, '/member/notices/notice-b', 'demo-member-a')\n  await request(lab, '/staff/notices/notice-b/publish', 'demo-staff-a', { method: 'POST' })\n  await request(lab, '/member/notices', 'demo-member-b')\n} finally { await lab.close() }"
+        }
+      ]
+    },
+    {
+      "title": "框架资源授权还需要对应配置",
+      "body": "**细粒度授权（FGA）**进一步表达“某个身份能否对某项具体资源执行操作”。Mastra 的 **server.fga** 属于企业版能力，可将路由操作与资源映射到授权提供方；本章没有接入该服务。\n框架的存储资源范围配置、内置记忆的资源归属，以及应用通知的 teamId 筛选，也需要按各自覆盖范围配置。认证通过或启用一种检查，不会自动筛选所有数据。",
+      "links": [
+        {
+          "label": "Mastra：细粒度授权",
+          "href": "https://mastra.ai/docs/auth/fga"
+        }
+      ]
+    },
+    {
+      "title": "把允许与拒绝一起交给下一阶段",
+      "body": "本章已验证访客、成员和工作人员的正常请求，也检查了伪造身份、权限不足与跨团队访问。后续改动时，这些拒绝样本应继续作为回归依据。\n接下来让应用持续运行：配置从哪里加载，记录怎样在重启后保留，任务与进程如何有序停止？下一章把服务、身份、存储与观测接成一个可部署的运行单元。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "角色决定允许哪些操作，资源规则决定这些操作可以作用于哪些记录。列表、单条访问与写入都应采用相应范围。"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "成员列表已按团队筛选，但单条读取只按 id 查询，会出现什么问题？发布接口还需要怎样把角色权限和记录归属一起落实？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "同一操作，落到具体哪条记录",
+          "body": "成员甲与成员乙属于不同团队。读取通知列表时，查询先限定当前团队；读取单条或发布时，再同时匹配记录 id 与 teamId。\n这样，知道另一条通知的 id 也不能直接取得内容。过滤列表与检查单条入口需要配合，否则其中一条路径仍可能返回其他团队的资料。"
+        },
+        {
+          "title": "沿三类入口检查归属",
+          "body": "下面的业务模块从认证后的 user 读取 teamId，分别用于列表、单条读取和发布。跨团队请求返回 404；这是应用选择的响应约定，用于避免暴露不可访问的记录。\n将来换成数据库查询时，也应把归属条件带进实际查询或更新，而不只在读取后检查客户端传来的字段。",
+          "codeBlocks": [
+            {
+              "label": "src/routes.ts",
+              "language": "typescript",
+              "code": "import { registerApiRoute } from '@mastra/core/server'\nimport { permissions } from './policy.ts'\n\n// 业务接口分别演示公开内容、可信身份、角色权限与记录归属。\nexport function createRoutes (notices) {\n  return [\n    registerApiRoute('/public/notices', { method: 'GET', requiresAuth: false,\n      handler: async c => c.json(notices.filter(n => n.published).map(n => ({ id: n.id, text: n.text })))\n    }),\n    registerApiRoute('/member/me', { method: 'GET', handler: async c => {\n      const user = c.get('requestContext').get('user')\n      return c.json({ id: user.id, name: user.name, role: user.role, teamId: user.teamId })\n    } }),\n    registerApiRoute('/member/notices', { method: 'GET', handler: async c => {\n      const user = c.get('requestContext').get('user')\n      return c.json(notices.filter(n => n.teamId === user.teamId))\n    } }),\n    registerApiRoute('/member/notices/:id', { method: 'GET', handler: async c => {\n      const user = c.get('requestContext').get('user')\n      const notice = notices.find(n => n.id === c.req.param('id') && n.teamId === user.teamId)\n      return notice ? c.json(notice) : c.json({ error: '没有可读取的通知' }, 404)\n    } }),\n    registerApiRoute('/staff/notices/:id/publish', { method: 'POST', handler: async c => {\n      const user = c.get('requestContext').get('user')\n      if (!permissions[user.role]?.includes('notice:publish')) return c.json({ error: '没有发布通知的权限' }, 403)\n      const notice = notices.find(n => n.id === c.req.param('id') && n.teamId === user.teamId)\n      if (!notice) return c.json({ error: '没有可发布的通知' }, 404)\n      notice.published = true\n      return c.json({ id: notice.id, status: '已发布教学记录' })\n    } })\n  ]\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/07-scope.ts"
+            },
+            {
+              "label": "src/07-scope.ts",
+              "language": "typescript",
+              "code": "import { createLab, request } from './lab.ts'\n\n// 列表、单条读取与发布都核对记录归属，角色权限不能替代此检查。\nconst lab = await createLab()\ntry {\n  await request(lab, '/member/notices', 'demo-member-a')\n  await request(lab, '/member/notices/notice-b', 'demo-member-a')\n  await request(lab, '/staff/notices/notice-b/publish', 'demo-staff-a', { method: 'POST' })\n  await request(lab, '/member/notices', 'demo-member-b')\n} finally { await lab.close() }"
+            }
+          ]
+        },
+        {
+          "title": "框架资源授权还需要对应配置",
+          "body": "**细粒度授权（FGA）**进一步表达“某个身份能否对某项具体资源执行操作”。Mastra 的 **server.fga** 属于企业版能力，可将路由操作与资源映射到授权提供方；本章没有接入该服务。\n框架的存储资源范围配置、内置记忆的资源归属，以及应用通知的 teamId 筛选，也需要按各自覆盖范围配置。认证通过或启用一种检查，不会自动筛选所有数据。",
+          "links": [
+            {
+              "label": "Mastra：细粒度授权",
+              "href": "https://mastra.ai/docs/auth/fga"
+            }
+          ]
+        },
+        {
+          "title": "把允许与拒绝一起交给下一阶段",
+          "body": "本章已验证访客、成员和工作人员的正常请求，也检查了伪造身份、权限不足与跨团队访问。后续改动时，这些拒绝样本应继续作为回归依据。\n接下来让应用持续运行：配置从哪里加载，记录怎样在重启后保留，任务与进程如何有序停止？下一章把服务、身份、存储与观测接成一个可部署的运行单元。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "角色决定允许哪些操作，资源规则决定这些操作可以作用于哪些记录。列表、单条访问与写入都应采用相应范围。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

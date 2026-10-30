@@ -1,0 +1,14 @@
+{
+  "title": "先发现入口，再按远端任务状态交接",
+  "caption": "能力卡给出调用入口，Task 状态说明远端报告的进展。本例的 failed 也对应适配层 stop；等待输入时保留 taskId，完成时继续核对产物。",
+  "card": "读取 Agent Card",
+  "cardDetail": "取得任务入口与支持能力",
+  "send": "向执行入口提交任务",
+  "sendDetail": "读取返回消息、Task 与产物",
+  "done": "completed",
+  "doneDetail": "核对实际产物",
+  "wait": "input-required",
+  "waitDetail": "保留任务，等待输入",
+  "failed": "failed",
+  "failedDetail": "保留原因，处理失败"
+}

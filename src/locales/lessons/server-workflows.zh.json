@@ -1,0 +1,130 @@
+{
+  "title": "工作流接口（Workflow API）",
+  "lead": "通过运行标识启动、查询和衔接工作流，按实际 API 约定理解等待方式。",
+  "sections": [
+    {
+      "title": "客户端发请求，服务端保存运行",
+      "body": "**createRun()** 创建工作流运行，返回供后续调用使用的 runId。启动、查询和恢复时，都需要明确对应哪一次运行。\n本例提交入口尚未公布的资料，等待执行返回，再通过 **runById()** 读回状态。随后传入已有 runId 重新取得客户端运行对象，核对它仍指向同一次运行。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/06-workflows.js"
+        },
+        {
+          "label": "src/06-workflows.js",
+          "language": "javascript",
+          "code": "import { MastraClient } from '@mastra/client-js'\nimport { createLab } from './lab.js'\n\n// 客户端先创建运行，再启动执行，并按同一 runId 读取保存的状态。\nconst lab = await createLab()\ntry {\n  const client = new MastraClient({ baseUrl: lab.baseUrl, retries: 0 })\n  const workflow = client.getWorkflow('notice-check')\n  const run = await workflow.createRun()\n  const result = await run.startAsync({ inputData: { venue: null } })\n  const saved = await workflow.runById(run.runId)\n  console.log('运行标识：', run.runId, '返回状态：', result.status, '结果：', result.result)\n  console.log('读回状态：', saved.status)\n  const reconnected = await workflow.createRun({ runId: run.runId })\n  console.log('重新连接同一运行：', reconnected.runId === run.runId)\n} finally {\n  await lab.close()\n}"
+        }
+      ]
+    },
+    {
+      "title": "按客户端的方法约定区分等待方式",
+      "body": "客户端 **run.startAsync()** 等待本次执行结果，客户端 **run.start()** 发起执行后返回，后续通过查询查看进展。它们与前面 Core 的同名方法有不同约定，应结合调用侧使用。\n流程暂停后，保留原 runId，用 resumeAsync() 等方法提交相应 resumeData。**createRun({ runId })**可以重新取得原运行；不带已有标识创建新运行，则是另一项任务，不能代替恢复。",
+      "table": {
+        "headers": [
+          "客户端调用",
+          "结果含义"
+        ],
+        "rows": [
+          [
+            "createRun()",
+            "新建运行，尚未完成业务任务"
+          ],
+          [
+            "createRun({ runId })",
+            "使用已有运行标识取得调用对象"
+          ],
+          [
+            "startAsync()",
+            "等待本次执行结果"
+          ],
+          [
+            "start()",
+            "发起执行，稍后查询进展"
+          ],
+          [
+            "runById()",
+            "读取指定运行保存的状态"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "为跨进程查询保留必要条件",
+      "body": "本章使用内存存储，服务退出后记录清空。跨进程查询需要持久存储；进程中断后如何继续长任务，还需要运行器、调度或恢复机制配合。\n运行标识、已保存状态与实际执行进展需要一起检查。下一节将这套调用封装为通知业务接口，让页面可以直接提交资料。",
+      "links": [
+        {
+          "label": "Mastra：客户端工作流 API",
+          "href": "https://mastra.ai/reference/client-js/workflows"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "通知任务暂停后，网页重新打开。它应怎样取得原运行并继续？如果不保留原 runId，重新创建任务会有什么不同？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "客户端发请求，服务端保存运行",
+          "body": "**createRun()** 创建工作流运行，返回供后续调用使用的 runId。启动、查询和恢复时，都需要明确对应哪一次运行。\n本例提交入口尚未公布的资料，等待执行返回，再通过 **runById()** 读回状态。随后传入已有 runId 重新取得客户端运行对象，核对它仍指向同一次运行。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/06-workflows.ts"
+            },
+            {
+              "label": "src/06-workflows.ts",
+              "language": "typescript",
+              "code": "import { MastraClient } from '@mastra/client-js'\nimport { createLab } from './lab.ts'\n\n// 客户端先创建运行，再启动执行，并按同一 runId 读取保存的状态。\nconst lab = await createLab()\ntry {\n  const client = new MastraClient({ baseUrl: lab.baseUrl, retries: 0 })\n  const workflow = client.getWorkflow('notice-check')\n  const run = await workflow.createRun()\n  const result = await run.startAsync({ inputData: { venue: null } })\n  const saved = await workflow.runById(run.runId)\n  console.log('运行标识：', run.runId, '返回状态：', result.status, '结果：', result.result)\n  console.log('读回状态：', saved.status)\n  const reconnected = await workflow.createRun({ runId: run.runId })\n  console.log('重新连接同一运行：', reconnected.runId === run.runId)\n} finally {\n  await lab.close()\n}"
+            }
+          ]
+        },
+        {
+          "title": "按客户端的方法约定区分等待方式",
+          "body": "客户端 **run.startAsync()** 等待本次执行结果，客户端 **run.start()** 发起执行后返回，后续通过查询查看进展。它们与前面 Core 的同名方法有不同约定，应结合调用侧使用。\n流程暂停后，保留原 runId，用 resumeAsync() 等方法提交相应 resumeData。**createRun({ runId })**可以重新取得原运行；不带已有标识创建新运行，则是另一项任务，不能代替恢复。",
+          "table": {
+            "headers": [
+              "客户端调用",
+              "结果含义"
+            ],
+            "rows": [
+              [
+                "createRun()",
+                "新建运行，尚未完成业务任务"
+              ],
+              [
+                "createRun({ runId })",
+                "使用已有运行标识取得调用对象"
+              ],
+              [
+                "startAsync()",
+                "等待本次执行结果"
+              ],
+              [
+                "start()",
+                "发起执行，稍后查询进展"
+              ],
+              [
+                "runById()",
+                "读取指定运行保存的状态"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "为跨进程查询保留必要条件",
+          "body": "本章使用内存存储，服务退出后记录清空。跨进程查询需要持久存储；进程中断后如何继续长任务，还需要运行器、调度或恢复机制配合。\n运行标识、已保存状态与实际执行进展需要一起检查。下一节将这套调用封装为通知业务接口，让页面可以直接提交资料。",
+          "links": [
+            {
+              "label": "Mastra：客户端工作流 API",
+              "href": "https://mastra.ai/reference/client-js/workflows"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

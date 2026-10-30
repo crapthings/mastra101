@@ -1,0 +1,178 @@
+{
+  "title": "子智能体配置（Subagents）",
+  "lead": "把一段需要独立理解与判断的工作交出去，再由主助手接回结果。",
+  "sections": [
+    {
+      "title": "从执行一项操作，到委派一段任务",
+      "body": "上一章让助手能够执行程序。回到活动准备，它还要核对通知、整理缺口、编写提醒。工具已经够用，但不同工作的材料、处理规则和交付要求开始变多。\n可以先让一个助手核对资料，另一个助手根据核对结果写提醒。**子智能体（Subagent）**是被其他 Agent 委派任务的 Agent；负责组织委派的主智能体，也常称为 **Supervisor**。"
+    },
+    {
+      "title": "方法、动作与子任务，分别交给谁",
+      "body": "技能提供核对方法，工具执行查询，子智能体则可以围绕“核对这份通知”独立调用模型，并使用自己配置的工具。它不是多加一个角色名称，而是另一次实际运行。\n职责简单、工具很少时，一个 Agent 就能完成。需要分别维护任务规则、上下文或能力时，再拆成子智能体。拆分会增加调用与交接，也需要检查是否真的改善了任务。",
+      "table": {
+        "headers": [
+          "能力",
+          "本例承担什么"
+        ],
+        "rows": [
+          [
+            "技能",
+            "怎样核对活动时间与预约条件"
+          ],
+          [
+            "工具",
+            "读取一份通知或查询一条记录"
+          ],
+          [
+            "子智能体",
+            "理解资料、核对事实与缺口"
+          ],
+          [
+            "工作流",
+            "组织业务必须经过的阶段与数据交接"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "把核对助手放进 agents",
+      "body": "子智能体仍通过 **Agent** 创建，再放入主助手的 **agents**。本例注册键是 reviewer，Agent 自身 id 是 activity-reviewer；前者用于生成主助手可请求的 agent-reviewer 委派工具，后者标识实际 Agent。\n父子都沿用 vercel/openai/gpt-6.1-sol。它们是不同职责的运行，不要求使用不同模型，也不会因为模型相同就合并为一次调用。\n下载并解压后进入 14-subagents 文件夹，使用 Node.js 24 或更高版本安装依赖，复制 .env.example 为 .env，并填入前面使用的 AI_GATEWAY_API_KEY。shared.js 保存本章共同资料与最小配置，后续入口都使用它。",
+      "download": {
+        "href": "/downloads/14-subagents.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install\ncp .env.example .env"
+        },
+        {
+          "label": "src/shared.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\n\n// 本章的父子模型都沿用同一个网关入口。\nexport const model = 'vercel/openai/gpt-6.1-sol'\n// 这份教学通知是各节核对信息的共同依据。\nexport const activity = '社区阅读分享会：周六下午两点开始，一点半开放入场，南门进入，需要提前预约。未提供个人预约记录。'\n// 核对助手只整理已有事实与缺口，不执行预约。\nexport function makeReviewer (options = {}) {\n  return new Agent({\n    id: 'activity-reviewer', name: '资料核对助手', model,\n    description: '核对活动通知中的开始、入场、地点与预约要求，返回已确认信息和待确认事项。',\n    instructions: '核对所提供的活动材料，分为已确认和待确认。保留时间含义、条件与来源，不补写地点或个人预约状态。',\n    defaultOptions: { maxSteps: 2 },\n    ...options\n  })\n}\n// 主助手把资料核对交给 reviewer，再依据返回内容向用户说明。\nexport function makeCoordinator (agents, options = {}) {\n  return new Agent({\n    id: 'activity-coordinator', name: '活动主助手', model, agents,\n    instructions: '把活动资料核对委派给 reviewer，依据其结果回答。保留来源和缺口，不声称已经完成预约。',\n    ...options\n  })\n}\n// 打印父子各自的模型步骤，便于将委派与普通工具执行区分开。\nexport function logStep (label) {\n  return ({ stepNumber, toolCalls, toolResults, finishReason }) => {\n    console.dir({ 位置: label, stepNumber, toolCalls, toolResults, finishReason }, { depth: 6 })\n  }\n}"
+        },
+        {
+          "label": "src/01-subagents.js",
+          "language": "javascript",
+          "code": "import { activity, makeReviewer, makeCoordinator, logStep } from './shared.js'\n\n// 注册键 reviewer 决定主助手看到的委派工具名称。\nconst reviewer = makeReviewer()\n// agents 提供子智能体，主助手的指令说明何时委派。\nconst parent = makeCoordinator({ reviewer })\n// 一次父运行包含委派、子任务处理和父任务继续生成。\nconst result = await parent.generate(`请核对这份通知：${activity}`, {\n  maxSteps: 3, abortSignal: AbortSignal.timeout(60000), onStepFinish: logStep('主助手')\n})\nconsole.dir({ text: result.text, finishReason: result.finishReason })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/01-subagents.js"
+        }
+      ]
+    },
+    {
+      "title": "一次委派，包含父子两层运行",
+      "body": "先看主助手有没有发出 **agent-reviewer** 请求，再检查子任务返回与父任务最终回答。典型路径是：父模型提出委派 → 子助手完成核对 → 结果返回父模型 → 父助手组织答复。\n“需要预约”应保留为参加条件，不能变成“已经替你预约”。增加一个 Agent 只改变分工，没有增加原材料之外的事实。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "主助手负责组织任务，子助手负责受托工作。两层都可能调用模型，各自的结果仍要对照资料检查。"
+        }
+      ]
+    },
+    {
+      "title": "先让职责容易被选中",
+      "body": "主助手怎样知道核对工作该交给 reviewer？配置里需要一份清楚的用途说明。\n下一节把用于选择的 description 与子助手内部的 instructions 分开维护。",
+      "links": [
+        {
+          "label": "Mastra：子智能体",
+          "href": "https://mastra.ai/docs/subagents"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "主助手请求了 agent-reviewer，最终却把“需要预约”写成“已经预约”。应分别查看哪份子任务结果与父回答，才能定位交接中的偏差？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "从执行一项操作，到委派一段任务",
+          "body": "上一章让助手能够执行程序。回到活动准备，它还要核对通知、整理缺口、编写提醒。工具已经够用，但不同工作的材料、处理规则和交付要求开始变多。\n可以先让一个助手核对资料，另一个助手根据核对结果写提醒。**子智能体（Subagent）**是被其他 Agent 委派任务的 Agent；负责组织委派的主智能体，也常称为 **Supervisor**。"
+        },
+        {
+          "title": "方法、动作与子任务，分别交给谁",
+          "body": "技能提供核对方法，工具执行查询，子智能体则可以围绕“核对这份通知”独立调用模型，并使用自己配置的工具。它不是多加一个角色名称，而是另一次实际运行。\n职责简单、工具很少时，一个 Agent 就能完成。需要分别维护任务规则、上下文或能力时，再拆成子智能体。拆分会增加调用与交接，也需要检查是否真的改善了任务。",
+          "table": {
+            "headers": [
+              "能力",
+              "本例承担什么"
+            ],
+            "rows": [
+              [
+                "技能",
+                "怎样核对活动时间与预约条件"
+              ],
+              [
+                "工具",
+                "读取一份通知或查询一条记录"
+              ],
+              [
+                "子智能体",
+                "理解资料、核对事实与缺口"
+              ],
+              [
+                "工作流",
+                "组织业务必须经过的阶段与数据交接"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "把核对助手放进 agents",
+          "body": "子智能体仍通过 **Agent** 创建，再放入主助手的 **agents**。本例注册键是 reviewer，Agent 自身 id 是 activity-reviewer；前者用于生成主助手可请求的 agent-reviewer 委派工具，后者标识实际 Agent。\n父子都沿用 vercel/openai/gpt-6.1-sol。它们是不同职责的运行，不要求使用不同模型，也不会因为模型相同就合并为一次调用。\n下载并解压后进入 14-subagents-ts 文件夹，使用 Node.js 24 或更高版本安装依赖，复制 .env.example 为 .env，并填入前面使用的 AI_GATEWAY_API_KEY。shared.ts 保存本章共同资料与最小配置，后续入口都使用它。",
+          "download": {
+            "href": "/downloads/14-subagents-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install\ncp .env.example .env"
+            },
+            {
+              "label": "src/shared.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\n\n// 本章的父子模型都沿用同一个网关入口。\nexport const model = 'vercel/openai/gpt-6.1-sol'\n// 这份教学通知是各节核对信息的共同依据。\nexport const activity = '社区阅读分享会：周六下午两点开始，一点半开放入场，南门进入，需要提前预约。未提供个人预约记录。'\n// 核对助手只整理已有事实与缺口，不执行预约。\nexport function makeReviewer (options = {}) {\n  return new Agent({\n    id: 'activity-reviewer', name: '资料核对助手', model,\n    description: '核对活动通知中的开始、入场、地点与预约要求，返回已确认信息和待确认事项。',\n    instructions: '核对所提供的活动材料，分为已确认和待确认。保留时间含义、条件与来源，不补写地点或个人预约状态。',\n    defaultOptions: { maxSteps: 2 },\n    ...options\n  })\n}\n// 主助手把资料核对交给 reviewer，再依据返回内容向用户说明。\nexport function makeCoordinator (agents, options = {}) {\n  return new Agent({\n    id: 'activity-coordinator', name: '活动主助手', model, agents,\n    instructions: '把活动资料核对委派给 reviewer，依据其结果回答。保留来源和缺口，不声称已经完成预约。',\n    ...options\n  })\n}\n// 打印父子各自的模型步骤，便于将委派与普通工具执行区分开。\nexport function logStep (label) {\n  return ({ stepNumber, toolCalls, toolResults, finishReason }) => {\n    console.dir({ 位置: label, stepNumber, toolCalls, toolResults, finishReason }, { depth: 6 })\n  }\n}"
+            },
+            {
+              "label": "src/01-subagents.ts",
+              "language": "typescript",
+              "code": "import { activity, makeReviewer, makeCoordinator, logStep } from './shared.ts'\n\n// 注册键 reviewer 决定主助手看到的委派工具名称。\nconst reviewer = makeReviewer()\n// agents 提供子智能体，主助手的指令说明何时委派。\nconst parent = makeCoordinator({ reviewer })\n// 一次父运行包含委派、子任务处理和父任务继续生成。\nconst result = await parent.generate(`请核对这份通知：${activity}`, {\n  maxSteps: 3, abortSignal: AbortSignal.timeout(60000), onStepFinish: logStep('主助手')\n})\nconsole.dir({ text: result.text, finishReason: result.finishReason })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/01-subagents.ts"
+            }
+          ]
+        },
+        {
+          "title": "一次委派，包含父子两层运行",
+          "body": "先看主助手有没有发出 **agent-reviewer** 请求，再检查子任务返回与父任务最终回答。典型路径是：父模型提出委派 → 子助手完成核对 → 结果返回父模型 → 父助手组织答复。\n“需要预约”应保留为参加条件，不能变成“已经替你预约”。增加一个 Agent 只改变分工，没有增加原材料之外的事实。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "主助手负责组织任务，子助手负责受托工作。两层都可能调用模型，各自的结果仍要对照资料检查。"
+            }
+          ]
+        },
+        {
+          "title": "先让职责容易被选中",
+          "body": "主助手怎样知道核对工作该交给 reviewer？配置里需要一份清楚的用途说明。\n下一节把用于选择的 description 与子助手内部的 instructions 分开维护。",
+          "links": [
+            {
+              "label": "Mastra：子智能体",
+              "href": "https://mastra.ai/docs/subagents"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "title": "执行结果（Execution Outcomes）",
+  "lead": "区分执行结束、停止原因与业务完成，防止把运行状态当作结果质量。",
+  "sections": [
+    {
+      "title": "步骤执行成功，通知也可能没有找到",
+      "body": "通知查询正常返回“未找到通知”，工作流仍然可能是 success：查询和返回都完成了，但用户还不知道从哪里入场。能否继续生成入场通知，要看输出里有没有足够的资料。\n下面对比查到通知、资料缺失和服务抛错三种情况。前两次工作流正常结束，第三次执行失败；这些差异应留给后续调用方判断。"
+    },
+    {
+      "title": "先读运行状态，再看停止原因",
+      "body": "工作流返回的 **result.status** 表示运行状态。本章示例保存的片段还可以检查 **attributes.status**、error 与 **endedAt**；其中 outcome 可能为空，应结合结束时间与状态判断，不能仅凭空值认定还在运行。\n智能体追踪中的 **outcome** 与 **stopReason** 用来说明执行结果及停止原因。读取时要核对当前片段和版本实际提供的字段，再结合工具结果判断业务进展。\n**maxSteps** 尤其需要分清：恰好在最后允许的一步完成任务，可以正常结束；还需要下一步却已耗尽额度，才属于因步数限制停止。步数用满本身，不能说明任务成功或失败。",
+      "codeBlocks": [
+        {
+          "label": "src/04-outcomes.js",
+          "language": "javascript",
+          "code": "import { createLab, runActivity } from './lab.js'\n\n// 对比正常返回、业务资料缺失和执行异常，不用一个“成功”概括三者。\nconst lab = await createLab()\ntry {\n  for (const mode of ['ok', 'missing', 'error']) {\n    const { result } = await runActivity(lab, { mode })\n    const trace = await lab.store.getTrace({ traceId: result.traceId })\n    console.log('模式：', mode, '工作流状态：', result.status)\n    console.table(trace.spans.map(span => ({\n      type: span.spanType, ended: Boolean(span.endedAt),\n      outcome: span.outcome, status: span.attributes?.status,\n      error: Boolean(span.error), output: JSON.stringify(span.output)\n    })))\n  }\n} finally {\n  await lab.mastra.shutdown()\n}"
+        }
+      ],
+      "callouts": [
+        {
+          "type": "key",
+          "body": "运行成功说明执行按当前协议结束；结果是否足够、事实是否正确、产物是否可用，仍需另行判断。"
+        }
+      ]
+    },
+    {
+      "title": "保留原因，再决定如何恢复",
+      "body": "执行异常时，先查出错片段与错误详情，再决定是否重试。资料缺失需要补充信息，审批暂停需要等待决定，额度耗尽则需要评估是否继续。涉及写入的任务，重试前还要确认上一次是否已产生实际结果。\n框架能记录执行状态，业务状态仍需要工具清楚地返回。把两层信息一起保留，后续 Agent 才能决定继续、等待，还是向用户说明尚未完成。下一节用日志补上这些分支发生时的现场信息。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "查询状态是 success，返回内容却是“未找到通知”；另一次刚好用完 maxSteps。后续 Agent 要生成入场通知，分别还需要哪些证据？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "步骤执行成功，通知也可能没有找到",
+          "body": "通知查询正常返回“未找到通知”，工作流仍然可能是 success：查询和返回都完成了，但用户还不知道从哪里入场。能否继续生成入场通知，要看输出里有没有足够的资料。\n下面对比查到通知、资料缺失和服务抛错三种情况。前两次工作流正常结束，第三次执行失败；这些差异应留给后续调用方判断。"
+        },
+        {
+          "title": "先读运行状态，再看停止原因",
+          "body": "工作流返回的 **result.status** 表示运行状态。本章示例保存的片段还可以检查 **attributes.status**、error 与 **endedAt**；其中 outcome 可能为空，应结合结束时间与状态判断，不能仅凭空值认定还在运行。\n智能体追踪中的 **outcome** 与 **stopReason** 用来说明执行结果及停止原因。读取时要核对当前片段和版本实际提供的字段，再结合工具结果判断业务进展。\n**maxSteps** 尤其需要分清：恰好在最后允许的一步完成任务，可以正常结束；还需要下一步却已耗尽额度，才属于因步数限制停止。步数用满本身，不能说明任务成功或失败。",
+          "codeBlocks": [
+            {
+              "label": "src/04-outcomes.ts",
+              "language": "typescript",
+              "code": "import { createLab, runActivity } from './lab.ts'\n\n// 对比正常返回、业务资料缺失和执行异常，不用一个“成功”概括三者。\nconst lab = await createLab()\ntry {\n  for (const mode of ['ok', 'missing', 'error']) {\n    const { result } = await runActivity(lab, { mode })\n    const trace = await lab.store.getTrace({ traceId: result.traceId })\n    console.log('模式：', mode, '工作流状态：', result.status)\n    console.table(trace.spans.map(span => ({\n      type: span.spanType, ended: Boolean(span.endedAt),\n      outcome: span.outcome, status: span.attributes?.status,\n      error: Boolean(span.error), output: JSON.stringify(span.output)\n    })))\n  }\n} finally {\n  await lab.mastra.shutdown()\n}"
+            }
+          ],
+          "callouts": [
+            {
+              "type": "key",
+              "body": "运行成功说明执行按当前协议结束；结果是否足够、事实是否正确、产物是否可用，仍需另行判断。"
+            }
+          ]
+        },
+        {
+          "title": "保留原因，再决定如何恢复",
+          "body": "执行异常时，先查出错片段与错误详情，再决定是否重试。资料缺失需要补充信息，审批暂停需要等待决定，额度耗尽则需要评估是否继续。涉及写入的任务，重试前还要确认上一次是否已产生实际结果。\n框架能记录执行状态，业务状态仍需要工具清楚地返回。把两层信息一起保留，后续 Agent 才能决定继续、等待，还是向用户说明尚未完成。下一节用日志补上这些分支发生时的现场信息。"
+        }
+      ]
+    }
+  }
+}

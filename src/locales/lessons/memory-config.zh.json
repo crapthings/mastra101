@@ -77,7 +77,7 @@
         },
         {
           "title": "先接上两次调用",
-          "body": "下载本章示例，解压后进入 08-memory-ts 文件夹，使用 Node.ts 24 或更高版本。安装依赖，复制环境变量模板，填入前面使用的 Vercel 网关凭证。\n记忆需要可用的存储。本例在 **Memory** 上显式配置 **LibSQLStore**，把消息写入本地文件数据库，再将 Memory 挂到 Agent。也可以由 Mastra 实例提供共享存储，09 会进一步展开配置范围与后端选择。lastMessages: 8 选择最近八条历史，语义召回和标题生成先显式关闭。两次调用使用相同的 memory.resource 与 memory.thread，第二次只发送新问题。",
+          "body": "下载本章示例，解压后进入 08-memory-ts 文件夹，使用 Node.js 24 或更高版本。安装依赖，复制环境变量模板，填入前面使用的 Vercel 网关凭证。\n记忆需要可用的存储。本例在 **Memory** 上显式配置 **LibSQLStore**，把消息写入本地文件数据库，再将 Memory 挂到 Agent。也可以由 Mastra 实例提供共享存储，09 会进一步展开配置范围与后端选择。lastMessages: 8 选择最近八条历史，语义召回和标题生成先显式关闭。两次调用使用相同的 memory.resource 与 memory.thread，第二次只发送新问题。",
           "download": {
             "href": "/downloads/08-memory-ts.zip",
             "label": "下载 TypeScript 示例（ZIP）"

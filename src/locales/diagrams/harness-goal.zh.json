@@ -1,0 +1,17 @@
+{
+  "title": "目标决定是否继续，预算限制尝试",
+  "caption": "目标只在适合判定的候选结果出现后检查。未达标且预算尚有剩余时继续；达到目标则完成，预算用尽或需要人介入则暂停。",
+  "one": "线程目标 · Objective",
+  "oneDetail": "保存明确、可检查的完成条件",
+  "two": "候选结果",
+  "twoDetail": "maxSteps 约束模型与工具循环",
+  "three": "目标判定 · judge",
+  "threeDetail": "maxRuns 限制目标判定次数",
+  "left": "继续",
+  "leftDetail": "未达标，还有预算",
+  "middle": "完成 · done",
+  "middleDetail": "判定达到目标",
+  "right": "暂停 · paused",
+  "rightDetail": "预算用尽或等人",
+  "loop": "带回具体反馈"
+}

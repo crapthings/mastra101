@@ -109,7 +109,7 @@
         },
         {
           "title": "先配置一个最小技能",
-          "body": "下载示例，解压后进入 11-skills-ts 文件夹，使用 Node.ts 24 或更高版本安装依赖。\n本例通过 skills 将内联技能挂给 Agent，再用 **listSkills()** 查看元数据、**getSkill()** 读取规则。先不调用模型，确认技能名称、用途和规则能被正确读取。",
+          "body": "下载示例，解压后进入 11-skills-ts 文件夹，使用 Node.js 24 或更高版本安装依赖。\n本例通过 skills 将内联技能挂给 Agent，再用 **listSkills()** 查看元数据、**getSkill()** 读取规则。先不调用模型，确认技能名称、用途和规则能被正确读取。",
           "download": {
             "href": "/downloads/11-skills-ts.zip",
             "label": "下载 TypeScript 示例（ZIP）"

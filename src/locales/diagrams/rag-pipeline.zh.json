@@ -1,0 +1,16 @@
+{
+  "title": "准备索引，查询时带回依据",
+  "caption": "两条路径共享同一向量空间。文档先入库，查询时复用索引；本章独立脚本为便于运行，会重新建立小型内存索引。",
+  "left": "文档准备",
+  "leftDetail": "原文、来源、归属与版本",
+  "right": "当前问题",
+  "rightDetail": "同时确定允许的资料范围",
+  "leftTwo": "分片与文档向量",
+  "leftTwoDetail": "保留片段 id 与原文",
+  "rightTwo": "问题向量",
+  "rightTwoDetail": "使用兼容的同一模型",
+  "middle": "向量索引与范围检索",
+  "middleDetail": "候选仍需检查相关性与适用条件",
+  "bottom": "重排、生成与引用",
+  "bottomDetail": "资料不足时明确返回，保留可核对来源"
+}

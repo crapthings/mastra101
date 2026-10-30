@@ -1,0 +1,88 @@
+{
+  "title": "批量评估（runEvals）",
+  "lead": "批量运行样本并读懂逐条结果，避免只看一个平均分。",
+  "sections": [
+    {
+      "title": "把样本交给目标，再评分",
+      "body": "前面的 scorer.run() 直接检查一份现成输出。**runEvals()** 则会先执行 Agent 或 Workflow，取得结果后调用评分器。\n共享配置注册了两个工作流、一个评分器，以及保存记录的内存 LibSQL。本节先运行 **baseline**，观察它如何处理三条资料。",
+      "codeBlocks": [
+        {
+          "label": "src/lab.js",
+          "language": "javascript",
+          "code": "import { Mastra } from '@mastra/core/mastra'\nimport { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { z } from 'zod'\nimport { evidenceScorer } from './scorer.js'\n\n// 两个固定版本只在资料缺失时的处理不同，用于观察真实评估 API 的结果。\nexport function createLab ({ live = false } = {}) {\n  const inputSchema = z.object({ notice: z.object({ venue: z.string().nullable(), source: z.string() }) })\n  const outputSchema = z.object({ status: z.string(), venue: z.string().nullable(), source: z.string() })\n  const workflows = {}\n  for (const version of ['baseline', 'revised']) {\n    const prepare = createStep({\n      id: `prepare-${version}`, inputSchema, outputSchema,\n      ...(live ? { scorers: { evidence: { scorer: evidenceScorer, sampling: { type: 'ratio', rate: 1 } } } } : {}),\n      execute: async ({ inputData }) => {\n        const { notice } = inputData\n        return {\n          status: version === 'revised' && notice.venue === null ? '待确认' : '已确认',\n          venue: version === 'baseline' ? notice.venue ?? '南门' : notice.venue,\n          source: notice.source\n        }\n      }\n    })\n    workflows[version] = createWorkflow({ id: `notice-${version}`, inputSchema, outputSchema })\n      .then(prepare).commit()\n  }\n  return new Mastra({\n    workflows, scorers: { evidence: evidenceScorer },\n    storage: new LibSQLStore({ id: 'eval-storage', url: ':memory:' })\n  })\n}"
+        }
+      ]
+    },
+    {
+      "title": "从 Mastra 取出注册后的目标",
+      "body": "通过 **mastra.getWorkflow()** 或 **mastra.getAgent()** 取得目标，使它保留与 Mastra 实例及注册表的关联。本例也在实例上注册评分器，便于保存评分结果。\n**data** 提供样本，**scorers** 指定判断规则，**concurrency** 控制同时处理的样本数。这里设为 1，便于观察；评估真实模型与外部工具时，还应按限流和任务副作用安排并发。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/06-batch.js"
+        },
+        {
+          "label": "src/06-batch.js",
+          "language": "javascript",
+          "code": "import { runEvals } from '@mastra/core/evals'\nimport { createLab } from './lab.js'\nimport { evidenceScorer } from './scorer.js'\nimport { samples } from './samples.js'\n\n// 批量运行基线版本，并保留逐条结果以解释平均分。\nconst mastra = createLab()\ntry {\n  const result = await runEvals({\n    target: mastra.getWorkflow('baseline'), data: samples,\n    scorers: [evidenceScorer], concurrency: 1,\n    onItemComplete: ({ item, scorerResults }) => {\n      const score = scorerResults['notice-evidence']\n      console.log('参考：', JSON.stringify(item.groundTruth), '分数：', score.score, '理由：', score.reason)\n    }\n  })\n  console.log('平均分：', result.scores)\n  console.log('评估汇总：', result.summary)\n} finally {\n  await mastra.shutdown()\n}"
+        }
+      ]
+    },
+    {
+      "title": "用逐条结果解释平均分",
+      "body": "三条样本中，两条入口已知的资料通过，入口未公布的一条得 0，因此平均分约为 0.67。这个值来自当前三条样本；样本范围或评分规则改变，均分也可能变化。\n**onItemComplete** 提供逐条结果，示例从中打印参考值、分数与理由。**result.scores** 汇总平均分，**result.summary** 汇总处理信息。阅读时同时检查执行异常、评分异常与无法评分的记录。\n如果要求每条通知都不能编造入口，就需要明确的放行条件。下一节将硬性要求与均分阈值写进配置。",
+      "links": [
+        {
+          "label": "Mastra：runEvals",
+          "href": "https://mastra.ai/reference/evals/run-evals"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "基线版均分约为 0.67。你会怎样向开发者指出具体哪项行为有问题？若部分样本未得到分数，又需要补充哪些信息来解释这个均值？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "把样本交给目标，再评分",
+          "body": "前面的 scorer.run() 直接检查一份现成输出。**runEvals()** 则会先执行 Agent 或 Workflow，取得结果后调用评分器。\n共享配置注册了两个工作流、一个评分器，以及保存记录的内存 LibSQL。本节先运行 **baseline**，观察它如何处理三条资料。",
+          "codeBlocks": [
+            {
+              "label": "src/lab.ts",
+              "language": "typescript",
+              "code": "import { Mastra } from '@mastra/core/mastra'\nimport { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { z } from 'zod'\nimport { evidenceScorer } from './scorer.ts'\n\n// 两个固定版本只在资料缺失时的处理不同，用于观察真实评估 API 的结果。\nexport function createLab ({ live = false } = {}) {\n  const inputSchema = z.object({ notice: z.object({ venue: z.string().nullable(), source: z.string() }) })\n  const outputSchema = z.object({ status: z.string(), venue: z.string().nullable(), source: z.string() })\n  const workflows = {}\n  for (const version of ['baseline', 'revised']) {\n    const prepare = createStep({\n      id: `prepare-${version}`, inputSchema, outputSchema,\n      ...(live ? { scorers: { evidence: { scorer: evidenceScorer, sampling: { type: 'ratio', rate: 1 } } } } : {}),\n      execute: async ({ inputData }) => {\n        const { notice } = inputData\n        return {\n          status: version === 'revised' && notice.venue === null ? '待确认' : '已确认',\n          venue: version === 'baseline' ? notice.venue ?? '南门' : notice.venue,\n          source: notice.source\n        }\n      }\n    })\n    workflows[version] = createWorkflow({ id: `notice-${version}`, inputSchema, outputSchema })\n      .then(prepare).commit()\n  }\n  return new Mastra({\n    workflows, scorers: { evidence: evidenceScorer },\n    storage: new LibSQLStore({ id: 'eval-storage', url: ':memory:' })\n  })\n}"
+            }
+          ]
+        },
+        {
+          "title": "从 Mastra 取出注册后的目标",
+          "body": "通过 **mastra.getWorkflow()** 或 **mastra.getAgent()** 取得目标，使它保留与 Mastra 实例及注册表的关联。本例也在实例上注册评分器，便于保存评分结果。\n**data** 提供样本，**scorers** 指定判断规则，**concurrency** 控制同时处理的样本数。这里设为 1，便于观察；评估真实模型与外部工具时，还应按限流和任务副作用安排并发。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/06-batch.ts"
+            },
+            {
+              "label": "src/06-batch.ts",
+              "language": "typescript",
+              "code": "import { runEvals } from '@mastra/core/evals'\nimport { createLab } from './lab.ts'\nimport { evidenceScorer } from './scorer.ts'\nimport { samples } from './samples.ts'\n\n// 批量运行基线版本，并保留逐条结果以解释平均分。\nconst mastra = createLab()\ntry {\n  const result = await runEvals({\n    target: mastra.getWorkflow('baseline'), data: samples,\n    scorers: [evidenceScorer], concurrency: 1,\n    onItemComplete: ({ item, scorerResults }) => {\n      const score = scorerResults['notice-evidence']\n      console.log('参考：', JSON.stringify(item.groundTruth), '分数：', score.score, '理由：', score.reason)\n    }\n  })\n  console.log('平均分：', result.scores)\n  console.log('评估汇总：', result.summary)\n} finally {\n  await mastra.shutdown()\n}"
+            }
+          ]
+        },
+        {
+          "title": "用逐条结果解释平均分",
+          "body": "三条样本中，两条入口已知的资料通过，入口未公布的一条得 0，因此平均分约为 0.67。这个值来自当前三条样本；样本范围或评分规则改变，均分也可能变化。\n**onItemComplete** 提供逐条结果，示例从中打印参考值、分数与理由。**result.scores** 汇总平均分，**result.summary** 汇总处理信息。阅读时同时检查执行异常、评分异常与无法评分的记录。\n如果要求每条通知都不能编造入口，就需要明确的放行条件。下一节将硬性要求与均分阈值写进配置。",
+          "links": [
+            {
+              "label": "Mastra：runEvals",
+              "href": "https://mastra.ai/reference/evals/run-evals"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

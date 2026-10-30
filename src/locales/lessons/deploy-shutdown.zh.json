@@ -1,0 +1,64 @@
+{
+  "title": "优雅停止（Graceful Shutdown）",
+  "lead": "停止接收新请求，为在途任务留出预算，再完成观测与存储回收。",
+  "sections": [
+    {
+      "title": "更新版本前，旧进程需要怎样结束",
+      "body": "收到 **SIGTERM** 或 SIGINT 后，服务先撤下就绪状态，停止接收新连接，再等待在途 HTTP 请求。这样可以让正在整理通知的请求在预算内返回结果。\n运行时将重复关闭调用合并到同一个 Promise，避免两个信号同时触发重复回收。入口只负责安装信号处理，将关闭工作交给服务实例。",
+      "codeBlocks": [
+        {
+          "label": "src/main.js",
+          "language": "javascript",
+          "code": "import { readConfig } from './config.js'\nimport { startService } from './runtime.js'\n\n// 入口只在配置通过后启动，安装进程信号处理并报告可访问地址。\nconst config = readConfig()\n// 服务实例负责初始化、后台机制和资源关闭。\nconst service = await startService(config)\n// 信号触发同一个可重复调用的关闭过程，错误只报告必要信息。\nconst stop = signal => { service.close(signal).catch(() => { console.error('服务关闭失败'); process.exitCode = 1 }) }\nprocess.once('SIGTERM', () => stop('SIGTERM'))\nprocess.once('SIGINT', () => stop('SIGINT'))\nconsole.log(JSON.stringify({ event: 'service.ready', address: service.address, version: config.version }))"
+        }
+      ]
+    },
+    {
+      "title": "等待有预算，也要准备未完成情况",
+      "body": "本例 **SHUTDOWN_MS** 分别用于 HTTP 排空与 Mastra 的任务收尾，两个阶段各自有预算。HTTP 超过预算会关闭连接，随后 **mastra.shutdown()** 处理框架任务、导出观测数据，再关闭存储。\n强制断开之后，任务可能已经产生部分结果。与 18 的请求取消一样，需要根据运行状态与业务结果决定是否重试，不能把断开当成回滚。"
+    },
+    {
+      "title": "实际验证停止时的在途请求",
+      "body": "验证入口启动一项带有限等待的通知任务，查询确认状态为 running 后才发送 SIGTERM。它要求在途请求返回正确结果，并确认子进程以 0 退出。\n随后启动另一个进程读回原运行与追踪，检查数据保存与导出顺序。这样才能用实际证据判断停止过程，而不是只看是否安装了信号监听器。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "优雅停止需要明确停止接单、在途处理、导出与存储关闭的顺序，并为超出预算的情况保留后续核对依据。"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "停止预算已经耗尽，客户端收到连接中断。重新提交通知任务前，应核对哪些记录？为什么保留旧镜像并不能保证撤销上一项业务操作？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "更新版本前，旧进程需要怎样结束",
+          "body": "收到 **SIGTERM** 或 SIGINT 后，服务先撤下就绪状态，停止接收新连接，再等待在途 HTTP 请求。这样可以让正在整理通知的请求在预算内返回结果。\n运行时将重复关闭调用合并到同一个 Promise，避免两个信号同时触发重复回收。入口只负责安装信号处理，将关闭工作交给服务实例。",
+          "codeBlocks": [
+            {
+              "label": "src/main.ts",
+              "language": "typescript",
+              "code": "import { readConfig } from './config.ts'\nimport { startService } from './runtime.ts'\n\n// 入口只在配置通过后启动，安装进程信号处理并报告可访问地址。\nconst config = readConfig()\n// 服务实例负责初始化、后台机制和资源关闭。\nconst service = await startService(config)\n// 信号触发同一个可重复调用的关闭过程，错误只报告必要信息。\nconst stop = signal => { service.close(signal).catch(() => { console.error('服务关闭失败'); process.exitCode = 1 }) }\nprocess.once('SIGTERM', () => stop('SIGTERM'))\nprocess.once('SIGINT', () => stop('SIGINT'))\nconsole.log(JSON.stringify({ event: 'service.ready', address: service.address, version: config.version }))"
+            }
+          ]
+        },
+        {
+          "title": "等待有预算，也要准备未完成情况",
+          "body": "本例 **SHUTDOWN_MS** 分别用于 HTTP 排空与 Mastra 的任务收尾，两个阶段各自有预算。HTTP 超过预算会关闭连接，随后 **mastra.shutdown()** 处理框架任务、导出观测数据，再关闭存储。\n强制断开之后，任务可能已经产生部分结果。与 18 的请求取消一样，需要根据运行状态与业务结果决定是否重试，不能把断开当成回滚。"
+        },
+        {
+          "title": "实际验证停止时的在途请求",
+          "body": "验证入口启动一项带有限等待的通知任务，查询确认状态为 running 后才发送 SIGTERM。它要求在途请求返回正确结果，并确认子进程以 0 退出。\n随后启动另一个进程读回原运行与追踪，检查数据保存与导出顺序。这样才能用实际证据判断停止过程，而不是只看是否安装了信号监听器。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "优雅停止需要明确停止接单、在途处理、导出与存储关闭的顺序，并为超出预算的情况保留后续核对依据。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "title": "按需要组合评分阶段",
+  "caption": "本节准备参考资料、生成分数，再解释结果。模型评分例子会加入 analyze；四个阶段中，只有 generateScore 必需。",
+  "one": "preprocess · 准备资料",
+  "oneDetail": "可选：准备并校验参考资料",
+  "two": "analyze · 分析内容",
+  "twoDetail": "可选：本节字段检查省略此阶段",
+  "three": "generateScore · 生成分数",
+  "threeDetail": "必需：本例按字段一致性返回 1 或 0",
+  "four": "generateReason · 解释结果",
+  "fourDetail": "可选：说明判断依据"
+}

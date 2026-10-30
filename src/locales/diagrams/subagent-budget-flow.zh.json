@@ -1,0 +1,14 @@
+{
+  "title": "父子各自计步，合起来看总调用",
+  "caption": "图中父运行两步，子运行也有两步，共发生四次模型调用。查询工具的执行包含在子步骤中；步数是上限，实际仍可能提前结束或因重试增加底层请求。",
+  "scope": "父运行：maxSteps 为 2",
+  "delegate": "父步骤 1：请求委派",
+  "delegateDetail": "执行子助手任务后，结果回到本步",
+  "childScope": "子运行：maxSteps 为 2",
+  "lookup": "子步骤 1：查询",
+  "lookupDetail": "模型请求，程序执行工具",
+  "answer": "子步骤 2：整理",
+  "answerDetail": "模型根据工具结果回答",
+  "finish": "父步骤 2：组织答复",
+  "finishDetail": "模型读取子结果，再交付给用户"
+}

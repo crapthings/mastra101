@@ -1,0 +1,102 @@
+{
+  "title": "工具审批（Tool Approval）",
+  "lead": "在外部工具执行之前取得明确决定，再用实际服务状态核对是否写入。",
+  "sections": [
+    {
+      "title": "服务可访问，仍需确认具体写入",
+      "body": "本节的 MCP 服务除了查通知，还能保存提醒草稿。保存只改变当前服务进程里的教学数组，不会发消息，也不会修改真实预约。\n我们让查询与草稿数量读取直接进行，保存操作则必须先暂停，展示将执行的工具和参数。认证确认调用者身份或凭证，权限检查决定可以访问什么，审批决定这一次动作是否获准执行。"
+    },
+    {
+      "title": "在客户端定义审批策略",
+      "body": "MCPClient 中的服务配置可以通过 **requireToolApproval** 要求全部工具审批，也可以用函数逐项决定。本例判断服务原始工具名 saveDraft；挂到 Agent 后的键则是 activity_saveDraft。\n外部服务提供的只读等 annotations 只是信息，不能直接当成可信授权结论。本例根据自己了解的操作定义策略，执行权限仍由服务端落实。\n这项审批接在 Agent 的工具循环中。程序直接调用 execute() 时，不会自动经过同一个模型运行审批流程；应用主动调用工具，也需要先完成自己的授权检查。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "服务认证、Agent 执行前审批、服务端权限检查，各自控制不同位置。它们不能互相代替。"
+        }
+      ]
+    },
+    {
+      "title": "批准前后，读回实际草稿数量",
+      "body": "将 .env.example 复制为 .env，填入前面使用的 Vercel 网关凭证。本节才会调用 vercel/openai/gpt-6.1-sol。\n示例通过 Mastra 的 LibSQLStore 保存审批快照。先运行拒绝，再运行确认；每次都会启动一份新的教学服务，所以批准前数量应为 0，拒绝后仍为 0，确认后为 1。若没有进入预期 suspended，脚本会报告缺少审批证据。",
+      "codeBlocks": [
+        {
+          "label": "src/06-approval.js",
+          "language": "javascript",
+          "code": "import { MCPClient } from '@mastra/mcp'\nimport { Agent } from '@mastra/core/agent'\nimport { Mastra } from '@mastra/core'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { fileURLToPath } from 'node:url'\n\n// 命令行明确决定是否批准一次本地教学草稿写入。\nconst decision = process.argv[2] || '拒绝'\nif (!['确认', '拒绝'].includes(decision)) throw new Error('请使用“确认”或“拒绝”。')\n// 保存工具需要审批，查询和状态读取保持只读路径。\nconst client = new MCPClient({\n  id: 'activity-approval-client',\n  servers: {\n    activity: {\n      command: process.execPath, args: [fileURLToPath(new URL('./stdio-server.js', import.meta.url))],\n      requireToolApproval: ({ toolName }) => toolName === 'saveDraft'\n    }\n  }\n})\ntry {\n  const tools = await client.listTools()\n  const configured = new Agent({\n    id: 'connected-assistant', name: '外部草稿助手', model: 'vercel/openai/gpt-6.1-sol',\n    instructions: '仅保存一次用户提供的草稿。被拒绝后说明未保存，不再次申请，不声称已发送通知。', tools\n  })\n  const mastra = new Mastra({ agents: { configured }, storage: new LibSQLStore({ id: 'mcp-approval', url: 'file:./06-approval.db' }) })\n  const agent = mastra.getAgentById('connected-assistant')\n  const pending = await agent.generate('保存教学草稿：周六出发前核对个人预约状态。', { maxSteps: 2, abortSignal: AbortSignal.timeout(60000) })\n  console.dir({ 暂停原因: pending.finishReason, 待确认动作: pending.suspendPayload }, { depth: 5 })\n  console.dir({ 批准前数量: await tools.activity_draftStatus.execute({}) })\n  if (pending.finishReason !== 'suspended' || !pending.suspendPayload) throw new Error('没有进入预期审批，请核对实际调用。')\n  const options = { runId: pending.runId, toolCallId: pending.suspendPayload.toolCallId, maxSteps: 2, abortSignal: AbortSignal.timeout(60000) }\n  const result = decision === '确认'\n    ? await agent.approveToolCallGenerate(options)\n    : await agent.declineToolCallGenerate({ ...options, reason: '本次明确拒绝教学草稿写入。' })\n  console.dir({ text: result.text, finishReason: result.finishReason, toolResults: result.toolResults, 审批后数量: await tools.activity_draftStatus.execute({}) }, { depth: 5 })\n} finally {\n  await client.disconnect()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "cp .env.example .env\nnode --env-file=.env src/06-approval.js 拒绝\nnode --env-file=.env src/06-approval.js 确认"
+        }
+      ]
+    },
+    {
+      "title": "审批记录与服务状态分别核对",
+      "body": "恢复后检查 toolResults、结束原因与草稿数量。用户批准不保证外部服务写入成功，超时也不证明写入没有发生；需要按实际业务结果处理重试。\n本例让客户端与子进程一直保留到审批恢复完成。跨进程恢复时，快照之外还需要兼容的连接配置、凭证与服务状态；保存了暂停记录，不表示外部进程的内存也被保存。"
+    },
+    {
+      "title": "使用外部工具之后，也可以提供自己的能力",
+      "body": "到这里我们一直站在客户端一侧。若自己的核对工具也需要供其他系统使用，就要把它们组织成 MCP 服务。\n下一节打开随包服务的定义，看看客户端所见的接口从哪里来。",
+      "links": [
+        {
+          "label": "Mastra：MCP 工具审批",
+          "href": "https://mastra.ai/docs/connections/mcp#tool-approval"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "用户已批准保存，服务草稿数量却仍为 0。应怎样结合本次工具结果判断写入是否完成，而不是只看审批记录？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "服务可访问，仍需确认具体写入",
+          "body": "本节的 MCP 服务除了查通知，还能保存提醒草稿。保存只改变当前服务进程里的教学数组，不会发消息，也不会修改真实预约。\n我们让查询与草稿数量读取直接进行，保存操作则必须先暂停，展示将执行的工具和参数。认证确认调用者身份或凭证，权限检查决定可以访问什么，审批决定这一次动作是否获准执行。"
+        },
+        {
+          "title": "在客户端定义审批策略",
+          "body": "MCPClient 中的服务配置可以通过 **requireToolApproval** 要求全部工具审批，也可以用函数逐项决定。本例判断服务原始工具名 saveDraft；挂到 Agent 后的键则是 activity_saveDraft。\n外部服务提供的只读等 annotations 只是信息，不能直接当成可信授权结论。本例根据自己了解的操作定义策略，执行权限仍由服务端落实。\n这项审批接在 Agent 的工具循环中。程序直接调用 execute() 时，不会自动经过同一个模型运行审批流程；应用主动调用工具，也需要先完成自己的授权检查。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "服务认证、Agent 执行前审批、服务端权限检查，各自控制不同位置。它们不能互相代替。"
+            }
+          ]
+        },
+        {
+          "title": "批准前后，读回实际草稿数量",
+          "body": "将 .env.example 复制为 .env，填入前面使用的 Vercel 网关凭证。本节才会调用 vercel/openai/gpt-6.1-sol。\n示例通过 Mastra 的 LibSQLStore 保存审批快照。先运行拒绝，再运行确认；每次都会启动一份新的教学服务，所以批准前数量应为 0，拒绝后仍为 0，确认后为 1。若没有进入预期 suspended，脚本会报告缺少审批证据。",
+          "codeBlocks": [
+            {
+              "label": "src/06-approval.ts",
+              "language": "typescript",
+              "code": "import { MCPClient } from '@mastra/mcp'\nimport { Agent } from '@mastra/core/agent'\nimport { Mastra } from '@mastra/core'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { fileURLToPath } from 'node:url'\n\n// 命令行明确决定是否批准一次本地教学草稿写入。\nconst decision = process.argv[2] || '拒绝'\nif (!['确认', '拒绝'].includes(decision)) throw new Error('请使用“确认”或“拒绝”。')\n// 保存工具需要审批，查询和状态读取保持只读路径。\nconst client = new MCPClient({\n  id: 'activity-approval-client',\n  servers: {\n    activity: {\n      command: process.execPath, args: [fileURLToPath(new URL('./stdio-server.ts', import.meta.url))],\n      requireToolApproval: ({ toolName }) => toolName === 'saveDraft'\n    }\n  }\n})\ntry {\n  const tools = await client.listTools()\n  const configured = new Agent({\n    id: 'connected-assistant', name: '外部草稿助手', model: 'vercel/openai/gpt-6.1-sol',\n    instructions: '仅保存一次用户提供的草稿。被拒绝后说明未保存，不再次申请，不声称已发送通知。', tools\n  })\n  const mastra = new Mastra({ agents: { configured }, storage: new LibSQLStore({ id: 'mcp-approval', url: 'file:./06-approval.db' }) })\n  const agent = mastra.getAgentById('connected-assistant')\n  const pending = await agent.generate('保存教学草稿：周六出发前核对个人预约状态。', { maxSteps: 2, abortSignal: AbortSignal.timeout(60000) })\n  console.dir({ 暂停原因: pending.finishReason, 待确认动作: pending.suspendPayload }, { depth: 5 })\n  console.dir({ 批准前数量: await tools.activity_draftStatus.execute({}) })\n  if (pending.finishReason !== 'suspended' || !pending.suspendPayload) throw new Error('没有进入预期审批，请核对实际调用。')\n  const options = { runId: pending.runId, toolCallId: pending.suspendPayload.toolCallId, maxSteps: 2, abortSignal: AbortSignal.timeout(60000) }\n  const result = decision === '确认'\n    ? await agent.approveToolCallGenerate(options)\n    : await agent.declineToolCallGenerate({ ...options, reason: '本次明确拒绝教学草稿写入。' })\n  console.dir({ text: result.text, finishReason: result.finishReason, toolResults: result.toolResults, 审批后数量: await tools.activity_draftStatus.execute({}) }, { depth: 5 })\n} finally {\n  await client.disconnect()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "cp .env.example .env\nnode --env-file=.env src/06-approval.ts 拒绝\nnode --env-file=.env src/06-approval.ts 确认"
+            }
+          ]
+        },
+        {
+          "title": "审批记录与服务状态分别核对",
+          "body": "恢复后检查 toolResults、结束原因与草稿数量。用户批准不保证外部服务写入成功，超时也不证明写入没有发生；需要按实际业务结果处理重试。\n本例让客户端与子进程一直保留到审批恢复完成。跨进程恢复时，快照之外还需要兼容的连接配置、凭证与服务状态；保存了暂停记录，不表示外部进程的内存也被保存。"
+        },
+        {
+          "title": "使用外部工具之后，也可以提供自己的能力",
+          "body": "到这里我们一直站在客户端一侧。若自己的核对工具也需要供其他系统使用，就要把它们组织成 MCP 服务。\n下一节打开随包服务的定义，看看客户端所见的接口从哪里来。",
+          "links": [
+            {
+              "label": "Mastra：MCP 工具审批",
+              "href": "https://mastra.ai/docs/connections/mcp#tool-approval"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

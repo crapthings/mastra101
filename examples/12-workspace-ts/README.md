@@ -1,6 +1,6 @@
 # 12 工作区：活动资料与产物
 
-Node.ts >=24，此包使用 TypeScript。执行 pnpm install 后逐节运行，不需要模型密钥。
+Node.js >=24，此包使用 TypeScript。执行 pnpm install 后逐节运行，不需要模型密钥。
 
 ```bash
 node src/01-workspace.ts

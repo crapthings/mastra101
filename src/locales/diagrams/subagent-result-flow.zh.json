@@ -1,0 +1,12 @@
+{
+  "title": "父模型与应用，接收范围不同",
+  "caption": "默认交接主要将子助手文本交给父模型；应用仍能检查更完整的委派结果。includeSubAgentToolResultsInModelContext 可以扩大父模型可见范围，但不会替代事实核对。",
+  "tool": "子工具读取通知",
+  "toolDetail": "返回事实字段与来源",
+  "result": "子助手整理结果",
+  "resultDetail": "形成文本，并保留嵌套运行记录",
+  "parent": "父模型继续处理",
+  "parentDetail": "默认主要收到子任务文本",
+  "app": "应用检查与展示",
+  "appDetail": "可查看文本、工具结果与标识"
+}

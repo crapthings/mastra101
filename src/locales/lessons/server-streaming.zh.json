@@ -1,0 +1,74 @@
+{
+  "title": "流式响应（Streaming）",
+  "lead": "按事件接收模型输出，区分收到文字、流结束与业务结果可用。",
+  "sections": [
+    {
+      "title": "让生成过程逐步到达调用方",
+      "body": "普通 JSON 响应通常在结果准备好后一次返回。**流式响应（Streaming）**按事件传递生成过程，调用方可以逐步展示文字或工具进展。\n协议事件与网络分块并非一一对应：一个事件可能跨多次读取，一次读取也可能包含多个事件。接收端应先解析协议，再处理文字、错误与结束等事件。"
+    },
+    {
+      "title": "处理文字事件，也等待结束事件",
+      "body": "本入口用客户端 SDK 请求通知助手，模型调用发生在本地服务中。复制环境模板、填写 **AI_GATEWAY_API_KEY** 后运行，模型沿用 vercel/openai/gpt-6.1-sol。\n**processDataStream()** 解析协议事件。代码累计 **text-delta** 的文字，处理 **error**，并记录是否收到 **finish**。流中断或报错时，已经显示的文字仍应保留未完成或错误状态。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "cp .env.example .env\n# 填写 AI_GATEWAY_API_KEY 后运行\nnode --env-file=.env src/05-streaming.js"
+        },
+        {
+          "label": "src/05-streaming.js",
+          "language": "javascript",
+          "code": "import { MastraClient } from '@mastra/client-js'\nimport { createLab } from './lab.js'\n\n// 此入口通过本地服务请求模型，逐块读取文本并检查结束事件。\nconst lab = await createLab()\ntry {\n  const client = new MastraClient({ baseUrl: lab.baseUrl, retries: 0 })\n  const response = await client.getAgent('notice-helper').stream('场馆通知：入口尚未公布。请整理一句入场提醒。')\n  let text = ''\n  let finished = false\n  await response.processDataStream({ onChunk: async chunk => {\n    if (chunk.type === 'text-delta') {\n      text += chunk.payload.text\n      console.log('收到文字：', chunk.payload.text)\n    }\n    if (chunk.type === 'error') throw new Error('服务端返回流错误，请核对服务端运行记录')\n    if (chunk.type === 'finish') finished = true\n  } })\n  console.log('文本：', text, '收到结束事件：', finished)\n  if (!finished) throw new Error('响应流未收到结束事件，不能认定任务已完成')\n} finally {\n  await lab.close()\n}"
+        }
+      ]
+    },
+    {
+      "title": "分别核对传输结束与业务完成",
+      "body": "finish 是协议结束信号。是否保留了通知事实、是否明确入口待确认，还需要检查最终内容；上一章的评分标准仍然适用。\n代理缓冲可能让多个事件一起到达，断线则可能留下不完整文本。排查时分别查看服务端产生的事件与客户端实际接收情况。\n流式传输也可以用于工作流。下一节转向运行标识与状态查询，了解一次流程怎样在多次 HTTP 调用之间衔接。",
+      "links": [
+        {
+          "label": "Mastra：客户端智能体 API",
+          "href": "https://mastra.ai/reference/client-js/agents"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "网页已显示半句提醒，连接随后中断，应保留什么状态？若收到了 finish，接下来还需怎样核对通知内容？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "让生成过程逐步到达调用方",
+          "body": "普通 JSON 响应通常在结果准备好后一次返回。**流式响应（Streaming）**按事件传递生成过程，调用方可以逐步展示文字或工具进展。\n协议事件与网络分块并非一一对应：一个事件可能跨多次读取，一次读取也可能包含多个事件。接收端应先解析协议，再处理文字、错误与结束等事件。"
+        },
+        {
+          "title": "处理文字事件，也等待结束事件",
+          "body": "本入口用客户端 SDK 请求通知助手，模型调用发生在本地服务中。复制环境模板、填写 **AI_GATEWAY_API_KEY** 后运行，模型沿用 vercel/openai/gpt-6.1-sol。\n**processDataStream()** 解析协议事件。代码累计 **text-delta** 的文字，处理 **error**，并记录是否收到 **finish**。流中断或报错时，已经显示的文字仍应保留未完成或错误状态。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "cp .env.example .env\n# 填写 AI_GATEWAY_API_KEY 后运行\nnode --env-file=.env src/05-streaming.ts"
+            },
+            {
+              "label": "src/05-streaming.ts",
+              "language": "typescript",
+              "code": "import { MastraClient } from '@mastra/client-js'\nimport { createLab } from './lab.ts'\n\n// 此入口通过本地服务请求模型，逐块读取文本并检查结束事件。\nconst lab = await createLab()\ntry {\n  const client = new MastraClient({ baseUrl: lab.baseUrl, retries: 0 })\n  const response = await client.getAgent('notice-helper').stream('场馆通知：入口尚未公布。请整理一句入场提醒。')\n  let text = ''\n  let finished = false\n  await response.processDataStream({ onChunk: async chunk => {\n    if (chunk.type === 'text-delta') {\n      text += chunk.payload.text\n      console.log('收到文字：', chunk.payload.text)\n    }\n    if (chunk.type === 'error') throw new Error('服务端返回流错误，请核对服务端运行记录')\n    if (chunk.type === 'finish') finished = true\n  } })\n  console.log('文本：', text, '收到结束事件：', finished)\n  if (!finished) throw new Error('响应流未收到结束事件，不能认定任务已完成')\n} finally {\n  await lab.close()\n}"
+            }
+          ]
+        },
+        {
+          "title": "分别核对传输结束与业务完成",
+          "body": "finish 是协议结束信号。是否保留了通知事实、是否明确入口待确认，还需要检查最终内容；上一章的评分标准仍然适用。\n代理缓冲可能让多个事件一起到达，断线则可能留下不完整文本。排查时分别查看服务端产生的事件与客户端实际接收情况。\n流式传输也可以用于工作流。下一节转向运行标识与状态查询，了解一次流程怎样在多次 HTTP 调用之间衔接。",
+          "links": [
+            {
+              "label": "Mastra：客户端智能体 API",
+              "href": "https://mastra.ai/reference/client-js/agents"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

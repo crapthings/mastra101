@@ -1,0 +1,86 @@
+{
+  "title": "在线评分（Live Evaluations）",
+  "lead": "在日常运行中收集质量信号，分清后台评分与执行前拦截。",
+  "sections": [
+    {
+      "title": "离线样本之外，还要观察实际运行",
+      "body": "固定样本用于重复比较改动，真实请求则会带来新的表达和资料组合。**在线评分（Live Evaluations）**把评分器挂到 Agent 或工作流步骤，持续为运行结果收集质量信号。\n本例给通知整理步骤挂上 evidenceScorer。它读取该步骤的输入通知，核对输出字段，因此无需为每次真实请求人工填写 groundTruth。"
+    },
+    {
+      "title": "分别等待业务结果与评分结果",
+      "body": "共享配置中的 **scorers** 将规则挂到步骤，**sampling** 控制参与评分的比例。本例 rate 为 1，方便核对每次运行；它与上一章的追踪采样分开配置，实际覆盖范围需要结合两者检查。\n在线评分在后台执行，不保证与业务返回的先后顺序。工作流返回 success 时，评分可能已经完成，也可能尚未写入。入口按 runId 在有限时间内查询 **scores 存储域**，找到结果后打印；超时则报告没有取得评分。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/08-live.js"
+        },
+        {
+          "label": "src/08-live.js",
+          "language": "javascript",
+          "code": "import { createLab } from './lab.js'\nimport { samples } from './samples.js'\n\n// 将评分器接到步骤后，运行与评分会通过框架的后台机制分别完成。\nconst mastra = createLab({ live: true })\ntry {\n  const run = await mastra.getWorkflow('revised').createRun()\n  const result = await run.start({ inputData: samples[2].input })\n  console.log('工作流状态：', result.status)\n  const scores = await mastra.getStorage().getStore('scores')\n  let page\n  for (let attempt = 0; attempt < 50; attempt++) {\n    page = await scores.listScoresByRunId({ runId: run.runId, pagination: { page: 0, perPage: 10 } })\n    if (page.scores.length > 0) break\n    await new Promise(resolve => setTimeout(resolve, 100))\n  }\n  if (!page.scores.length) throw new Error('等待评分结果超时，请检查后台评分与存储配置')\n  console.table(page.scores.map(score => ({ scorerId: score.scorerId, score: score.score, reason: score.reason })))\n} finally {\n  await mastra.shutdown()\n}"
+        }
+      ]
+    },
+    {
+      "title": "监测与执行前校验各有位置",
+      "body": "后台评分可以发现异常、帮助抽查，并提供新的回归样本。收到低分后，应回到对应输入、输出与运行记录，确认原因。\n若依据一致性必须在发通知前通过，就把检查放进实际执行路径，确认通过后再发送。**Guardrails**、工具审批和服务端校验也各自承担相应的执行控制；事后评分不会自动撤回已经完成的操作。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "在线评分通常在后台完成。需要阻止执行的规则，应进入实际控制流程，不能只依赖事后评分。"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：在线评估",
+          "href": "https://mastra.ai/docs/evals/overview"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "通知已发送，后台评分随后得到 0。你会怎样追查并补入回归样本？如果要在下次发送前拦下同类问题，应把检查放到哪里？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "离线样本之外，还要观察实际运行",
+          "body": "固定样本用于重复比较改动，真实请求则会带来新的表达和资料组合。**在线评分（Live Evaluations）**把评分器挂到 Agent 或工作流步骤，持续为运行结果收集质量信号。\n本例给通知整理步骤挂上 evidenceScorer。它读取该步骤的输入通知，核对输出字段，因此无需为每次真实请求人工填写 groundTruth。"
+        },
+        {
+          "title": "分别等待业务结果与评分结果",
+          "body": "共享配置中的 **scorers** 将规则挂到步骤，**sampling** 控制参与评分的比例。本例 rate 为 1，方便核对每次运行；它与上一章的追踪采样分开配置，实际覆盖范围需要结合两者检查。\n在线评分在后台执行，不保证与业务返回的先后顺序。工作流返回 success 时，评分可能已经完成，也可能尚未写入。入口按 runId 在有限时间内查询 **scores 存储域**，找到结果后打印；超时则报告没有取得评分。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/08-live.ts"
+            },
+            {
+              "label": "src/08-live.ts",
+              "language": "typescript",
+              "code": "import { createLab } from './lab.ts'\nimport { samples } from './samples.ts'\n\n// 将评分器接到步骤后，运行与评分会通过框架的后台机制分别完成。\nconst mastra = createLab({ live: true })\ntry {\n  const run = await mastra.getWorkflow('revised').createRun()\n  const result = await run.start({ inputData: samples[2].input })\n  console.log('工作流状态：', result.status)\n  const scores = await mastra.getStorage().getStore('scores')\n  let page\n  for (let attempt = 0; attempt < 50; attempt++) {\n    page = await scores.listScoresByRunId({ runId: run.runId, pagination: { page: 0, perPage: 10 } })\n    if (page.scores.length > 0) break\n    await new Promise(resolve => setTimeout(resolve, 100))\n  }\n  if (!page.scores.length) throw new Error('等待评分结果超时，请检查后台评分与存储配置')\n  console.table(page.scores.map(score => ({ scorerId: score.scorerId, score: score.score, reason: score.reason })))\n} finally {\n  await mastra.shutdown()\n}"
+            }
+          ]
+        },
+        {
+          "title": "监测与执行前校验各有位置",
+          "body": "后台评分可以发现异常、帮助抽查，并提供新的回归样本。收到低分后，应回到对应输入、输出与运行记录，确认原因。\n若依据一致性必须在发通知前通过，就把检查放进实际执行路径，确认通过后再发送。**Guardrails**、工具审批和服务端校验也各自承担相应的执行控制；事后评分不会自动撤回已经完成的操作。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "在线评分通常在后台完成。需要阻止执行的规则，应进入实际控制流程，不能只依赖事后评分。"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：在线评估",
+              "href": "https://mastra.ai/docs/evals/overview"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

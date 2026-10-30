@@ -1,6 +1,6 @@
 # 11 技能：维护活动处理方法
 
-Node.ts >=24，此包使用 TypeScript。在本目录执行 pnpm install。
+Node.js >=24，此包使用 TypeScript。在本目录执行 pnpm install。
 
 ```bash
 node src/01-skills.ts

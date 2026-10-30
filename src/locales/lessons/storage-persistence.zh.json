@@ -76,7 +76,7 @@
         },
         {
           "title": "直接读回一条保存的记录",
-          "body": "下载示例，进入 09-storage-ts 文件夹，在 Node.ts 24 或更高版本下安装依赖。这里全部示例都只操作本地教学数据库，不需要模型密钥。\n先运行“写入”，退出后再运行“读取”。两次使用同一数据库文件、threadId 与 resourceId，脚本直接打印读回的会话。",
+          "body": "下载示例，进入 09-storage-ts 文件夹，在 Node.js 24 或更高版本下安装依赖。这里全部示例都只操作本地教学数据库，不需要模型密钥。\n先运行“写入”，退出后再运行“读取”。两次使用同一数据库文件、threadId 与 resourceId，脚本直接打印读回的会话。",
           "download": {
             "href": "/downloads/09-storage-ts.zip",
             "label": "下载 TypeScript 示例（ZIP）"

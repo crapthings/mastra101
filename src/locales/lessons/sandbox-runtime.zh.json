@@ -73,7 +73,7 @@
         },
         {
           "title": "启动后执行一个固定命令",
-          "body": "下载示例，进入 13-sandbox-ts 文件夹，在 Node.ts 24 或更高版本下安装依赖。全部入口只执行本章提供的教学代码，不需要模型密钥。\n调用 **start()** 准备环境，通过 **executeCommand()** 运行当前 Node 输出工作目录，最后在 finally 中 destroy。运行时创建的文件放在示例项目的 lab/ 目录中。",
+          "body": "下载示例，进入 13-sandbox-ts 文件夹，在 Node.js 24 或更高版本下安装依赖。全部入口只执行本章提供的教学代码，不需要模型密钥。\n调用 **start()** 准备环境，通过 **executeCommand()** 运行当前 Node 输出工作目录，最后在 finally 中 destroy。运行时创建的文件放在示例项目的 lab/ 目录中。",
           "download": {
             "href": "/downloads/13-sandbox-ts.zip",
             "label": "下载 TypeScript 示例（ZIP）"

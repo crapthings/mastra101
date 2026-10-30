@@ -1,0 +1,14 @@
+{
+  "title": "模型请求与工具请求，各走一条连接",
+  "caption": "Agent 通过网关请求模型生成，同时可以通过 MCPClient 调用通知服务。通知服务可以是普通程序；两条路径的凭证、错误与返回含义分别核对。",
+  "agent": "本项目的 Agent",
+  "agentDetail": "组织模型、任务与可用能力",
+  "gateway": "模型网关",
+  "gatewayDetail": "Vercel AI Gateway",
+  "client": "MCPClient",
+  "clientDetail": "发现并调用服务接口",
+  "model": "模型服务",
+  "modelDetail": "接收输入并生成回答或工具请求",
+  "service": "通知服务",
+  "serviceDetail": "执行查询，返回资料与业务状态"
+}

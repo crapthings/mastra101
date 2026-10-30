@@ -1,0 +1,102 @@
+{
+  "title": "上下文传递（Message Filtering）",
+  "lead": "分别检查转发历史、委派提示与应用条件，让子任务收到合适的材料。",
+  "sections": [
+    {
+      "title": "有独立职责，不等于只看到一句新任务",
+      "body": "主会话可能先聊过生日贺卡，后来才转到活动通知。核对通知时，子助手未必需要那段旧讨论。\n默认委派会带入父对话中可转发的上下文，并附上本次任务；框架会整理其中的工具调用与结果。**独立子任务不等于天然隔绝父会话内容**，需要按任务决定传递范围。"
+    },
+    {
+      "title": "历史消息与委派提示是两条路线",
+      "body": "**messageFilter** 控制转发哪些历史消息；**onDelegationStart** 可以通过 **modifiedPrompt** 调整实际委派任务。只过滤历史，主模型仍可能把旧内容写进新的委派提示。\n本例同时处理两处：历史返回空数组，委派提示由程序用当前教学通知重建。这样做适合材料范围已明确的小任务；开放任务则需要按内容保留必要前文，不宜机械清空。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "检查子任务输入时，同时看历史、委派提示、系统指令与工具结果。过滤一个来源，不代表其他来源也已排除。"
+        }
+      ]
+    },
+    {
+      "title": "应用条件也要对应本次委派",
+      "body": "每次委派得到一份从父请求派生的 **RequestContext**，普通条目采用浅复制，运行身份等保留字段另行处理。钩子对这份容器 set 或 delete，不会直接改写父容器的条目。\n浅复制不等于深复制；嵌套对象不要当作天然独立副本。本例只传字符串，把子任务受众改为“活动参加者”，并由动态 instructions 读取。RequestContext 本身仍不是模型消息。"
+    },
+    {
+      "title": "观察筛选与应用条件的变化",
+      "body": "运行后检查待筛选消息条数、最终文字，以及父请求中的 audience 是否仍为“主助手”。要确认模型实际收到哪些内容，还应查看对应调用输入。\n生日贺卡是无关的教学备注。这里用它观察筛选，不把这份简单过滤器当成面向所有内容的保密规则。",
+      "codeBlocks": [
+        {
+          "label": "src/03-context.js",
+          "language": "javascript",
+          "code": "import { RequestContext } from '@mastra/core/request-context'\nimport { activity, makeReviewer, makeCoordinator } from './shared.js'\n\n// 应用条件由独立请求上下文传入，不直接当作聊天历史。\nconst requestContext = new RequestContext()\nrequestContext.set('audience', '主助手')\n// 动态指令读取这次委派得到的应用条件。\nconst reviewer = makeReviewer({\n  instructions: ({ requestContext }) => `你面向${requestContext.get('audience')}核对资料，保留已确认与待确认，不补写事实。`\n})\n// 主会话包含一条无关的教学备注，子任务只需本次通知。\nconst parent = makeCoordinator({ reviewer })\n// 同时控制历史消息与委派提示，避免只过滤一条输入路线。\nconst result = await parent.generate([\n  { role: 'user', content: '教学备注：之前在讨论一份生日贺卡，与本次活动核对无关。' },\n  { role: 'assistant', content: '这份贺卡讨论暂时结束。' },\n  { role: 'user', content: `请核对活动通知：${activity}` }\n], {\n  requestContext, maxSteps: 3, abortSignal: AbortSignal.timeout(60000),\n  delegation: {\n    hookErrorStrategy: 'throw',\n    onDelegationStart: context => {\n      context.requestContext.set('audience', '活动参加者')\n      return { modifiedPrompt: `只核对以下教学通知，按已确认和待确认整理：${activity}` }\n    },\n    messageFilter: ({ messages }) => {\n      console.log('本次待筛选历史条数：', messages.length)\n      return []\n    }\n  }\n})\nconsole.dir({ text: result.text, 主请求仍为: requestContext.get('audience') })"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/03-context.js"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：消息过滤",
+          "href": "https://mastra.ai/docs/subagents#message-filtering"
+        }
+      ]
+    },
+    {
+      "title": "材料交进去，还要把结果接回来",
+      "body": "输入范围明确后，子助手会交付自己的处理结果。但主模型收到的内容，与应用能查看的完整运行记录，并不完全相同。\n下一节沿着一次通知查询，把这两种结果分开。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "历史里的无关备注已经被过滤，主模型却把它写进委派 prompt。应检查哪条输入路线？本例为什么同时使用 messageFilter 和 modifiedPrompt？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "有独立职责，不等于只看到一句新任务",
+          "body": "主会话可能先聊过生日贺卡，后来才转到活动通知。核对通知时，子助手未必需要那段旧讨论。\n默认委派会带入父对话中可转发的上下文，并附上本次任务；框架会整理其中的工具调用与结果。**独立子任务不等于天然隔绝父会话内容**，需要按任务决定传递范围。"
+        },
+        {
+          "title": "历史消息与委派提示是两条路线",
+          "body": "**messageFilter** 控制转发哪些历史消息；**onDelegationStart** 可以通过 **modifiedPrompt** 调整实际委派任务。只过滤历史，主模型仍可能把旧内容写进新的委派提示。\n本例同时处理两处：历史返回空数组，委派提示由程序用当前教学通知重建。这样做适合材料范围已明确的小任务；开放任务则需要按内容保留必要前文，不宜机械清空。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "检查子任务输入时，同时看历史、委派提示、系统指令与工具结果。过滤一个来源，不代表其他来源也已排除。"
+            }
+          ]
+        },
+        {
+          "title": "应用条件也要对应本次委派",
+          "body": "每次委派得到一份从父请求派生的 **RequestContext**，普通条目采用浅复制，运行身份等保留字段另行处理。钩子对这份容器 set 或 delete，不会直接改写父容器的条目。\n浅复制不等于深复制；嵌套对象不要当作天然独立副本。本例只传字符串，把子任务受众改为“活动参加者”，并由动态 instructions 读取。RequestContext 本身仍不是模型消息。"
+        },
+        {
+          "title": "观察筛选与应用条件的变化",
+          "body": "运行后检查待筛选消息条数、最终文字，以及父请求中的 audience 是否仍为“主助手”。要确认模型实际收到哪些内容，还应查看对应调用输入。\n生日贺卡是无关的教学备注。这里用它观察筛选，不把这份简单过滤器当成面向所有内容的保密规则。",
+          "codeBlocks": [
+            {
+              "label": "src/03-context.ts",
+              "language": "typescript",
+              "code": "import { RequestContext } from '@mastra/core/request-context'\nimport { activity, makeReviewer, makeCoordinator } from './shared.ts'\n\n// 应用条件由独立请求上下文传入，不直接当作聊天历史。\nconst requestContext = new RequestContext()\nrequestContext.set('audience', '主助手')\n// 动态指令读取这次委派得到的应用条件。\nconst reviewer = makeReviewer({\n  instructions: ({ requestContext }) => `你面向${requestContext.get('audience')}核对资料，保留已确认与待确认，不补写事实。`\n})\n// 主会话包含一条无关的教学备注，子任务只需本次通知。\nconst parent = makeCoordinator({ reviewer })\n// 同时控制历史消息与委派提示，避免只过滤一条输入路线。\nconst result = await parent.generate([\n  { role: 'user', content: '教学备注：之前在讨论一份生日贺卡，与本次活动核对无关。' },\n  { role: 'assistant', content: '这份贺卡讨论暂时结束。' },\n  { role: 'user', content: `请核对活动通知：${activity}` }\n], {\n  requestContext, maxSteps: 3, abortSignal: AbortSignal.timeout(60000),\n  delegation: {\n    hookErrorStrategy: 'throw',\n    onDelegationStart: context => {\n      context.requestContext.set('audience', '活动参加者')\n      return { modifiedPrompt: `只核对以下教学通知，按已确认和待确认整理：${activity}` }\n    },\n    messageFilter: ({ messages }) => {\n      console.log('本次待筛选历史条数：', messages.length)\n      return []\n    }\n  }\n})\nconsole.dir({ text: result.text, 主请求仍为: requestContext.get('audience') })"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/03-context.ts"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：消息过滤",
+              "href": "https://mastra.ai/docs/subagents#message-filtering"
+            }
+          ]
+        },
+        {
+          "title": "材料交进去，还要把结果接回来",
+          "body": "输入范围明确后，子助手会交付自己的处理结果。但主模型收到的内容，与应用能查看的完整运行记录，并不完全相同。\n下一节沿着一次通知查询，把这两种结果分开。"
+        }
+      ]
+    }
+  }
+}

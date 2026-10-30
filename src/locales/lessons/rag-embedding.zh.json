@@ -1,0 +1,92 @@
+{
+  "title": "向量表示（Embedding）",
+  "lead": "理解文本怎样进入同一个向量空间，并核对模型、维数与输入输出对应关系。",
+  "sections": [
+    {
+      "title": "用不同说法找到相关资料",
+      "body": "员工问“酒店一晚能报多少”，制度写“住宿报销上限”。**Embedding** 把文本转换为数值向量，用于比较语义相关性，帮助不同表述的内容成为检索候选。\n向量相似表示在当前模型表示下接近，不能直接证明候选足以回答问题。具体事实、范围和条件仍需从原文核对。"
+    },
+    {
+      "title": "文档与问题使用兼容的配置",
+      "body": "入库文本与查询问题应使用兼容的向量空间。本例用同一个 **openai/text-embedding-3-small** 配置处理两者，索引维数从实际返回的向量长度取得。\n维数相同也不保证不同模型的向量能够混用。更换模型或关键表示设置时，应重新生成对应索引，并记录使用的模型与数据版本。"
+    },
+    {
+      "title": "仍然通过 Vercel 接入",
+      "body": "下面直接请求 Vercel 的 Embedding API。接口地址已经指定网关，请求体 model 使用网关内的模型标识；后面 Mastra Agent 的生成模型仍写 **vercel/openai/gpt-6.1-sol**。\n这两个模型承担不同工作。继续使用 **AI_GATEWAY_API_KEY**，复制模板并填写后运行；04—09 都会产生相应接口调用，执行次数也受入库片段与问题数量影响。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "cp .env.example .env\n# 填写 AI_GATEWAY_API_KEY 后运行\nnode --env-file=.env src/04-embedding.js"
+        },
+        {
+          "label": "src/embedding.js",
+          "language": "javascript",
+          "code": "import { z } from 'zod'\n\n// Embedding 与生成模型各有用途，这里通过同一 Vercel 网关请求向量。\nexport const embeddingModel = 'openai/text-embedding-3-small'\n// 校验返回位置、数量与维数，避免把错位向量写入片段。\nconst responseSchema = z.object({ data: z.array(z.object({ index: z.number().int().nonnegative(), embedding: z.array(z.number().finite()).min(1) })) })\n\n// 原生 HTTP 示例直接展示输入文本到数值向量的接口边界。\nexport async function embedTexts (texts) {\n  if (!process.env.AI_GATEWAY_API_KEY) throw new Error('请先设置 AI_GATEWAY_API_KEY')\n  if (!texts.length) return []\n  const response = await fetch('https://ai-gateway.vercel.sh/v1/embeddings', {\n    method: 'POST', signal: AbortSignal.timeout(30000),\n    headers: { Authorization: `Bearer ${process.env.AI_GATEWAY_API_KEY}`, 'Content-Type': 'application/json' },\n    body: JSON.stringify({ model: embeddingModel, input: texts })\n  })\n  if (!response.ok) throw new Error(`向量请求失败，HTTP 状态：${response.status}`)\n  const { data } = responseSchema.parse(await response.json())\n  const ordered = data.sort((a, b) => a.index - b.index)\n  const dimension = ordered[0]?.embedding.length\n  if (ordered.length !== texts.length || ordered.some((item, i) => item.index !== i || item.embedding.length !== dimension)) throw new Error('向量数量、顺序或维数与输入不一致')\n  return ordered.map(item => item.embedding)\n}"
+        },
+        {
+          "label": "src/04-embedding.js",
+          "language": "javascript",
+          "code": "import { embedTexts, embeddingModel } from './embedding.js'\n\n// 入库文字和问题可以写法不同，仍需使用兼容的同一向量空间。\nconst texts = ['甲团队到北京出差，住宿上限每晚 500 元。', '去北京住酒店一晚能报多少？']\n// 只打印尺寸，不把完整向量当成可供人阅读的解释。\nconst vectors = await embedTexts(texts)\nconsole.log('向量模型：', embeddingModel)\nconsole.table(vectors.map((vector, i) => ({ text: texts[i], dimension: vector.length })))"
+        }
+      ],
+      "links": [
+        {
+          "label": "Vercel：Embedding 接口",
+          "href": "https://vercel.com/docs/ai-gateway/modalities/embeddings"
+        }
+      ]
+    },
+    {
+      "title": "写入前检查数量、顺序和维数",
+      "body": "一次请求可以处理多段文本，返回的每个向量必须与原片段对应。代码按返回 index 排序，并检查数量、顺序、维数及数值是否合法。\n这些检查确认接口数据能否用于入库；至于语义检索的实际效果，还需要后面的样本评估。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "文档和问题使用了两个不同模型，但返回维数相同，能直接比较吗？如果批量返回顺序错位，会怎样影响后续引用？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "用不同说法找到相关资料",
+          "body": "员工问“酒店一晚能报多少”，制度写“住宿报销上限”。**Embedding** 把文本转换为数值向量，用于比较语义相关性，帮助不同表述的内容成为检索候选。\n向量相似表示在当前模型表示下接近，不能直接证明候选足以回答问题。具体事实、范围和条件仍需从原文核对。"
+        },
+        {
+          "title": "文档与问题使用兼容的配置",
+          "body": "入库文本与查询问题应使用兼容的向量空间。本例用同一个 **openai/text-embedding-3-small** 配置处理两者，索引维数从实际返回的向量长度取得。\n维数相同也不保证不同模型的向量能够混用。更换模型或关键表示设置时，应重新生成对应索引，并记录使用的模型与数据版本。"
+        },
+        {
+          "title": "仍然通过 Vercel 接入",
+          "body": "下面直接请求 Vercel 的 Embedding API。接口地址已经指定网关，请求体 model 使用网关内的模型标识；后面 Mastra Agent 的生成模型仍写 **vercel/openai/gpt-6.1-sol**。\n这两个模型承担不同工作。继续使用 **AI_GATEWAY_API_KEY**，复制模板并填写后运行；04—09 都会产生相应接口调用，执行次数也受入库片段与问题数量影响。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "cp .env.example .env\n# 填写 AI_GATEWAY_API_KEY 后运行\nnode --env-file=.env src/04-embedding.ts"
+            },
+            {
+              "label": "src/embedding.ts",
+              "language": "typescript",
+              "code": "import { z } from 'zod'\n\n// Embedding 与生成模型各有用途，这里通过同一 Vercel 网关请求向量。\nexport const embeddingModel = 'openai/text-embedding-3-small'\n// 校验返回位置、数量与维数，避免把错位向量写入片段。\nconst responseSchema = z.object({ data: z.array(z.object({ index: z.number().int().nonnegative(), embedding: z.array(z.number().finite()).min(1) })) })\n\n// 原生 HTTP 示例直接展示输入文本到数值向量的接口边界。\nexport async function embedTexts (texts) {\n  if (!process.env.AI_GATEWAY_API_KEY) throw new Error('请先设置 AI_GATEWAY_API_KEY')\n  if (!texts.length) return []\n  const response = await fetch('https://ai-gateway.vercel.sh/v1/embeddings', {\n    method: 'POST', signal: AbortSignal.timeout(30000),\n    headers: { Authorization: `Bearer ${process.env.AI_GATEWAY_API_KEY}`, 'Content-Type': 'application/json' },\n    body: JSON.stringify({ model: embeddingModel, input: texts })\n  })\n  if (!response.ok) throw new Error(`向量请求失败，HTTP 状态：${response.status}`)\n  const { data } = responseSchema.parse(await response.json())\n  const ordered = data.sort((a, b) => a.index - b.index)\n  const dimension = ordered[0]?.embedding.length\n  if (ordered.length !== texts.length || ordered.some((item, i) => item.index !== i || item.embedding.length !== dimension)) throw new Error('向量数量、顺序或维数与输入不一致')\n  return ordered.map(item => item.embedding)\n}"
+            },
+            {
+              "label": "src/04-embedding.ts",
+              "language": "typescript",
+              "code": "import { embedTexts, embeddingModel } from './embedding.ts'\n\n// 入库文字和问题可以写法不同，仍需使用兼容的同一向量空间。\nconst texts = ['甲团队到北京出差，住宿上限每晚 500 元。', '去北京住酒店一晚能报多少？']\n// 只打印尺寸，不把完整向量当成可供人阅读的解释。\nconst vectors = await embedTexts(texts)\nconsole.log('向量模型：', embeddingModel)\nconsole.table(vectors.map((vector, i) => ({ text: texts[i], dimension: vector.length })))"
+            }
+          ],
+          "links": [
+            {
+              "label": "Vercel：Embedding 接口",
+              "href": "https://vercel.com/docs/ai-gateway/modalities/embeddings"
+            }
+          ]
+        },
+        {
+          "title": "写入前检查数量、顺序和维数",
+          "body": "一次请求可以处理多段文本，返回的每个向量必须与原片段对应。代码按返回 index 排序，并检查数量、顺序、维数及数值是否合法。\n这些检查确认接口数据能否用于入库；至于语义检索的实际效果，还需要后面的样本评估。"
+        }
+      ]
+    }
+  }
+}

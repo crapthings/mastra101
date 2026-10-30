@@ -1,0 +1,134 @@
+{
+  "title": "后台任务（Background Tasks）",
+  "lead": "让慢操作独立推进，并把完成结果送回智能体继续处理。",
+  "sections": [
+    {
+      "title": "慢工具，不必一直占住当前分支",
+      "body": "核查某份材料需要等待外部服务。用户可以先得到“正在核查”的回应，助手也可以处理其他已知事项，但最终结论仍要等待真实结果。\n**后台任务（Background Tasks）**让符合条件的工具调用先返回受理信息，实际操作由任务管理器推进。受理信息只是任务已经提交，不能当成核查完成的证据。"
+    },
+    {
+      "title": "管理器和工具都要允许",
+      "body": "在 Mastra 上启用 backgroundTasks 管理器，并在工具上声明 background.enabled，工具调用才具备后台执行资格。示例把默认方式设为 deferred，并用半秒等待模拟读取材料。\n模型可以通过 _background 为符合条件的调用选择执行方式，但不能用这个字段把开发者未允许的工具变成后台工具。工具、并发和超时边界仍由应用配置。",
+      "codeBlocks": [
+        {
+          "label": "src/05-background.js",
+          "language": "javascript",
+          "code": "import { setTimeout } from 'node:timers/promises'\nimport { Mastra } from '@mastra/core'\nimport { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { createAssistant, createStorage } from './assistant.js'\n\n// 用只读核查模拟耗时任务，完成后返回可供继续推理的材料。\nconst inspectPolicy = createTool({\n  id: 'inspect-policy',\n  description: '核查指定制度，返回已知条款与缺项。',\n  inputSchema: z.object({ documentId: z.literal('travel-2026') }),\n  background: { enabled: true, defaultDisposition: 'deferred', timeoutMs: 10_000 },\n  execute: async ({ documentId }) => {\n    await setTimeout(500)\n    return { documentId, limit: 500, approvalRequired: true, missing: ['事先书面批准记录'] }\n  }\n})\n\n// 将后台任务管理器接到同一存储和助手上。\nconst storage = await createStorage('background')\n// 配置本入口使用的核查助手。\nconst reviewer = createAssistant(storage, { tools: { inspectPolicy } })\n// 注册助手及其共用的运行服务。\nconst mastra = new Mastra({\n  agents: { reviewer },\n  storage,\n  backgroundTasks: { enabled: true, globalConcurrency: 2, perAgentConcurrency: 1, backpressure: 'queue' }\n})\n\ntry {\n  const output = await reviewer.stream('先调用 inspectPolicy 核查 travel-2026，得到结果后再说明 560 元住宿申请还需补什么。', {\n    memory: { thread: crypto.randomUUID(), resource: 'demo-user' },\n    untilIdle: { maxIdleMs: 15_000 },\n    maxSteps: 5\n  })\n  for await (const chunk of output.fullStream) {\n    if (chunk.type.startsWith('background-task-')) console.log('任务事件：', chunk.type)\n    if (chunk.type === 'text-delta') process.stdout.write(chunk.payload.text)\n  }\n  console.log()\n} finally {\n  await mastra.shutdown()\n  await storage.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/05-background.js"
+        }
+      ]
+    },
+    {
+      "title": "受理、完成、消费结果是三个时点",
+      "body": "**deferred** 提交后允许当前分支继续；**awaited** 同样通过任务管理器执行，但当前分支等待权威结果；**foreground** 则直接在前台执行。选择方式时，应看后续推理是否依赖这个结果。\n示例使用 **untilIdle** 保持流，任务完成后由后续轮次消费结果，并遍历 fullStream 接收整个过程。若只读 output.text 等聚合属性，它们仍对应第一轮缓冲，不能据此判断所有后续内容已经处理完。",
+      "table": {
+        "headers": [
+          "观察到什么",
+          "可以据此判断什么"
+        ],
+        "rows": [
+          [
+            "background-task-started",
+            "已分配任务标识并提交"
+          ],
+          [
+            "background-task-completed",
+            "任务本身执行成功"
+          ],
+          [
+            "后续智能体输出",
+            "助手已获得机会处理结果，业务仍需验收"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "限制等待，也保留失败出口",
+      "body": "存储保存任务记录，并发限制避免一次提交压垮服务；timeoutMs 限制工具任务时长，untilIdle.maxIdleMs 则限制轮次之间等待后台变化的空闲时间，两者不是同一个超时。\n任务失败、取消或暂停，都要在应用中形成明确状态。记录持久化也不意味着任意进程内的函数或尚未完成的 HTTP 请求能原样复活；重启后要重新注册对应工具，并核对框架恢复路径及外部操作是否允许重试。下一节再把“现在等待”扩展为“到时间再触发”。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "后台任务完成后，结果还需要进入上下文并被消费。把任务提交成功当成任务完成，会让后续结论失去依据。"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：Background Tasks",
+          "href": "https://mastra.ai/docs/harness/background-tasks"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "页面收到了后台任务已提交的事件，随后返回第一段说明。要确认核查已经完成并用于结论，还需要观察哪两个环节？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "慢工具，不必一直占住当前分支",
+          "body": "核查某份材料需要等待外部服务。用户可以先得到“正在核查”的回应，助手也可以处理其他已知事项，但最终结论仍要等待真实结果。\n**后台任务（Background Tasks）**让符合条件的工具调用先返回受理信息，实际操作由任务管理器推进。受理信息只是任务已经提交，不能当成核查完成的证据。"
+        },
+        {
+          "title": "管理器和工具都要允许",
+          "body": "在 Mastra 上启用 backgroundTasks 管理器，并在工具上声明 background.enabled，工具调用才具备后台执行资格。示例把默认方式设为 deferred，并用半秒等待模拟读取材料。\n模型可以通过 _background 为符合条件的调用选择执行方式，但不能用这个字段把开发者未允许的工具变成后台工具。工具、并发和超时边界仍由应用配置。",
+          "codeBlocks": [
+            {
+              "label": "src/05-background.ts",
+              "language": "typescript",
+              "code": "import { setTimeout } from 'node:timers/promises'\nimport { Mastra } from '@mastra/core'\nimport { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { createAssistant, createStorage } from './assistant.ts'\n\n// 用只读核查模拟耗时任务，完成后返回可供继续推理的材料。\nconst inspectPolicy = createTool({\n  id: 'inspect-policy',\n  description: '核查指定制度，返回已知条款与缺项。',\n  inputSchema: z.object({ documentId: z.literal('travel-2026') }),\n  background: { enabled: true, defaultDisposition: 'deferred', timeoutMs: 10_000 },\n  execute: async ({ documentId }) => {\n    await setTimeout(500)\n    return { documentId, limit: 500, approvalRequired: true, missing: ['事先书面批准记录'] }\n  }\n})\n\n// 将后台任务管理器接到同一存储和助手上。\nconst storage = await createStorage('background')\n// 配置本入口使用的核查助手。\nconst reviewer = createAssistant(storage, { tools: { inspectPolicy } })\n// 注册助手及其共用的运行服务。\nconst mastra = new Mastra({\n  agents: { reviewer },\n  storage,\n  backgroundTasks: { enabled: true, globalConcurrency: 2, perAgentConcurrency: 1, backpressure: 'queue' }\n})\n\ntry {\n  const output = await reviewer.stream('先调用 inspectPolicy 核查 travel-2026，得到结果后再说明 560 元住宿申请还需补什么。', {\n    memory: { thread: crypto.randomUUID(), resource: 'demo-user' },\n    untilIdle: { maxIdleMs: 15_000 },\n    maxSteps: 5\n  })\n  for await (const chunk of output.fullStream) {\n    if (chunk.type.startsWith('background-task-')) console.log('任务事件：', chunk.type)\n    if (chunk.type === 'text-delta') process.stdout.write(chunk.payload.text)\n  }\n  console.log()\n} finally {\n  await mastra.shutdown()\n  await storage.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/05-background.ts"
+            }
+          ]
+        },
+        {
+          "title": "受理、完成、消费结果是三个时点",
+          "body": "**deferred** 提交后允许当前分支继续；**awaited** 同样通过任务管理器执行，但当前分支等待权威结果；**foreground** 则直接在前台执行。选择方式时，应看后续推理是否依赖这个结果。\n示例使用 **untilIdle** 保持流，任务完成后由后续轮次消费结果，并遍历 fullStream 接收整个过程。若只读 output.text 等聚合属性，它们仍对应第一轮缓冲，不能据此判断所有后续内容已经处理完。",
+          "table": {
+            "headers": [
+              "观察到什么",
+              "可以据此判断什么"
+            ],
+            "rows": [
+              [
+                "background-task-started",
+                "已分配任务标识并提交"
+              ],
+              [
+                "background-task-completed",
+                "任务本身执行成功"
+              ],
+              [
+                "后续智能体输出",
+                "助手已获得机会处理结果，业务仍需验收"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "限制等待，也保留失败出口",
+          "body": "存储保存任务记录，并发限制避免一次提交压垮服务；timeoutMs 限制工具任务时长，untilIdle.maxIdleMs 则限制轮次之间等待后台变化的空闲时间，两者不是同一个超时。\n任务失败、取消或暂停，都要在应用中形成明确状态。记录持久化也不意味着任意进程内的函数或尚未完成的 HTTP 请求能原样复活；重启后要重新注册对应工具，并核对框架恢复路径及外部操作是否允许重试。下一节再把“现在等待”扩展为“到时间再触发”。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "后台任务完成后，结果还需要进入上下文并被消费。把任务提交成功当成任务完成，会让后续结论失去依据。"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：Background Tasks",
+              "href": "https://mastra.ai/docs/harness/background-tasks"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

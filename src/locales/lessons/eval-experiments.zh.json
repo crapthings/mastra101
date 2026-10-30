@@ -1,0 +1,94 @@
+{
+  "title": "版本实验（Experiments）",
+  "lead": "固定数据与评分方式比较改动，并分别检查执行状态和逐条质量。",
+  "sections": [
+    {
+      "title": "固定条件，比较改动的效果",
+      "body": "前面已有样本、评分器和两个版本。**实验（Experiment）**将指定版本的数据集交给目标，保存逐条运行结果与评分，便于重复比较。\n本例固定数据集版本与评分器，分别运行 baseline、revised。两者的行为差异只有一处：入口缺失时，是否保留待确认。"
+    },
+    {
+      "title": "通过注册目标启动实验",
+      "body": "**dataset.startExperiment()** 通过 **targetType** 与 **targetId** 选择注册目标，通过 **version** 指定数据集版本。这里的 targetId 是工作流的 id，scorers 则使用评分器的 id。\n方法等待实验处理完成后返回汇总。代码同时打印执行计数与逐条分数，便于区分任务有没有执行完、结果有没有满足要求。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/09-experiments.js"
+        },
+        {
+          "label": "src/09-experiments.js",
+          "language": "javascript",
+          "code": "import { createLab } from './lab.js'\nimport { samples } from './samples.js'\n\n// 锁定同一数据集版本，以相同评分器比较两个已注册工作流。\nconst mastra = createLab()\ntry {\n  const dataset = await mastra.datasets.create({ name: '通知版本比较' })\n  await dataset.addItems({ items: samples })\n  const { version } = await dataset.getDetails()\n  for (const targetId of ['notice-baseline', 'notice-revised']) {\n    const summary = await dataset.startExperiment({\n      name: targetId, targetType: 'workflow', targetId,\n      version, scorers: ['notice-evidence']\n    })\n    console.log('目标：', targetId, '状态：', summary.status, '执行成功：', summary.succeededCount, '执行失败：', summary.failedCount)\n    console.table(summary.results.map(item => ({\n      expected: JSON.stringify(item.groundTruth), actual: JSON.stringify(item.output),\n      score: item.scores[0]?.score, reason: item.scores[0]?.reason\n    })))\n  }\n} finally {\n  await mastra.shutdown()\n}"
+        }
+      ]
+    },
+    {
+      "title": "分别检查执行状态与质量结果",
+      "body": "本例两个版本都返回 **completed**，**succeededCount** 为 3、**failedCount** 为 0：三个任务都正常执行。基线版却有一条依据检查得 0，修改版三条都得 1。\n实验 status 与这些计数描述执行情况；质量要从逐条分数和理由中判断。它也不同于 runEvals 按 gates 与 threshold 得出的 verdict。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "实验执行状态回答“有没有跑完”，逐条评分回答“满足了哪些要求”。两者应一起检查。"
+        }
+      ]
+    },
+    {
+      "title": "把发现的问题带回下一轮",
+      "body": "Studio 的实验列表可以查看逐条输出、分数并比较实验，适合在配置好持久存储的项目中持续使用。\n比较时，记录数据集版本、目标版本与评分配置，检查原有失败是否修复、已通过的样本是否退步，再抽查关键结果。根据发现补充规则与样本，让下一轮改动继续接受同样的检查。\n确认通知处理符合要求后，接下来将它接到 HTTP 接口，让网页和其他程序也能提交资料、读取结果。",
+      "links": [
+        {
+          "label": "Mastra：实验",
+          "href": "https://mastra.ai/docs/evals/experiments"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "两个实验都是 completed、执行失败数为 0，但基线版有一项依据检查得 0。哪些结果能帮助定位问题，哪些才应影响是否交给后续 Agent 使用？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "固定条件，比较改动的效果",
+          "body": "前面已有样本、评分器和两个版本。**实验（Experiment）**将指定版本的数据集交给目标，保存逐条运行结果与评分，便于重复比较。\n本例固定数据集版本与评分器，分别运行 baseline、revised。两者的行为差异只有一处：入口缺失时，是否保留待确认。"
+        },
+        {
+          "title": "通过注册目标启动实验",
+          "body": "**dataset.startExperiment()** 通过 **targetType** 与 **targetId** 选择注册目标，通过 **version** 指定数据集版本。这里的 targetId 是工作流的 id，scorers 则使用评分器的 id。\n方法等待实验处理完成后返回汇总。代码同时打印执行计数与逐条分数，便于区分任务有没有执行完、结果有没有满足要求。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/09-experiments.ts"
+            },
+            {
+              "label": "src/09-experiments.ts",
+              "language": "typescript",
+              "code": "import { createLab } from './lab.ts'\nimport { samples } from './samples.ts'\n\n// 锁定同一数据集版本，以相同评分器比较两个已注册工作流。\nconst mastra = createLab()\ntry {\n  const dataset = await mastra.datasets.create({ name: '通知版本比较' })\n  await dataset.addItems({ items: samples })\n  const { version } = await dataset.getDetails()\n  for (const targetId of ['notice-baseline', 'notice-revised']) {\n    const summary = await dataset.startExperiment({\n      name: targetId, targetType: 'workflow', targetId,\n      version, scorers: ['notice-evidence']\n    })\n    console.log('目标：', targetId, '状态：', summary.status, '执行成功：', summary.succeededCount, '执行失败：', summary.failedCount)\n    console.table(summary.results.map(item => ({\n      expected: JSON.stringify(item.groundTruth), actual: JSON.stringify(item.output),\n      score: item.scores[0]?.score, reason: item.scores[0]?.reason\n    })))\n  }\n} finally {\n  await mastra.shutdown()\n}"
+            }
+          ]
+        },
+        {
+          "title": "分别检查执行状态与质量结果",
+          "body": "本例两个版本都返回 **completed**，**succeededCount** 为 3、**failedCount** 为 0：三个任务都正常执行。基线版却有一条依据检查得 0，修改版三条都得 1。\n实验 status 与这些计数描述执行情况；质量要从逐条分数和理由中判断。它也不同于 runEvals 按 gates 与 threshold 得出的 verdict。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "实验执行状态回答“有没有跑完”，逐条评分回答“满足了哪些要求”。两者应一起检查。"
+            }
+          ]
+        },
+        {
+          "title": "把发现的问题带回下一轮",
+          "body": "Studio 的实验列表可以查看逐条输出、分数并比较实验，适合在配置好持久存储的项目中持续使用。\n比较时，记录数据集版本、目标版本与评分配置，检查原有失败是否修复、已通过的样本是否退步，再抽查关键结果。根据发现补充规则与样本，让下一轮改动继续接受同样的检查。\n确认通知处理符合要求后，接下来将它接到 HTTP 接口，让网页和其他程序也能提交资料、读取结果。",
+          "links": [
+            {
+              "label": "Mastra：实验",
+              "href": "https://mastra.ai/docs/evals/experiments"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "title": "按顺序停止，再核对保存结果",
+  "caption": "HTTP 排空与 Mastra 收尾各有预算。超过预算的操作仍需按实际结果处理，进程退出不等于业务回滚。",
+  "one": "SIGTERM / SIGINT",
+  "oneDetail": "撤下就绪，停止接收新请求",
+  "two": "HTTP 排空",
+  "twoDetail": "预算内等待在途响应",
+  "three": "Mastra 收尾",
+  "threeDetail": "处理框架任务，完成观测导出",
+  "four": "关闭存储并退出",
+  "fourDetail": "重新启动后按原 runId 核对记录"
+}

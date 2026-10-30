@@ -10,7 +10,7 @@ localStorage 属于当前浏览器及站点；清除站点数据会清除偏好�
 
 ## 方案选择
 
-采用 Shiki 4.5.0 的细粒度核心与 JavaScript 正则引擎。高亮模块在代码块挂载后动态加载；语言限定为 JavaScript、TypeScript、JSON 和 Bash，主题限定为 github-dark。未知语言及加载失败保留可读的纯文本。
+采用 Shiki 4.5.0 的细粒度核心与 JavaScript 正则引擎。高亮模块在代码块挂载后动态加载；语言限定为 JavaScript、TypeScript、JSON、JSONL、YAML、XML、CSV、Bash、Markdown 和 Dockerfile，主题限定为 github-dark。未知语言及加载失败保留可读的纯文本。
 
 使用 codeToTokens 将结果交给 React 渲染，不注入 HTML。词法颜色来自主题，其他布局继续使用 Tailwind。异步结果同时匹配源代码和语法，快速切换不会将旧高亮覆盖到新代码上。
 
@@ -34,3 +34,5 @@ react-markdown 负责 Markdown 解析与 React 元素生成，本身不是高亮
 当前浏览器连接不可用，本地未发现已运行的教程服务。遵守项目约定，未启动开发服务或运行构建／测试脚本；实际浏览器视觉和键盘操作仍待验证。
 
 结构化输出示例还按需加载 JSONL、YAML、XML、CSV 语法，保留同一主题与正则引擎；不在入口加载全部语言。
+
+20 的容器文件按需加载 Dockerfile 语法；JS/TS 切换同时更新 Docker 启动入口，保留 package.json 等非 JS 文件名。

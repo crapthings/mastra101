@@ -1,0 +1,12 @@
+{
+  "title": "取消要沿调用链逐层确认",
+  "caption": "本例确认 HTTP 断开能传到服务端等待任务。已经完成的写入或外部操作，仍要根据实际业务结果另行处理。",
+  "one": "调用方 · AbortController",
+  "oneDetail": "停止等待当前请求",
+  "two": "HTTP 服务 · 请求取消信号",
+  "twoDetail": "运行环境需要传递连接断开",
+  "three": "下游任务 · AbortSignal",
+  "threeDetail": "支持取消的操作主动响应",
+  "four": "核对实际现场",
+  "fourDetail": "是否已停止，是否已有业务结果"
+}

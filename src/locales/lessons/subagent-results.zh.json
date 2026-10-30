@@ -1,0 +1,130 @@
+{
+  "title": "结果交接（Result Context）",
+  "lead": "分清子助手交给父模型的文本，与应用保留的嵌套工具和运行信息。",
+  "sections": [
+    {
+      "title": "子助手查过什么，主模型未必全部看见",
+      "body": "核对助手先用工具读取通知，再生成一段核对结论。应用能查看那次查询的返回数据，父模型却不一定会收到相同的完整对象。\n默认交接主要把**子任务文本**作为工具结果提供给父模型，嵌套工具数据与会话标识保留在应用可检查的委派结果中。两者服务于不同用途：继续理解任务，以及排查或展示执行过程。"
+    },
+    {
+      "title": "把依据写进需要交接的结果",
+      "body": "子助手的结论应说明来源、已确认内容和仍有缺口的部分。只返回“都检查过了”，会丢掉主助手继续处理所需的信息。\n**subAgentToolResults** 可供应用检查嵌套工具返回；**subAgentThreadId** 等标识则帮助找到对应子会话。需要这些原始数据进入父模型上下文时，可以设置 **includeSubAgentToolResultsInModelContext**，同时考虑体积和不必要内容。",
+      "table": {
+        "headers": [
+          "接收方",
+          "默认可用信息",
+          "典型用途"
+        ],
+        "rows": [
+          [
+            "父模型",
+            "子助手返回的文本",
+            "继续回答或决定下一步"
+          ],
+          [
+            "应用代码",
+            "文本、嵌套工具结果与运行标识等",
+            "核对执行、定位记录、展示详情"
+          ],
+          [
+            "父模型，显式开启完整交接",
+            "更完整的委派结果",
+            "确实需要继续处理嵌套数据的任务"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "对照默认与完整模式",
+      "body": "本例把查询和整理固定为子任务的两步。lookupNotice 返回教学通知，核对助手再生成文本；父子日志分别标注来源。\n先运行默认模式，再运行完整模式。两次都会打印应用收到的嵌套结果；开关改变的是父模型可见内容，不能根据终端里“打印过了”判断模型已经读过。",
+      "codeBlocks": [
+        {
+          "label": "src/04-results.js",
+          "language": "javascript",
+          "code": "import { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { makeReviewer, makeCoordinator, logStep } from './shared.js'\n\n// 只允许比较默认文本交接与完整结果交接。\nconst mode = process.argv[2] || '默认'\nif (!['默认', '完整'].includes(mode)) throw new Error('请使用“默认”或“完整”。')\n// 查询返回固定教学通知，给子任务一份可以追溯的来源。\nconst lookupNotice = createTool({\n  id: 'lookup-notice', description: '读取本章教学活动通知。', inputSchema: z.object({}),\n  execute: async () => ({ venue: '南门', startTime: '周六下午两点', source: '教学通知 v1', bookingStatus: '未提供个人记录' })\n})\n// 强制第一步查询、第二步回答，固定观察结果交接所需的路径。\nconst reviewer = makeReviewer({\n  tools: { lookupNotice },\n  instructions: '先读取教学通知，再用中文整理地点、开始时间、来源与个人预约状态缺口。',\n  defaultOptions: {\n    maxSteps: 2, onStepFinish: logStep('核对助手'),\n    prepareStep: ({ stepNumber }) => ({ toolChoice: stepNumber === 0 ? { type: 'tool', toolName: 'lookupNotice' } : 'none' })\n  }\n})\n// 主助手收到子任务结果后再组织回答。\nconst parent = makeCoordinator({ reviewer })\n// 完整模式增加父模型可见的嵌套数据，不改变应用本就可检查的原始结果。\nconst result = await parent.generate('请让核对助手读取教学通知并说明安排。', {\n  maxSteps: 3, abortSignal: AbortSignal.timeout(60000), onStepFinish: logStep('主助手'),\n  delegation: {\n    includeSubAgentToolResultsInModelContext: mode === '完整',\n    onDelegationComplete: ({ result, success }) => {\n      console.dir({ success, 子任务文本: result?.text, 嵌套工具: result?.subAgentToolResults }, { depth: 6 })\n    }\n  }\n})\nconsole.log(result.text)"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/04-results.js 默认\nnode --env-file=.env src/04-results.js 完整"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：子任务结果范围",
+          "href": "https://mastra.ai/docs/subagents#subagent-result-context"
+        }
+      ]
+    },
+    {
+      "title": "有结果，不等于有可靠结论",
+      "body": "嵌套工具返回南门，子助手写成东门，父助手又照抄了东门时，需要沿原始数据、子文本与父回答逐层核对。保留原始记录，才能知道偏差从哪里开始。\n让应用在委派前后介入，可以更早发现缺少材料、空结果或失败。下一节认识这些委派钩子。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "应用能打印 subAgentToolResults，能否证明父模型看到了其中的数据？若子文本与工具返回不一致，应按什么顺序核对？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "子助手查过什么，主模型未必全部看见",
+          "body": "核对助手先用工具读取通知，再生成一段核对结论。应用能查看那次查询的返回数据，父模型却不一定会收到相同的完整对象。\n默认交接主要把**子任务文本**作为工具结果提供给父模型，嵌套工具数据与会话标识保留在应用可检查的委派结果中。两者服务于不同用途：继续理解任务，以及排查或展示执行过程。"
+        },
+        {
+          "title": "把依据写进需要交接的结果",
+          "body": "子助手的结论应说明来源、已确认内容和仍有缺口的部分。只返回“都检查过了”，会丢掉主助手继续处理所需的信息。\n**subAgentToolResults** 可供应用检查嵌套工具返回；**subAgentThreadId** 等标识则帮助找到对应子会话。需要这些原始数据进入父模型上下文时，可以设置 **includeSubAgentToolResultsInModelContext**，同时考虑体积和不必要内容。",
+          "table": {
+            "headers": [
+              "接收方",
+              "默认可用信息",
+              "典型用途"
+            ],
+            "rows": [
+              [
+                "父模型",
+                "子助手返回的文本",
+                "继续回答或决定下一步"
+              ],
+              [
+                "应用代码",
+                "文本、嵌套工具结果与运行标识等",
+                "核对执行、定位记录、展示详情"
+              ],
+              [
+                "父模型，显式开启完整交接",
+                "更完整的委派结果",
+                "确实需要继续处理嵌套数据的任务"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "对照默认与完整模式",
+          "body": "本例把查询和整理固定为子任务的两步。lookupNotice 返回教学通知，核对助手再生成文本；父子日志分别标注来源。\n先运行默认模式，再运行完整模式。两次都会打印应用收到的嵌套结果；开关改变的是父模型可见内容，不能根据终端里“打印过了”判断模型已经读过。",
+          "codeBlocks": [
+            {
+              "label": "src/04-results.ts",
+              "language": "typescript",
+              "code": "import { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { makeReviewer, makeCoordinator, logStep } from './shared.ts'\n\n// 只允许比较默认文本交接与完整结果交接。\nconst mode = process.argv[2] || '默认'\nif (!['默认', '完整'].includes(mode)) throw new Error('请使用“默认”或“完整”。')\n// 查询返回固定教学通知，给子任务一份可以追溯的来源。\nconst lookupNotice = createTool({\n  id: 'lookup-notice', description: '读取本章教学活动通知。', inputSchema: z.object({}),\n  execute: async () => ({ venue: '南门', startTime: '周六下午两点', source: '教学通知 v1', bookingStatus: '未提供个人记录' })\n})\n// 强制第一步查询、第二步回答，固定观察结果交接所需的路径。\nconst reviewer = makeReviewer({\n  tools: { lookupNotice },\n  instructions: '先读取教学通知，再用中文整理地点、开始时间、来源与个人预约状态缺口。',\n  defaultOptions: {\n    maxSteps: 2, onStepFinish: logStep('核对助手'),\n    prepareStep: ({ stepNumber }) => ({ toolChoice: stepNumber === 0 ? { type: 'tool', toolName: 'lookupNotice' } : 'none' })\n  }\n})\n// 主助手收到子任务结果后再组织回答。\nconst parent = makeCoordinator({ reviewer })\n// 完整模式增加父模型可见的嵌套数据，不改变应用本就可检查的原始结果。\nconst result = await parent.generate('请让核对助手读取教学通知并说明安排。', {\n  maxSteps: 3, abortSignal: AbortSignal.timeout(60000), onStepFinish: logStep('主助手'),\n  delegation: {\n    includeSubAgentToolResultsInModelContext: mode === '完整',\n    onDelegationComplete: ({ result, success }) => {\n      console.dir({ success, 子任务文本: result?.text, 嵌套工具: result?.subAgentToolResults }, { depth: 6 })\n    }\n  }\n})\nconsole.log(result.text)"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/04-results.ts 默认\nnode --env-file=.env src/04-results.ts 完整"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：子任务结果范围",
+              "href": "https://mastra.ai/docs/subagents#subagent-result-context"
+            }
+          ]
+        },
+        {
+          "title": "有结果，不等于有可靠结论",
+          "body": "嵌套工具返回南门，子助手写成东门，父助手又照抄了东门时，需要沿原始数据、子文本与父回答逐层核对。保留原始记录，才能知道偏差从哪里开始。\n让应用在委派前后介入，可以更早发现缺少材料、空结果或失败。下一节认识这些委派钩子。"
+        }
+      ]
+    }
+  }
+}

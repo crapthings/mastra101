@@ -1,0 +1,102 @@
+{
+  "title": "委派控制（Delegation Hooks）",
+  "lead": "在交出任务和接回结果时介入，并区分主动拒绝、子任务失败与钩子故障。",
+  "sections": [
+    {
+      "title": "先检查任务，再决定是否交出去",
+      "body": "**onDelegationStart** 在委派开始前介入。它可以检查对象与任务，返回 proceed: false 拒绝委派，并提供 rejectionReason；也可以修改 prompt 或本次子任务预算。\n本例准备允许、拒绝和钩子错误三种情况。拒绝是应用作出的决定，钩子抛错则表示检查程序没有正常完成，两者应留下不同的原因。"
+    },
+    {
+      "title": "接回结果时，先保留成功与失败",
+      "body": "**onDelegationComplete** 提供 success、result 和 error 等信息。子运行失败时，主助手通常还能继续解释或选择其他方式；若应用需要停止父循环，可以调用 **bail()**。\n返回 **resultText** 可以替换父模型本轮看到的交接文字，但不会把失败状态改成成功。feedback 用于后续回合的反馈，与本轮替换结果的时机不同。先按当前需要选择，不把错误详情原样塞进用户回答。"
+    },
+    {
+      "title": "钩子失败，也需要明确策略",
+      "body": "钩子默认有继续处理的回退行为。例如 messageFilter 抛错后可能退回未过滤上下文。依赖这项检查决定能否继续时，可以显式设置 **hookErrorStrategy: 'throw'**，让本次委派失败。\n这仍不等于整次父任务一定抛出异常或立刻停止。错误可能发生在子任务启动之前，完成回调也不一定执行；应用应检查实际委派结果与最终交付，而不只依赖外层 try/catch。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "主动拒绝、子任务执行失败、钩子自身失败，分别记录原因。失败文字换得更友好，不会改变那次执行的真实状态。"
+        }
+      ]
+    },
+    {
+      "title": "用三个受控分支观察行为",
+      "body": "允许模式在任务里补充预约缺口要求；拒绝模式不运行核对助手；钩子错误模式模拟检查器不可用。工具结果中可能出现错误，程序也可能继续返回说明，应结合记录判断。\n日志里的 primitiveId 是实际 Agent 标识 activity-reviewer，不是 agents 中的 reviewer 注册键。按对象控制规则时，先把两个名字对应好。",
+      "codeBlocks": [
+        {
+          "label": "src/05-hooks.js",
+          "language": "javascript",
+          "code": "import { activity, makeReviewer, makeCoordinator } from './shared.js'\n\n// 三种模式分别观察允许委派、主动拒绝与钩子抛错。\nconst mode = process.argv[2] || '允许'\nif (!['允许', '拒绝', '钩子错误'].includes(mode)) throw new Error('请使用“允许”“拒绝”或“钩子错误”。')\n// 子助手只执行资料核对，不写入外部系统。\nconst parent = makeCoordinator({ reviewer: makeReviewer() })\ntry {\n  const result = await parent.generate(`请核对：${activity}`, {\n    maxSteps: 3, abortSignal: AbortSignal.timeout(60000),\n    delegation: {\n      hookErrorStrategy: 'throw',\n      onDelegationStart: ({ primitiveId, prompt }) => {\n        console.dir({ 委派对象: primitiveId, 委派任务: prompt })\n        if (mode === '钩子错误') throw new Error('教学检查器暂时不可用')\n        if (mode === '拒绝') return { proceed: false, rejectionReason: '本轮暂不运行核对助手，请保留未核对状态。' }\n        return { proceed: true, modifiedPrompt: `${prompt}\\n请保留个人预约状态缺失这一项。` }\n      },\n      onDelegationComplete: context => {\n        console.dir({ success: context.success, finishReason: context.result?.finishReason })\n        if (!context.success) {\n          context.bail()\n          return { resultText: '子任务未完成，活动资料仍待核对。' }\n        }\n      }\n    }\n  })\n  console.dir({ text: result.text, finishReason: result.finishReason })\n} catch (error) {\n  console.error('本次任务未能正常交付：', error.message)\n  process.exitCode = 1\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/05-hooks.js 允许\nnode --env-file=.env src/05-hooks.js 拒绝\nnode --env-file=.env src/05-hooks.js 钩子错误"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：委派钩子",
+          "href": "https://mastra.ai/docs/subagents#delegation-hooks"
+        }
+      ]
+    },
+    {
+      "title": "允许执行以后，还要给运行留边界",
+      "body": "钩子可以决定任务是否交出，却不能让子任务无限继续。父助手和子助手各有自己的循环，也可能因步数或取消而停止。\n下一节把这些预算放到一条委派链上看。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "钩子报错后子助手没有运行，父助手却仍返回了一段说明。能否仅凭“没有抛出异常”认定核对完成？应查看哪些委派状态？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先检查任务，再决定是否交出去",
+          "body": "**onDelegationStart** 在委派开始前介入。它可以检查对象与任务，返回 proceed: false 拒绝委派，并提供 rejectionReason；也可以修改 prompt 或本次子任务预算。\n本例准备允许、拒绝和钩子错误三种情况。拒绝是应用作出的决定，钩子抛错则表示检查程序没有正常完成，两者应留下不同的原因。"
+        },
+        {
+          "title": "接回结果时，先保留成功与失败",
+          "body": "**onDelegationComplete** 提供 success、result 和 error 等信息。子运行失败时，主助手通常还能继续解释或选择其他方式；若应用需要停止父循环，可以调用 **bail()**。\n返回 **resultText** 可以替换父模型本轮看到的交接文字，但不会把失败状态改成成功。feedback 用于后续回合的反馈，与本轮替换结果的时机不同。先按当前需要选择，不把错误详情原样塞进用户回答。"
+        },
+        {
+          "title": "钩子失败，也需要明确策略",
+          "body": "钩子默认有继续处理的回退行为。例如 messageFilter 抛错后可能退回未过滤上下文。依赖这项检查决定能否继续时，可以显式设置 **hookErrorStrategy: 'throw'**，让本次委派失败。\n这仍不等于整次父任务一定抛出异常或立刻停止。错误可能发生在子任务启动之前，完成回调也不一定执行；应用应检查实际委派结果与最终交付，而不只依赖外层 try/catch。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "主动拒绝、子任务执行失败、钩子自身失败，分别记录原因。失败文字换得更友好，不会改变那次执行的真实状态。"
+            }
+          ]
+        },
+        {
+          "title": "用三个受控分支观察行为",
+          "body": "允许模式在任务里补充预约缺口要求；拒绝模式不运行核对助手；钩子错误模式模拟检查器不可用。工具结果中可能出现错误，程序也可能继续返回说明，应结合记录判断。\n日志里的 primitiveId 是实际 Agent 标识 activity-reviewer，不是 agents 中的 reviewer 注册键。按对象控制规则时，先把两个名字对应好。",
+          "codeBlocks": [
+            {
+              "label": "src/05-hooks.ts",
+              "language": "typescript",
+              "code": "import { activity, makeReviewer, makeCoordinator } from './shared.ts'\n\n// 三种模式分别观察允许委派、主动拒绝与钩子抛错。\nconst mode = process.argv[2] || '允许'\nif (!['允许', '拒绝', '钩子错误'].includes(mode)) throw new Error('请使用“允许”“拒绝”或“钩子错误”。')\n// 子助手只执行资料核对，不写入外部系统。\nconst parent = makeCoordinator({ reviewer: makeReviewer() })\ntry {\n  const result = await parent.generate(`请核对：${activity}`, {\n    maxSteps: 3, abortSignal: AbortSignal.timeout(60000),\n    delegation: {\n      hookErrorStrategy: 'throw',\n      onDelegationStart: ({ primitiveId, prompt }) => {\n        console.dir({ 委派对象: primitiveId, 委派任务: prompt })\n        if (mode === '钩子错误') throw new Error('教学检查器暂时不可用')\n        if (mode === '拒绝') return { proceed: false, rejectionReason: '本轮暂不运行核对助手，请保留未核对状态。' }\n        return { proceed: true, modifiedPrompt: `${prompt}\\n请保留个人预约状态缺失这一项。` }\n      },\n      onDelegationComplete: context => {\n        console.dir({ success: context.success, finishReason: context.result?.finishReason })\n        if (!context.success) {\n          context.bail()\n          return { resultText: '子任务未完成，活动资料仍待核对。' }\n        }\n      }\n    }\n  })\n  console.dir({ text: result.text, finishReason: result.finishReason })\n} catch (error) {\n  console.error('本次任务未能正常交付：', error.message)\n  process.exitCode = 1\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/05-hooks.ts 允许\nnode --env-file=.env src/05-hooks.ts 拒绝\nnode --env-file=.env src/05-hooks.ts 钩子错误"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：委派钩子",
+              "href": "https://mastra.ai/docs/subagents#delegation-hooks"
+            }
+          ]
+        },
+        {
+          "title": "允许执行以后，还要给运行留边界",
+          "body": "钩子可以决定任务是否交出，却不能让子任务无限继续。父助手和子助手各有自己的循环，也可能因步数或取消而停止。\n下一节把这些预算放到一条委派链上看。"
+        }
+      ]
+    }
+  }
+}

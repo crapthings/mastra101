@@ -1,0 +1,78 @@
+{
+  "title": "部署交付物（Deployment Artifact）",
+  "lead": "把源码、依赖与启动方式组成可复用产物，并在目标环境安装对应的原生依赖。",
+  "sections": [
+    {
+      "title": "选择一条明确的交付路径",
+      "body": "本章用 Node.js 24 直接运行适配器入口，交付物包含 src、package.json、锁文件与安装配置，不需要先进行应用打包。\n另一条常见路径是 Mastra CLI 的 build，生成 .mastra/output 后再部署。两种方式各有入口与产物结构，本章贯穿直接运行的方式，避免混用启动命令。"
+    },
+    {
+      "title": "在镜像内安装目标平台的依赖",
+      "body": "**Dockerfile** 固定 Node 主版本和 pnpm 版本，按锁文件安装生产依赖，再复制源码，以非 root 用户启动。\nLibSQL 与 DuckDB 含原生依赖，不能把 macOS 的 node_modules 直接复制到 Linux 镜像。这里在镜像中安装，取得适合目标系统和架构的包。",
+      "codeBlocks": [
+        {
+          "label": "Dockerfile",
+          "language": "dockerfile",
+          "code": "FROM node:24-bookworm-slim\nWORKDIR /app\nRUN npm install --global pnpm@12.4.1\nCOPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./\nRUN pnpm install --frozen-lockfile --prod\nCOPY src ./src\nRUN mkdir -p /app/data && chown node:node /app/data\nENV HOST=0.0.0.0 PORT=4111 DATA_DIR=/app/data\nUSER node\nEXPOSE 4111\nCMD [\"node\", \"src/main.js\"]"
+        }
+      ]
+    },
+    {
+      "title": "镜像与运行数据分开交付",
+      "body": "镜像保存应用文件，运行时再注入凭证，并为 /app/data 挂载数据卷。**.dockerignore**也排除本地依赖、环境文件与数据库，避免将它们带入构建上下文。\n下面构建后使用独立卷启动，访问令牌从本地环境文件注入。该文件只应包含你愿意交给这个服务的配置。\n正式发布时，应记录镜像摘要、锁文件与目标版本，保证验证和部署使用同一份产物。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "docker build -t mastra-notice:local .\ndocker volume create mastra-notice-data\ndocker run --rm --name mastra-notice \\\n  -p 127.0.0.1:4111:4111 --env-file .env \\\n  -e HOST=0.0.0.0 -e PORT=4111 -e DATA_DIR=/app/data \\\n  -v mastra-notice-data:/app/data mastra-notice:local"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：服务交付方式",
+          "href": "https://mastra.ai/docs/deployment/mastra-server"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "镜像换成新版本后，哪些内容应来自新镜像，哪些来自运行环境和数据卷？为什么不能直接复制开发机的 node_modules？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "选择一条明确的交付路径",
+          "body": "本章用 Node.js 24 直接运行适配器入口，交付物包含 src、package.json、锁文件与安装配置，不需要先进行应用打包。\n另一条常见路径是 Mastra CLI 的 build，生成 .mastra/output 后再部署。两种方式各有入口与产物结构，本章贯穿直接运行的方式，避免混用启动命令。"
+        },
+        {
+          "title": "在镜像内安装目标平台的依赖",
+          "body": "**Dockerfile** 固定 Node 主版本和 pnpm 版本，按锁文件安装生产依赖，再复制源码，以非 root 用户启动。\nLibSQL 与 DuckDB 含原生依赖，不能把 macOS 的 node_modules 直接复制到 Linux 镜像。这里在镜像中安装，取得适合目标系统和架构的包。",
+          "codeBlocks": [
+            {
+              "label": "Dockerfile",
+              "language": "dockerfile",
+              "code": "FROM node:24-bookworm-slim\nWORKDIR /app\nRUN npm install --global pnpm@12.4.1\nCOPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./\nRUN pnpm install --frozen-lockfile --prod\nCOPY src ./src\nRUN mkdir -p /app/data && chown node:node /app/data\nENV HOST=0.0.0.0 PORT=4111 DATA_DIR=/app/data\nUSER node\nEXPOSE 4111\nCMD [\"node\", \"src/main.ts\"]"
+            }
+          ]
+        },
+        {
+          "title": "镜像与运行数据分开交付",
+          "body": "镜像保存应用文件，运行时再注入凭证，并为 /app/data 挂载数据卷。**.dockerignore**也排除本地依赖、环境文件与数据库，避免将它们带入构建上下文。\n下面构建后使用独立卷启动，访问令牌从本地环境文件注入。该文件只应包含你愿意交给这个服务的配置。\n正式发布时，应记录镜像摘要、锁文件与目标版本，保证验证和部署使用同一份产物。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "docker build -t mastra-notice:local .\ndocker volume create mastra-notice-data\ndocker run --rm --name mastra-notice \\\n  -p 127.0.0.1:4111:4111 --env-file .env \\\n  -e HOST=0.0.0.0 -e PORT=4111 -e DATA_DIR=/app/data \\\n  -v mastra-notice-data:/app/data mastra-notice:local"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：服务交付方式",
+              "href": "https://mastra.ai/docs/deployment/mastra-server"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

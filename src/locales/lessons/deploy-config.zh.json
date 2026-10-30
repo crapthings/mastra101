@@ -1,0 +1,74 @@
+{
+  "title": "运行配置（Environment）",
+  "lead": "在启动前校验地址、凭证与数据路径，并区分配置、秘密与版本标识。",
+  "sections": [
+    {
+      "title": "把环境差异留在配置里",
+      "body": "同一份代码在本地和容器中，可以使用不同的监听地址、端口、数据目录与访问凭证。通过**环境变量**注入这些值，避免每个环境都修改业务源码。\n本章的配置还包括 **APP_VERSION** 和停止预算。前者用于核对正在运行的版本，后者决定停止时等待在途工作的时间。"
+    },
+    {
+      "title": "缺少必要配置，就在启动时失败",
+      "body": "**readConfig()** 先验证字段，再创建存储与服务。缺少 API_AUTH_TOKEN 或 DATA_DIR 时，启动会失败；错误信息只列出字段名，避免打印秘密值。\n本例用一个内部调用方的访问令牌保护 API；多用户场景仍需沿用上一章的身份和范围规则。服务访问令牌与模型网关密钥各有用途。前者保护本章 API；**AI_GATEWAY_API_KEY** 只在调用已注册模型时使用。固定通知工作流不依赖模型，因此验证入口不需要模型凭证。",
+      "codeBlocks": [
+        {
+          "label": "src/config.js",
+          "language": "javascript",
+          "code": "import { resolve } from 'node:path'\nimport { z } from 'zod'\n\n// 服务在启动时验证必要配置，错误信息不包含秘密值。\nexport function readConfig (env = process.env) {\n  const schema = z.object({\n    HOST: z.string().min(1).default('127.0.0.1'),\n    PORT: z.coerce.number().int().min(0).max(65535).default(4111),\n    DATA_DIR: z.string().min(1),\n    API_AUTH_TOKEN: z.string().min(32),\n    APP_VERSION: z.string().min(1).default('local'),\n    SHUTDOWN_MS: z.coerce.number().int().min(100).max(30000).default(5000)\n  })\n  const result = schema.safeParse(env)\n  if (!result.success) throw new Error(`启动配置不完整：${[...new Set(result.error.issues.map(issue => issue.path[0]))].join('、')}`)\n  const value = result.data\n  return { host: value.HOST, port: value.PORT, dataDir: resolve(value.DATA_DIR), token: value.API_AUTH_TOKEN, version: value.APP_VERSION, shutdownMs: value.SHUTDOWN_MS }\n}"
+        }
+      ]
+    },
+    {
+      "title": "准备环境，再启动服务",
+      "body": "复制模板后，设置至少 32 个字符的随机服务令牌，并选择可写的数据目录。运行入口通过 Node 的 --env-file 加载配置；平台部署时也可以由运行环境直接注入。\n默认 HOST 为 127.0.0.1。容器需要从外部接收映射流量时，改为在容器内监听 0.0.0.0，并由容器或平台决定外部访问范围。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "cp .env.example .env\n# 编辑 API_AUTH_TOKEN 和 DATA_DIR\nnode --env-file=.env src/main.js"
+        }
+      ]
+    },
+    {
+      "title": "为当前进程保留明确的配置来源",
+      "body": "环境模板用于说明字段，不应包含真实密钥。启动日志只报告服务地址、版本与状态；凭证应由部署环境管理，并按需要更新和失效。\n配置准备好后，下一节把源文件、依赖与启动命令组成可交付的产物。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "同一镜像换到另一个环境时，哪些值应重新注入？服务令牌与模型网关密钥分别被谁使用，为什么不能混用？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "把环境差异留在配置里",
+          "body": "同一份代码在本地和容器中，可以使用不同的监听地址、端口、数据目录与访问凭证。通过**环境变量**注入这些值，避免每个环境都修改业务源码。\n本章的配置还包括 **APP_VERSION** 和停止预算。前者用于核对正在运行的版本，后者决定停止时等待在途工作的时间。"
+        },
+        {
+          "title": "缺少必要配置，就在启动时失败",
+          "body": "**readConfig()** 先验证字段，再创建存储与服务。缺少 API_AUTH_TOKEN 或 DATA_DIR 时，启动会失败；错误信息只列出字段名，避免打印秘密值。\n本例用一个内部调用方的访问令牌保护 API；多用户场景仍需沿用上一章的身份和范围规则。服务访问令牌与模型网关密钥各有用途。前者保护本章 API；**AI_GATEWAY_API_KEY** 只在调用已注册模型时使用。固定通知工作流不依赖模型，因此验证入口不需要模型凭证。",
+          "codeBlocks": [
+            {
+              "label": "src/config.ts",
+              "language": "typescript",
+              "code": "import { resolve } from 'node:path'\nimport { z } from 'zod'\n\n// 服务在启动时验证必要配置，错误信息不包含秘密值。\nexport function readConfig (env = process.env) {\n  const schema = z.object({\n    HOST: z.string().min(1).default('127.0.0.1'),\n    PORT: z.coerce.number().int().min(0).max(65535).default(4111),\n    DATA_DIR: z.string().min(1),\n    API_AUTH_TOKEN: z.string().min(32),\n    APP_VERSION: z.string().min(1).default('local'),\n    SHUTDOWN_MS: z.coerce.number().int().min(100).max(30000).default(5000)\n  })\n  const result = schema.safeParse(env)\n  if (!result.success) throw new Error(`启动配置不完整：${[...new Set(result.error.issues.map(issue => issue.path[0]))].join('、')}`)\n  const value = result.data\n  return { host: value.HOST, port: value.PORT, dataDir: resolve(value.DATA_DIR), token: value.API_AUTH_TOKEN, version: value.APP_VERSION, shutdownMs: value.SHUTDOWN_MS }\n}"
+            }
+          ]
+        },
+        {
+          "title": "准备环境，再启动服务",
+          "body": "复制模板后，设置至少 32 个字符的随机服务令牌，并选择可写的数据目录。运行入口通过 Node 的 --env-file 加载配置；平台部署时也可以由运行环境直接注入。\n默认 HOST 为 127.0.0.1。容器需要从外部接收映射流量时，改为在容器内监听 0.0.0.0，并由容器或平台决定外部访问范围。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "cp .env.example .env\n# 编辑 API_AUTH_TOKEN 和 DATA_DIR\nnode --env-file=.env src/main.ts"
+            }
+          ]
+        },
+        {
+          "title": "为当前进程保留明确的配置来源",
+          "body": "环境模板用于说明字段，不应包含真实密钥。启动日志只报告服务地址、版本与状态；凭证应由部署环境管理，并按需要更新和失效。\n配置准备好后，下一节把源文件、依赖与启动命令组成可交付的产物。"
+        }
+      ]
+    }
+  }
+}

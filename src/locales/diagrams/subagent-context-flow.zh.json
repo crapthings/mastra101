@@ -1,0 +1,14 @@
+{
+  "title": "历史与委派提示，分别进入子任务",
+  "caption": "messageFilter 筛选转发历史，modifiedPrompt 调整本次委派任务。两条路线一起决定交给子助手的内容；RequestContext 等应用条件还需按实际使用方式另外核对。",
+  "history": "父会话历史",
+  "historyDetail": "当前资料与之前的讨论",
+  "prompt": "委派提示",
+  "promptDetail": "主模型组织的本次任务",
+  "filter": "messageFilter",
+  "filterDetail": "选择需要转发的消息",
+  "rewrite": "modifiedPrompt",
+  "rewriteDetail": "检查或重建任务与材料",
+  "child": "子助手的本次输入",
+  "childDetail": "保留必要依据，再按自身规则处理"
+}

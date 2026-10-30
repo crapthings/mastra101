@@ -1,0 +1,96 @@
+{
+  "title": "提供服务（MCPServer）",
+  "lead": "把项目里的工具、资源和模板组织成协议接口，理解注册、监听与对外访问的区别。",
+  "sections": [
+    {
+      "title": "回头看客户端正在使用的服务",
+      "body": "前面直接运行了随包的通知服务。现在打开 service.js：**MCPServer** 接收名称、版本与要暴露的工具，也可以配置资源和提示模板的处理函数。\n查询工具仍由 createTool() 定义，execute 执行普通代码。MCPServer 负责把这些能力提供为协议接口，工具内部继续执行原来的代码。",
+      "codeBlocks": [
+        {
+          "label": "src/service.js",
+          "language": "javascript",
+          "code": "import { MCPServer } from '@mastra/mcp'\nimport { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\n\n// 创建一份本地教学服务，公开查询、资源、提示模板和草稿操作。\nexport function makeService (owner = '公开通知') {\n  const drafts = []\n  const lookupNotice = createTool({\n    id: 'lookup-notice', description: '查询教学活动通知，reading 为已知编号，FAIL 模拟查询失败。',\n    inputSchema: z.object({ activityId: z.string().min(1) }),\n    outputSchema: z.object({ status: z.enum(['已确认', '未查到', '查询失败']), venue: z.string().nullable(), source: z.string(), owner: z.string() }),\n    execute: async ({ activityId }) => ({\n      status: activityId === 'reading' ? '已确认' : activityId === 'FAIL' ? '查询失败' : '未查到',\n      venue: activityId === 'reading' ? owner === '读者乙' ? '东门' : '南门' : null,\n      source: '本地教学通知 v1', owner\n    })\n  })\n  const saveDraft = createTool({\n    id: 'save-draft', description: '在本服务进程内保存教学提醒草稿，不发送通知。',\n    inputSchema: z.object({ text: z.string().min(1).max(200) }),\n    outputSchema: z.object({ status: z.literal('草稿已保存'), count: z.number() }),\n    execute: async ({ text }) => {\n      drafts.push(text)\n      return { status: '草稿已保存', count: drafts.length }\n    }\n  })\n  const draftStatus = createTool({\n    id: 'draft-status', description: '读取本服务已保存的教学草稿数量。',\n    inputSchema: z.object({}), outputSchema: z.object({ count: z.number() }),\n    execute: async () => ({ count: drafts.length })\n  })\n  const server = new MCPServer({\n    id: 'activity-service', name: '活动通知教学服务', version: '1.0.0',\n    tools: { lookupNotice, saveDraft, draftStatus },\n    resources: {\n      listResources: async () => [{ uri: 'activity://reading/notice', name: '阅读分享会通知', mimeType: 'text/plain' }],\n      getResourceContent: async ({ uri }) => {\n        if (uri !== 'activity://reading/notice') throw new Error('未找到教学资源')\n        return { text: '阅读分享会周六下午两点开始，一点半开放入场，需要预约。未提供个人预约记录。' }\n      }\n    },\n    prompts: {\n      listPrompts: async () => [{ name: 'review-notice', description: '核对一份通知中的事实与缺口。', arguments: [{ name: 'material', description: '待核对的活动材料', required: true }] }],\n      getPromptMessages: async ({ name, args }) => {\n        if (name !== 'review-notice') throw new Error('未找到教学提示模板')\n        return [{ role: 'user', content: { type: 'text', text: `请区分已确认信息和待确认事项，不补写个人预约状态。材料：${args.material}` } }]\n      }\n    }\n  })\n  return server\n}"
+        }
+      ]
+    },
+    {
+      "title": "服务定义、传输入口与项目注册分开",
+      "body": "stdio-server.js 通过 **startStdio()** 提供子进程入口；HTTP 版本则由监听程序把请求交给 **startHTTP()**。创建服务对象只是定义能力，接上监听入口后，客户端才能实际访问。\n在 Mastra Server 项目中，可以通过 **mcpServers** 注册服务，由服务路由承载。07-server.js 同时演示注册与临时 HTTP 访问；本例直接使用回环监听验证协议，不启动项目开发服务器。",
+      "codeBlocks": [
+        {
+          "label": "src/07-server.js",
+          "language": "javascript",
+          "code": "import { MCPClient } from '@mastra/mcp'\nimport { Mastra } from '@mastra/core'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { makeService } from './service.js'\nimport { startLocalHttp } from './local-http.js'\n\n// 把本项目的工具、资源和提示模板公开成一个 MCPServer。\nconst server = makeService()\n// 真实 Mastra Server 项目可以注册该实例，交由服务路由承载。\nconst mastra = new Mastra({ mcpServers: { activity: server }, storage: new LibSQLStore({ id: 'published-tools', url: ':memory:' }) })\n// 本例直接使用临时 HTTP 监听验证同一服务，不启动项目开发服务器。\nconst host = await startLocalHttp(() => server, [server])\n// 模拟另一个 MCP 客户端，只使用公开的协议接口。\nconst external = new MCPClient({ id: 'external-reader', servers: { activity: { url: host.url } } })\ntry {\n  const tools = await external.listTools()\n  console.dir({ 已注册服务: Object.keys(mastra.listMCPServers()), 外部工具: Object.keys(tools), result: await tools.activity_lookupNotice.execute({ activityId: 'reading' }) }, { depth: 5 })\n} finally {\n  await external.disconnect()\n  await host.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/07-server.js"
+        }
+      ]
+    },
+    {
+      "title": "只暴露调用者需要的接口",
+      "body": "通知查询、原文资源与核对模板各有不同用途。对外提供时，先明确参数、返回结构、错误含义和允许访问的范围，再选择暴露哪些能力。\nMastra 也能通过 MCP 暴露 Agent 或 Workflow。调用者这时仍是在请求 MCP 工具接口，内部可能再发生模型或工作流执行；执行链变长后，要继续保留来源与状态。"
+    },
+    {
+      "title": "从本机可调用，到持续提供服务",
+      "body": "脚本通过另一个 MCPClient 发现并调用服务，验证的是协议读写。真实服务还需要按部署环境安排认证、访问范围、连接管理与持续运行。\n本例使用内存数据库完成临时验证；持续运行和重启恢复，需要再安排对应存储与部署。\nMCP 让调用者使用接口，接口背后也可以运行完整 Agent。如果对方希望直接交换任务状态和产物，又有哪些不同？下一节进入 A2A。",
+      "links": [
+        {
+          "label": "Mastra：暴露 MCP 服务",
+          "href": "https://mastra.ai/docs/connections/mcp#expose-a-mastra-mcp-server"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "服务对象已注册，但另一客户端无法访问。你会怎样依次检查监听入口、工具发现与实际调用，找到还没接通的位置？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "回头看客户端正在使用的服务",
+          "body": "前面直接运行了随包的通知服务。现在打开 service.ts：**MCPServer** 接收名称、版本与要暴露的工具，也可以配置资源和提示模板的处理函数。\n查询工具仍由 createTool() 定义，execute 执行普通代码。MCPServer 负责把这些能力提供为协议接口，工具内部继续执行原来的代码。",
+          "codeBlocks": [
+            {
+              "label": "src/service.ts",
+              "language": "typescript",
+              "code": "import { MCPServer } from '@mastra/mcp'\nimport { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\n\n// 创建一份本地教学服务，公开查询、资源、提示模板和草稿操作。\nexport function makeService (owner = '公开通知') {\n  const drafts = []\n  const lookupNotice = createTool({\n    id: 'lookup-notice', description: '查询教学活动通知，reading 为已知编号，FAIL 模拟查询失败。',\n    inputSchema: z.object({ activityId: z.string().min(1) }),\n    outputSchema: z.object({ status: z.enum(['已确认', '未查到', '查询失败']), venue: z.string().nullable(), source: z.string(), owner: z.string() }),\n    execute: async ({ activityId }) => ({\n      status: activityId === 'reading' ? '已确认' : activityId === 'FAIL' ? '查询失败' : '未查到',\n      venue: activityId === 'reading' ? owner === '读者乙' ? '东门' : '南门' : null,\n      source: '本地教学通知 v1', owner\n    })\n  })\n  const saveDraft = createTool({\n    id: 'save-draft', description: '在本服务进程内保存教学提醒草稿，不发送通知。',\n    inputSchema: z.object({ text: z.string().min(1).max(200) }),\n    outputSchema: z.object({ status: z.literal('草稿已保存'), count: z.number() }),\n    execute: async ({ text }) => {\n      drafts.push(text)\n      return { status: '草稿已保存', count: drafts.length }\n    }\n  })\n  const draftStatus = createTool({\n    id: 'draft-status', description: '读取本服务已保存的教学草稿数量。',\n    inputSchema: z.object({}), outputSchema: z.object({ count: z.number() }),\n    execute: async () => ({ count: drafts.length })\n  })\n  const server = new MCPServer({\n    id: 'activity-service', name: '活动通知教学服务', version: '1.0.0',\n    tools: { lookupNotice, saveDraft, draftStatus },\n    resources: {\n      listResources: async () => [{ uri: 'activity://reading/notice', name: '阅读分享会通知', mimeType: 'text/plain' }],\n      getResourceContent: async ({ uri }) => {\n        if (uri !== 'activity://reading/notice') throw new Error('未找到教学资源')\n        return { text: '阅读分享会周六下午两点开始，一点半开放入场，需要预约。未提供个人预约记录。' }\n      }\n    },\n    prompts: {\n      listPrompts: async () => [{ name: 'review-notice', description: '核对一份通知中的事实与缺口。', arguments: [{ name: 'material', description: '待核对的活动材料', required: true }] }],\n      getPromptMessages: async ({ name, args }) => {\n        if (name !== 'review-notice') throw new Error('未找到教学提示模板')\n        return [{ role: 'user', content: { type: 'text', text: `请区分已确认信息和待确认事项，不补写个人预约状态。材料：${args.material}` } }]\n      }\n    }\n  })\n  return server\n}"
+            }
+          ]
+        },
+        {
+          "title": "服务定义、传输入口与项目注册分开",
+          "body": "stdio-server.ts 通过 **startStdio()** 提供子进程入口；HTTP 版本则由监听程序把请求交给 **startHTTP()**。创建服务对象只是定义能力，接上监听入口后，客户端才能实际访问。\n在 Mastra Server 项目中，可以通过 **mcpServers** 注册服务，由服务路由承载。07-server.ts 同时演示注册与临时 HTTP 访问；本例直接使用回环监听验证协议，不启动项目开发服务器。",
+          "codeBlocks": [
+            {
+              "label": "src/07-server.ts",
+              "language": "typescript",
+              "code": "import { MCPClient } from '@mastra/mcp'\nimport { Mastra } from '@mastra/core'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { makeService } from './service.ts'\nimport { startLocalHttp } from './local-http.ts'\n\n// 把本项目的工具、资源和提示模板公开成一个 MCPServer。\nconst server = makeService()\n// 真实 Mastra Server 项目可以注册该实例，交由服务路由承载。\nconst mastra = new Mastra({ mcpServers: { activity: server }, storage: new LibSQLStore({ id: 'published-tools', url: ':memory:' }) })\n// 本例直接使用临时 HTTP 监听验证同一服务，不启动项目开发服务器。\nconst host = await startLocalHttp(() => server, [server])\n// 模拟另一个 MCP 客户端，只使用公开的协议接口。\nconst external = new MCPClient({ id: 'external-reader', servers: { activity: { url: host.url } } })\ntry {\n  const tools = await external.listTools()\n  console.dir({ 已注册服务: Object.keys(mastra.listMCPServers()), 外部工具: Object.keys(tools), result: await tools.activity_lookupNotice.execute({ activityId: 'reading' }) }, { depth: 5 })\n} finally {\n  await external.disconnect()\n  await host.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/07-server.ts"
+            }
+          ]
+        },
+        {
+          "title": "只暴露调用者需要的接口",
+          "body": "通知查询、原文资源与核对模板各有不同用途。对外提供时，先明确参数、返回结构、错误含义和允许访问的范围，再选择暴露哪些能力。\nMastra 也能通过 MCP 暴露 Agent 或 Workflow。调用者这时仍是在请求 MCP 工具接口，内部可能再发生模型或工作流执行；执行链变长后，要继续保留来源与状态。"
+        },
+        {
+          "title": "从本机可调用，到持续提供服务",
+          "body": "脚本通过另一个 MCPClient 发现并调用服务，验证的是协议读写。真实服务还需要按部署环境安排认证、访问范围、连接管理与持续运行。\n本例使用内存数据库完成临时验证；持续运行和重启恢复，需要再安排对应存储与部署。\nMCP 让调用者使用接口，接口背后也可以运行完整 Agent。如果对方希望直接交换任务状态和产物，又有哪些不同？下一节进入 A2A。",
+          "links": [
+            {
+              "label": "Mastra：暴露 MCP 服务",
+              "href": "https://mastra.ai/docs/connections/mcp#expose-a-mastra-mcp-server"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

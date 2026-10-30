@@ -1,0 +1,94 @@
+{
+  "title": "执行树（Trace & Span）",
+  "lead": "读懂整次运行与内部片段的关系，从执行树找到真正需要检查的位置。",
+  "sections": [
+    {
+      "title": "一条追踪里有多个片段",
+      "body": "上一节的查询会返回多个执行片段。**追踪（Trace）**把一次执行中的相关操作串起来，每项操作用一个 **片段（Span）**记录：工作流运行包含步骤，智能体运行中还会出现模型调用与工具执行。\n同一追踪共享 traceId；每个片段有自己的 **spanId**。子片段的 **parentSpanId** 指向父片段，借助这些标识就能还原执行树。"
+    },
+    {
+      "title": "层级说明归属，时间说明等待",
+      "body": "工作流根片段包住通知核对步骤，根片段的时间范围通常已经包含子步骤。把父子耗时相加，会重复计算；子任务并行时，也不能把它们的时长直接相加，当作用户等待的时间。\n先看根片段的开始与结束，再沿子片段找到主要的等待区间。执行树说明谁调用了谁，时间线说明何时开始、何时结束，以及哪些操作发生了重叠。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "父片段通常包含子片段的执行时间。排查耗时要看层级与重叠，不能把整棵树的时长直接相加。"
+        }
+      ]
+    },
+    {
+      "title": "看一次智能体如何调用通知工具",
+      "body": "下面把固定通知工具交给 Agent，让它先查询，再根据结果回答。沿用前文的模型与 **AI_GATEWAY_API_KEY**，运行前在 .env 中填好网关密钥。\n代码打印片段类型、名称与父子标识。图中省略了部分内部片段；实际运行时，可以从 Agent 根片段向下找到模型生成、执行步骤与工具调用。片段数量会随运行过程变化，重点是读懂它们的归属。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "cp .env.example .env\n# 在 .env 中填写 AI_GATEWAY_API_KEY\nnode --env-file=.env src/02-spans.js"
+        },
+        {
+          "label": "src/02-spans.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { createLab } from './lab.js'\n\n// 固定通知用于观察工具调用，不连接真实活动服务。\nconst lookupNotice = createTool({\n  id: 'lookup-notice', description: '查询阅读分享会的已发布入场地点',\n  inputSchema: z.object({ title: z.string() }),\n  execute: async () => ({ status: '已确认', venue: '南门' })\n})\n// 一次查询通常包含模型、工具和再次生成回答的多个执行片段。\nconst agent = new Agent({\n  id: 'activity-helper', name: '活动助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '回答入场地点前先查询通知。根据查询结果回答，不补充未提供的信息。',\n  tools: { lookupNotice }\n})\n// 将智能体注册到已有 Mastra 实例，沿用本章的本地观测配置。\nconst lab = await createLab()\nlab.mastra.addAgent(agent, 'activityHelper')\ntry {\n  const result = await lab.mastra.getAgent('activityHelper').generate('阅读分享会从哪个门入场？', { maxSteps: 3 })\n  await lab.mastra.observability.flush()\n  const trace = await lab.store.getTrace({ traceId: result.traceId })\n  console.log('回答：', result.text)\n  console.table(trace.spans.map(span => ({\n    spanId: span.spanId, parentSpanId: span.parentSpanId,\n    type: span.spanType, name: span.name\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+        }
+      ]
+    },
+    {
+      "title": "本地片段能看到哪里",
+      "body": "如果工具发起 HTTP 请求，本地片段能记录这次调用的等待时间；远端服务内部还做了哪些操作，需要对方提供记录。\n要把两边的追踪连接起来，需要双方支持并传递兼容的**追踪上下文**。在两边日志里写入同一个业务单号，便于检索，但还没有建立片段之间的父子关系。下一节先把本地请求与执行记录关联清楚。",
+      "links": [
+        {
+          "label": "Mastra：追踪",
+          "href": "https://mastra.ai/docs/observability/tracing/overview"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "一次运行耗时两秒，两个并行子任务各耗时一秒半。为什么不能把总耗时算成三秒？若主要等待发生在外部查询，接下来应向服务端查什么？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "一条追踪里有多个片段",
+          "body": "上一节的查询会返回多个执行片段。**追踪（Trace）**把一次执行中的相关操作串起来，每项操作用一个 **片段（Span）**记录：工作流运行包含步骤，智能体运行中还会出现模型调用与工具执行。\n同一追踪共享 traceId；每个片段有自己的 **spanId**。子片段的 **parentSpanId** 指向父片段，借助这些标识就能还原执行树。"
+        },
+        {
+          "title": "层级说明归属，时间说明等待",
+          "body": "工作流根片段包住通知核对步骤，根片段的时间范围通常已经包含子步骤。把父子耗时相加，会重复计算；子任务并行时，也不能把它们的时长直接相加，当作用户等待的时间。\n先看根片段的开始与结束，再沿子片段找到主要的等待区间。执行树说明谁调用了谁，时间线说明何时开始、何时结束，以及哪些操作发生了重叠。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "父片段通常包含子片段的执行时间。排查耗时要看层级与重叠，不能把整棵树的时长直接相加。"
+            }
+          ]
+        },
+        {
+          "title": "看一次智能体如何调用通知工具",
+          "body": "下面把固定通知工具交给 Agent，让它先查询，再根据结果回答。沿用前文的模型与 **AI_GATEWAY_API_KEY**，运行前在 .env 中填好网关密钥。\n代码打印片段类型、名称与父子标识。图中省略了部分内部片段；实际运行时，可以从 Agent 根片段向下找到模型生成、执行步骤与工具调用。片段数量会随运行过程变化，重点是读懂它们的归属。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "cp .env.example .env\n# 在 .env 中填写 AI_GATEWAY_API_KEY\nnode --env-file=.env src/02-spans.ts"
+            },
+            {
+              "label": "src/02-spans.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { createLab } from './lab.ts'\n\n// 固定通知用于观察工具调用，不连接真实活动服务。\nconst lookupNotice = createTool({\n  id: 'lookup-notice', description: '查询阅读分享会的已发布入场地点',\n  inputSchema: z.object({ title: z.string() }),\n  execute: async () => ({ status: '已确认', venue: '南门' })\n})\n// 一次查询通常包含模型、工具和再次生成回答的多个执行片段。\nconst agent = new Agent({\n  id: 'activity-helper', name: '活动助手',\n  model: 'vercel/openai/gpt-6.1-sol',\n  instructions: '回答入场地点前先查询通知。根据查询结果回答，不补充未提供的信息。',\n  tools: { lookupNotice }\n})\n// 将智能体注册到已有 Mastra 实例，沿用本章的本地观测配置。\nconst lab = await createLab()\nlab.mastra.addAgent(agent, 'activityHelper')\ntry {\n  const result = await lab.mastra.getAgent('activityHelper').generate('阅读分享会从哪个门入场？', { maxSteps: 3 })\n  await lab.mastra.observability.flush()\n  const trace = await lab.store.getTrace({ traceId: result.traceId })\n  console.log('回答：', result.text)\n  console.table(trace.spans.map(span => ({\n    spanId: span.spanId, parentSpanId: span.parentSpanId,\n    type: span.spanType, name: span.name\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+            }
+          ]
+        },
+        {
+          "title": "本地片段能看到哪里",
+          "body": "如果工具发起 HTTP 请求，本地片段能记录这次调用的等待时间；远端服务内部还做了哪些操作，需要对方提供记录。\n要把两边的追踪连接起来，需要双方支持并传递兼容的**追踪上下文**。在两边日志里写入同一个业务单号，便于检索，但还没有建立片段之间的父子关系。下一节先把本地请求与执行记录关联清楚。",
+          "links": [
+            {
+              "label": "Mastra：追踪",
+              "href": "https://mastra.ai/docs/observability/tracing/overview"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

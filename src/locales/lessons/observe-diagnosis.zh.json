@@ -1,0 +1,72 @@
+{
+  "title": "排查路径（Diagnosis）",
+  "lead": "从指标定位样本，沿追踪与日志找到证据，再验证修复是否有效。",
+  "sections": [
+    {
+      "title": "从慢指标找到对应运行",
+      "body": "上一节看到了多次运行的耗时。现在把最后一次核对的模拟等待调长，让三个样本中出现一条明显较慢的记录。\n示例先查询限定时间内的工作流耗时，从中选出最慢样本，再沿 **traceId** 读取执行树与日志：指标发现变化，追踪还原过程，日志补充现场细节。"
+    },
+    {
+      "title": "先确认等待发生在哪一层",
+      "body": "执行树中，工作流根片段覆盖整个核对过程，内部 **lookup-notice** 步骤占据了主要等待。本例没有模型调用，等待由步骤中的模拟延迟产生。\n代码列出片段的父级与耗时，再打印对应日志。实际项目也可以这样逐层缩小范围：确认慢的是模型、工具还是工作流步骤，再检查相应的服务、连接或重试行为。",
+      "codeBlocks": [
+        {
+          "label": "src/08-diagnosis.js",
+          "language": "javascript",
+          "code": "import { createLab, runActivity } from './lab.js'\n\n// 从耗时指标定位最慢样本，再沿追踪标识查询步骤和日志。\nconst lab = await createLab()\ntry {\n  const start = new Date()\n  for (const delayMs of [5, 15, 120]) await runActivity(lab, { delayMs })\n  const page = await lab.store.listMetrics({ filters: {\n    name: ['mastra_workflow_duration_ms'], timestamp: { start, end: new Date() }\n  } })\n  const slowest = page.metrics.reduce((a, b) => a.value > b.value ? a : b)\n  const trace = await lab.store.getTrace({ traceId: slowest.traceId })\n  const logs = await lab.store.listLogs({ filters: { traceId: slowest.traceId } })\n  console.log('最慢样本：', slowest.value, '毫秒', slowest.traceId)\n  console.table(trace.spans.map(span => ({\n    name: span.name, parentSpanId: span.parentSpanId,\n    durationMs: span.endedAt ? span.endedAt - span.startedAt : null\n  })))\n  console.table(logs.logs.map(log => ({\n    message: log.message, spanId: log.spanId\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+        }
+      ]
+    },
+    {
+      "title": "用可比较的样本验证改动",
+      "body": "三个样本在一页内，示例可以直接比较。实际排查时，应先限定环境、版本与时间范围，再查看相关记录；读取不完整的分页结果，只能找到当前页面中的最慢样本。\n找到原因并修改后，用相近的任务和负载重新观察。除了耗时，还要确认错误与业务结果是否改善，避免只是更快地返回了不完整的内容。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "先确定问题属于哪一层，再拿对应记录验证；改动之后，还要用可比较的样本检查效果。"
+        }
+      ]
+    },
+    {
+      "title": "运行顺利之后，还要检验结果",
+      "body": "到这里，我们能关联一次运行、找到主要等待，并判断执行因何停止。这些记录解释了任务怎样完成，但回答是否准确，还需要检查具体内容。\n比如助手成功查到通知，却把“场馆南门”写成“地铁南出口”。这段回答不应直接交给用户或后续 Agent。接下来要为这样的结果建立样本与判断标准，让质量检查也能反复执行。"
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "一次通知核对变慢，你沿追踪发现主要时间花在外部查询。会保留哪些定位证据？改动后，又怎样验证查询更快、返回资料仍可供后续 Agent 使用？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "从慢指标找到对应运行",
+          "body": "上一节看到了多次运行的耗时。现在把最后一次核对的模拟等待调长，让三个样本中出现一条明显较慢的记录。\n示例先查询限定时间内的工作流耗时，从中选出最慢样本，再沿 **traceId** 读取执行树与日志：指标发现变化，追踪还原过程，日志补充现场细节。"
+        },
+        {
+          "title": "先确认等待发生在哪一层",
+          "body": "执行树中，工作流根片段覆盖整个核对过程，内部 **lookup-notice** 步骤占据了主要等待。本例没有模型调用，等待由步骤中的模拟延迟产生。\n代码列出片段的父级与耗时，再打印对应日志。实际项目也可以这样逐层缩小范围：确认慢的是模型、工具还是工作流步骤，再检查相应的服务、连接或重试行为。",
+          "codeBlocks": [
+            {
+              "label": "src/08-diagnosis.ts",
+              "language": "typescript",
+              "code": "import { createLab, runActivity } from './lab.ts'\n\n// 从耗时指标定位最慢样本，再沿追踪标识查询步骤和日志。\nconst lab = await createLab()\ntry {\n  const start = new Date()\n  for (const delayMs of [5, 15, 120]) await runActivity(lab, { delayMs })\n  const page = await lab.store.listMetrics({ filters: {\n    name: ['mastra_workflow_duration_ms'], timestamp: { start, end: new Date() }\n  } })\n  const slowest = page.metrics.reduce((a, b) => a.value > b.value ? a : b)\n  const trace = await lab.store.getTrace({ traceId: slowest.traceId })\n  const logs = await lab.store.listLogs({ filters: { traceId: slowest.traceId } })\n  console.log('最慢样本：', slowest.value, '毫秒', slowest.traceId)\n  console.table(trace.spans.map(span => ({\n    name: span.name, parentSpanId: span.parentSpanId,\n    durationMs: span.endedAt ? span.endedAt - span.startedAt : null\n  })))\n  console.table(logs.logs.map(log => ({\n    message: log.message, spanId: log.spanId\n  })))\n} finally {\n  await lab.mastra.shutdown()\n}"
+            }
+          ]
+        },
+        {
+          "title": "用可比较的样本验证改动",
+          "body": "三个样本在一页内，示例可以直接比较。实际排查时，应先限定环境、版本与时间范围，再查看相关记录；读取不完整的分页结果，只能找到当前页面中的最慢样本。\n找到原因并修改后，用相近的任务和负载重新观察。除了耗时，还要确认错误与业务结果是否改善，避免只是更快地返回了不完整的内容。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "先确定问题属于哪一层，再拿对应记录验证；改动之后，还要用可比较的样本检查效果。"
+            }
+          ]
+        },
+        {
+          "title": "运行顺利之后，还要检验结果",
+          "body": "到这里，我们能关联一次运行、找到主要等待，并判断执行因何停止。这些记录解释了任务怎样完成，但回答是否准确，还需要检查具体内容。\n比如助手成功查到通知，却把“场馆南门”写成“地铁南出口”。这段回答不应直接交给用户或后续 Agent。接下来要为这样的结果建立样本与判断标准，让质量检查也能反复执行。"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "title": "代码、配置和数据分别交付",
+  "caption": "本章以单个 Node 进程运行 API 与默认 Workers。本地文件存储放入独立数据目录，容器替换后继续由卷承接。",
+  "one": "部署产物 · 代码与依赖",
+  "oneDetail": "相同镜像可用于不同运行环境",
+  "left": "运行配置",
+  "leftDetail": "地址、凭证、版本与停止预算",
+  "right": "服务进程",
+  "rightDetail": "HTTP API 与进程内 Workers",
+  "bottom": "持久数据目录",
+  "bottomDetail": "LibSQL 应用状态与 DuckDB 观测记录"
+}

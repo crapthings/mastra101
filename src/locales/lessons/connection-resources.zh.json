@@ -1,0 +1,142 @@
+{
+  "title": "资源与提示模板（Resources & Prompts）",
+  "lead": "分别读取可用资料与提示模板，明确它们怎样进入后续任务。",
+  "sections": [
+    {
+      "title": "有些内容只需要读取，不必设计成操作",
+      "body": "通知原文是一份资料，核对要求是一份模板，查询编号则是一项操作。MCP 将它们分别表达为 **Resource**、**Prompt** 与 **Tool**。\n需要执行查询时调用工具；需要原文时读取资源；需要一组核对消息时取得模板。应用按当前任务选择。",
+      "table": {
+        "headers": [
+          "接口",
+          "本例交付什么",
+          "取得以后做什么"
+        ],
+        "rows": [
+          [
+            "Tools",
+            "按编号查询通知的操作",
+            "检查参数、状态与返回依据"
+          ],
+          [
+            "Resources",
+            "带 URI 的通知原文",
+            "读取内容，保留来源并提供给任务"
+          ],
+          [
+            "Prompts",
+            "带参数的核对消息模板",
+            "检查生成的消息，再决定怎样使用"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "列出资料以后，还要按 URI 读取",
+      "body": "**resources.list()** 按服务列出可用资源，**resources.read()** 再读取指定 URI。本例 activity://reading/notice 是服务定义的资源标识，不代表本机上同名的文件路径。\n这里的 Resource 描述可读取内容，与 08 中 memory.resource 的信息归属含义不同。不要仅因名称相同，就把资源 URI 当成用户标识。"
+    },
+    {
+      "title": "提示模板返回消息，不会自动升级优先级",
+      "body": "**prompts.list()** 列出模板，**prompts.get()** 根据名称和参数取得消息。本例的核对模板返回 user 消息，不是系统提示词。\n模板来自服务端，也需要检查用途、内容和角色。它不会因为通过 MCP 取得，就覆盖应用的通用规则；读取资源与模板之后，仍需显式组织本次模型输入。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "MCP 资源提供内容，提示模板提供消息。它们是否进入模型、以什么角色进入，由应用后续如何使用决定。"
+        }
+      ]
+    },
+    {
+      "title": "直接观察原文与模板消息",
+      "body": "本例分别打印资源列表、资源正文、模板列表和填入材料后的消息。资源返回 contents 中的正文，模板返回 messages 中的消息，两者都还没有发给模型。\n应用可以把正文作为参考资料，再按模型接口要求组织模板消息。材料里的地点缺口仍应保留，不能因模板字段齐全就补出入口。\n资料的发现、读取与生成现在已经分清。下一节换成不同调用者，看看服务如何决定可以返回哪一份内容。",
+      "codeBlocks": [
+        {
+          "label": "src/04-resources.js",
+          "language": "javascript",
+          "code": "import { MCPClient } from '@mastra/mcp'\nimport { fileURLToPath } from 'node:url'\n\n// 资源与提示模板使用各自的发现和读取方法。\nconst client = new MCPClient({\n  id: 'activity-resource-client',\n  servers: { activity: { command: process.execPath, args: [fileURLToPath(new URL('./stdio-server.js', import.meta.url))] } }\n})\ntry {\n  const resources = await client.resources.list()\n  const content = await client.resources.read('activity', 'activity://reading/notice')\n  const prompts = await client.prompts.list()\n  const prompt = await client.prompts.get({ serverName: 'activity', name: 'review-notice', args: { material: '地点尚未公布，需要提前预约。' } })\n  console.dir({ resources, content, prompts, prompt }, { depth: 6 })\n} finally {\n  await client.disconnect()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/04-resources.js"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：MCP 资源与模板",
+          "href": "https://mastra.ai/docs/connections/mcp"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "取得的模板消息角色为 user，读取的通知位于 contents。组织模型请求前，应分别检查什么，避免把模板当成系统指令、把资源目录当成正文？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "有些内容只需要读取，不必设计成操作",
+          "body": "通知原文是一份资料，核对要求是一份模板，查询编号则是一项操作。MCP 将它们分别表达为 **Resource**、**Prompt** 与 **Tool**。\n需要执行查询时调用工具；需要原文时读取资源；需要一组核对消息时取得模板。应用按当前任务选择。",
+          "table": {
+            "headers": [
+              "接口",
+              "本例交付什么",
+              "取得以后做什么"
+            ],
+            "rows": [
+              [
+                "Tools",
+                "按编号查询通知的操作",
+                "检查参数、状态与返回依据"
+              ],
+              [
+                "Resources",
+                "带 URI 的通知原文",
+                "读取内容，保留来源并提供给任务"
+              ],
+              [
+                "Prompts",
+                "带参数的核对消息模板",
+                "检查生成的消息，再决定怎样使用"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "列出资料以后，还要按 URI 读取",
+          "body": "**resources.list()** 按服务列出可用资源，**resources.read()** 再读取指定 URI。本例 activity://reading/notice 是服务定义的资源标识，不代表本机上同名的文件路径。\n这里的 Resource 描述可读取内容，与 08 中 memory.resource 的信息归属含义不同。不要仅因名称相同，就把资源 URI 当成用户标识。"
+        },
+        {
+          "title": "提示模板返回消息，不会自动升级优先级",
+          "body": "**prompts.list()** 列出模板，**prompts.get()** 根据名称和参数取得消息。本例的核对模板返回 user 消息，不是系统提示词。\n模板来自服务端，也需要检查用途、内容和角色。它不会因为通过 MCP 取得，就覆盖应用的通用规则；读取资源与模板之后，仍需显式组织本次模型输入。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "MCP 资源提供内容，提示模板提供消息。它们是否进入模型、以什么角色进入，由应用后续如何使用决定。"
+            }
+          ]
+        },
+        {
+          "title": "直接观察原文与模板消息",
+          "body": "本例分别打印资源列表、资源正文、模板列表和填入材料后的消息。资源返回 contents 中的正文，模板返回 messages 中的消息，两者都还没有发给模型。\n应用可以把正文作为参考资料，再按模型接口要求组织模板消息。材料里的地点缺口仍应保留，不能因模板字段齐全就补出入口。\n资料的发现、读取与生成现在已经分清。下一节换成不同调用者，看看服务如何决定可以返回哪一份内容。",
+          "codeBlocks": [
+            {
+              "label": "src/04-resources.ts",
+              "language": "typescript",
+              "code": "import { MCPClient } from '@mastra/mcp'\nimport { fileURLToPath } from 'node:url'\n\n// 资源与提示模板使用各自的发现和读取方法。\nconst client = new MCPClient({\n  id: 'activity-resource-client',\n  servers: { activity: { command: process.execPath, args: [fileURLToPath(new URL('./stdio-server.ts', import.meta.url))] } }\n})\ntry {\n  const resources = await client.resources.list()\n  const content = await client.resources.read('activity', 'activity://reading/notice')\n  const prompts = await client.prompts.list()\n  const prompt = await client.prompts.get({ serverName: 'activity', name: 'review-notice', args: { material: '地点尚未公布，需要提前预约。' } })\n  console.dir({ resources, content, prompts, prompt }, { depth: 6 })\n} finally {\n  await client.disconnect()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/04-resources.ts"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：MCP 资源与模板",
+              "href": "https://mastra.ai/docs/connections/mcp"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

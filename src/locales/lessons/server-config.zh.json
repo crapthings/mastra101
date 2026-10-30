@@ -1,0 +1,90 @@
+{
+  "title": "服务配置（MastraServer）",
+  "lead": "把已经能运行的智能体与工作流接到 HTTP，分清实例配置、路由初始化和端口监听。",
+  "sections": [
+    {
+      "title": "让其他程序调用经过检查的能力",
+      "body": "上一章确认了通知处理的要求：入口未公布时，保留待确认。现在要让网页提交通知资料，并读取同样的处理结果。\n网页与 Mastra 可以运行在不同进程中，通过 **HTTP 接口**交换请求和响应。模型、工具与工作流继续在服务端执行，本章从这条调用路径开始。"
+    },
+    {
+      "title": "先配置能力，再接上服务",
+      "body": "**Mastra 实例**注册 Agent、Workflow 和存储等能力；**服务适配器（Server Adapter）**将它们接到 HTTP 框架。本章使用 Hono 的 **MastraServer**，把服务端的入口明确展示出来。\n**init()** 负责注册路由与相关处理，HTTP 监听则由本例的 **serve()** 启动。两步完成后，调用方才能通过地址访问服务。\n使用适配器时，监听地址和端口由 HTTP 框架设置。本例在 serve 中指定 hostname 与 port；Mastra CLI 生成服务时读取的 server.host、server.port，属于另一条启动路径。"
+    },
+    {
+      "title": "先访问一次本地服务",
+      "body": "使用 Node.js 24 或更新版本，解压后进入 18-server 文件夹，按命令安装并运行。每个入口都会在 127.0.0.1 的空闲端口启动独立服务，完成请求后关闭。\n共享模块注册通知助手与固定通知工作流，存储使用内存 LibSQL，退出后运行记录清空。只有流式响应入口会请求模型，其余入口都可以直接运行。",
+      "download": {
+        "href": "/downloads/18-server.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install --frozen-lockfile\nnode src/01-server.js"
+        },
+        {
+          "label": "src/01-server.js",
+          "language": "javascript",
+          "code": "import { createLab } from './lab.js'\n\n// 实际访问健康路由和 OpenAPI，区分初始化路由与监听端口。\nconst lab = await createLab()\ntry {\n  const health = await fetch(`${lab.baseUrl}/health`)\n  console.log('服务地址：', lab.baseUrl, '健康响应：', await health.json())\n  const response = await fetch(`${lab.baseUrl}/api/openapi.json`)\n  console.log('接口描述状态：', response.status)\n  const spec = await response.json()\n  console.log('接口路径数：', Object.keys(spec.paths).length)\n} finally {\n  await lab.close()\n}"
+        }
+      ]
+    },
+    {
+      "title": "用接口描述核对实际路径",
+      "body": "**OpenAPI** 描述路由、参数与响应结构。本例显式设置 prefix 为 /api、openapiPath 为 /openapi.json，最终从 **/api/openapi.json** 读取描述；自定义健康接口在 **/health**。\n健康响应说明这条路由可以处理请求。接下来还要找到通知工作流的接口，提交资料并读取结果。",
+      "links": [
+        {
+          "label": "Mastra：服务适配器",
+          "href": "https://mastra.ai/docs/server/server-adapters"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "服务已经完成 init()，调用方却无法连接。你会检查哪一步？健康接口恢复后，还应怎样确认通知处理能力可用？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "让其他程序调用经过检查的能力",
+          "body": "上一章确认了通知处理的要求：入口未公布时，保留待确认。现在要让网页提交通知资料，并读取同样的处理结果。\n网页与 Mastra 可以运行在不同进程中，通过 **HTTP 接口**交换请求和响应。模型、工具与工作流继续在服务端执行，本章从这条调用路径开始。"
+        },
+        {
+          "title": "先配置能力，再接上服务",
+          "body": "**Mastra 实例**注册 Agent、Workflow 和存储等能力；**服务适配器（Server Adapter）**将它们接到 HTTP 框架。本章使用 Hono 的 **MastraServer**，把服务端的入口明确展示出来。\n**init()** 负责注册路由与相关处理，HTTP 监听则由本例的 **serve()** 启动。两步完成后，调用方才能通过地址访问服务。\n使用适配器时，监听地址和端口由 HTTP 框架设置。本例在 serve 中指定 hostname 与 port；Mastra CLI 生成服务时读取的 server.host、server.port，属于另一条启动路径。"
+        },
+        {
+          "title": "先访问一次本地服务",
+          "body": "使用 Node.js 24 或更新版本，解压后进入 18-server-ts 文件夹，按命令安装并运行。每个入口都会在 127.0.0.1 的空闲端口启动独立服务，完成请求后关闭。\n共享模块注册通知助手与固定通知工作流，存储使用内存 LibSQL，退出后运行记录清空。只有流式响应入口会请求模型，其余入口都可以直接运行。",
+          "download": {
+            "href": "/downloads/18-server-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install --frozen-lockfile\nnode src/01-server.ts"
+            },
+            {
+              "label": "src/01-server.ts",
+              "language": "typescript",
+              "code": "import { createLab } from './lab.ts'\n\n// 实际访问健康路由和 OpenAPI，区分初始化路由与监听端口。\nconst lab = await createLab()\ntry {\n  const health = await fetch(`${lab.baseUrl}/health`)\n  console.log('服务地址：', lab.baseUrl, '健康响应：', await health.json())\n  const response = await fetch(`${lab.baseUrl}/api/openapi.json`)\n  console.log('接口描述状态：', response.status)\n  const spec = await response.json()\n  console.log('接口路径数：', Object.keys(spec.paths).length)\n} finally {\n  await lab.close()\n}"
+            }
+          ]
+        },
+        {
+          "title": "用接口描述核对实际路径",
+          "body": "**OpenAPI** 描述路由、参数与响应结构。本例显式设置 prefix 为 /api、openapiPath 为 /openapi.json，最终从 **/api/openapi.json** 读取描述；自定义健康接口在 **/health**。\n健康响应说明这条路由可以处理请求。接下来还要找到通知工作流的接口，提交资料并读取结果。",
+          "links": [
+            {
+              "label": "Mastra：服务适配器",
+              "href": "https://mastra.ai/docs/server/server-adapters"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

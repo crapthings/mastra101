@@ -1,0 +1,94 @@
+{
+  "title": "会话与记忆（Memory Isolation）",
+  "lead": "区分子助手本次能看到的内容，与委派结束后保存到子会话的记录。",
+  "sections": [
+    {
+      "title": "收到过的背景，不必全存成自己的历史",
+      "body": "主助手带着活动讨论委派核对。子助手可能读取相关父上下文，但这些背景不应因此被当成它自己说过的全部历史。\n默认委派会为子调用建立独立 **thread**，将本次委派任务与子助手自身产生的消息保存到子会话。父对话提供的背景，与子会话持久保存的内容，是两份不同范围。"
+    },
+    {
+      "title": "相同存储接口，也可以有不同会话",
+      "body": "本例为父子配置同一份 **Memory**，使用 LibSQLStore 保存消息。两次父调用沿用同一 resource 与 thread，两次委派则应得到不同的子会话标识。\n通过 **subAgentThreadId** 找子会话，再用 recall() 读取实际记录。不要猜它等于父 thread，也不要把子调用派生出的 resource 当成未经核实的用户身份。\n示例关闭工作记忆与语义召回，先观察消息范围。若另外开启资源范围的记忆，还要检查相应共享配置；新 thread 不是所有信息都不会共享的保证。"
+    },
+    {
+      "title": "两次委派以后，直接回查子会话",
+      "body": "每次启动使用新教学归属，避免与旧试跑混淆。主助手两次都应完成委派，脚本再打印子 thread 列表和保存的消息。\n检查的不只是“标识不一样”，还包括子会话是否保存了对应任务与回答，以及父历史是否被错误地当成子任务原始记录。要确认子模型本次看到了什么，仍需查看该次模型输入。",
+      "codeBlocks": [
+        {
+          "label": "src/07-memory.js",
+          "language": "javascript",
+          "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\nimport { activity, makeReviewer, makeCoordinator } from './shared.js'\n\n// 父子共用存储接口，但分别保存到各自的会话。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'delegation-memory', url: 'file:./07-memory.db' }),\n  options: { lastMessages: 8, semanticRecall: false, generateTitle: false, workingMemory: { enabled: false } }\n})\n// 每次启动使用独立教学归属，便于识别本轮记录。\nconst resource = `reader-${randomUUID()}`\n// 两次父调用继续使用同一段主会话。\nconst thread = `parent-${randomUUID()}`\n// 应用保留两次委派返回的子会话标识。\nconst childThreads = []\n// 子任务有自己的记忆配置，以便直接回查已保存内容。\nconst reviewer = makeReviewer({ memory })\n// 主任务保留连续对话，子任务由框架为每次委派建立新会话。\nconst parent = makeCoordinator({ reviewer }, { memory })\nfor (const question of [`核对这份通知：${activity}`, '再核对一次原通知，仍需保留个人预约缺口。']) {\n  const result = await parent.generate(question, {\n    memory: { resource, thread }, maxSteps: 3, abortSignal: AbortSignal.timeout(60000),\n    delegation: {\n      onDelegationComplete: ({ result }) => {\n        if (result?.subAgentThreadId) childThreads.push(result.subAgentThreadId)\n      }\n    }\n  })\n  console.log(result.text)\n}\nconsole.dir({ 主会话: thread, 子会话: childThreads, 子会话各自独立: childThreads.length === 2 && new Set(childThreads).size === 2 })\nfor (const threadId of childThreads) {\n  const saved = await memory.recall({ threadId, perPage: false })\n  console.dir({ threadId, 保存的消息: saved.messages }, { depth: 5 })\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/07-memory.js"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：子任务记忆",
+          "href": "https://mastra.ai/docs/subagents#memory-isolation"
+        }
+      ]
+    },
+    {
+      "title": "消息范围与权限分开看",
+      "body": "这里的 Memory Isolation 讨论委派时的消息组织与保存，不是操作系统隔离，也不能替代用户访问检查。文件目录、工具权限与业务身份仍按各自配置落实。\n把输入、子结果、父回答与保存记录都找得到，才有条件检查一条完整协作链。最后一节将核对与提醒接起来。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "子模型能看到哪些内容，子会话保存了哪些记录，是两个问题。独立 thread 不能单独证明所有资料与权限都已隔离。"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "两次委派生成不同的子 thread，能否证明子模型没看过父历史？应该分别查看哪份输入与哪份存储记录？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "收到过的背景，不必全存成自己的历史",
+          "body": "主助手带着活动讨论委派核对。子助手可能读取相关父上下文，但这些背景不应因此被当成它自己说过的全部历史。\n默认委派会为子调用建立独立 **thread**，将本次委派任务与子助手自身产生的消息保存到子会话。父对话提供的背景，与子会话持久保存的内容，是两份不同范围。"
+        },
+        {
+          "title": "相同存储接口，也可以有不同会话",
+          "body": "本例为父子配置同一份 **Memory**，使用 LibSQLStore 保存消息。两次父调用沿用同一 resource 与 thread，两次委派则应得到不同的子会话标识。\n通过 **subAgentThreadId** 找子会话，再用 recall() 读取实际记录。不要猜它等于父 thread，也不要把子调用派生出的 resource 当成未经核实的用户身份。\n示例关闭工作记忆与语义召回，先观察消息范围。若另外开启资源范围的记忆，还要检查相应共享配置；新 thread 不是所有信息都不会共享的保证。"
+        },
+        {
+          "title": "两次委派以后，直接回查子会话",
+          "body": "每次启动使用新教学归属，避免与旧试跑混淆。主助手两次都应完成委派，脚本再打印子 thread 列表和保存的消息。\n检查的不只是“标识不一样”，还包括子会话是否保存了对应任务与回答，以及父历史是否被错误地当成子任务原始记录。要确认子模型本次看到了什么，仍需查看该次模型输入。",
+          "codeBlocks": [
+            {
+              "label": "src/07-memory.ts",
+              "language": "typescript",
+              "code": "import { Memory } from '@mastra/memory'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { randomUUID } from 'node:crypto'\nimport { activity, makeReviewer, makeCoordinator } from './shared.ts'\n\n// 父子共用存储接口，但分别保存到各自的会话。\nconst memory = new Memory({\n  storage: new LibSQLStore({ id: 'delegation-memory', url: 'file:./07-memory.db' }),\n  options: { lastMessages: 8, semanticRecall: false, generateTitle: false, workingMemory: { enabled: false } }\n})\n// 每次启动使用独立教学归属，便于识别本轮记录。\nconst resource = `reader-${randomUUID()}`\n// 两次父调用继续使用同一段主会话。\nconst thread = `parent-${randomUUID()}`\n// 应用保留两次委派返回的子会话标识。\nconst childThreads = []\n// 子任务有自己的记忆配置，以便直接回查已保存内容。\nconst reviewer = makeReviewer({ memory })\n// 主任务保留连续对话，子任务由框架为每次委派建立新会话。\nconst parent = makeCoordinator({ reviewer }, { memory })\nfor (const question of [`核对这份通知：${activity}`, '再核对一次原通知，仍需保留个人预约缺口。']) {\n  const result = await parent.generate(question, {\n    memory: { resource, thread }, maxSteps: 3, abortSignal: AbortSignal.timeout(60000),\n    delegation: {\n      onDelegationComplete: ({ result }) => {\n        if (result?.subAgentThreadId) childThreads.push(result.subAgentThreadId)\n      }\n    }\n  })\n  console.log(result.text)\n}\nconsole.dir({ 主会话: thread, 子会话: childThreads, 子会话各自独立: childThreads.length === 2 && new Set(childThreads).size === 2 })\nfor (const threadId of childThreads) {\n  const saved = await memory.recall({ threadId, perPage: false })\n  console.dir({ threadId, 保存的消息: saved.messages }, { depth: 5 })\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/07-memory.ts"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：子任务记忆",
+              "href": "https://mastra.ai/docs/subagents#memory-isolation"
+            }
+          ]
+        },
+        {
+          "title": "消息范围与权限分开看",
+          "body": "这里的 Memory Isolation 讨论委派时的消息组织与保存，不是操作系统隔离，也不能替代用户访问检查。文件目录、工具权限与业务身份仍按各自配置落实。\n把输入、子结果、父回答与保存记录都找得到，才有条件检查一条完整协作链。最后一节将核对与提醒接起来。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "子模型能看到哪些内容，子会话保存了哪些记录，是两个问题。独立 thread 不能单独证明所有资料与权限都已隔离。"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

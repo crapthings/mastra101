@@ -1,0 +1,114 @@
+{
+  "title": "门槛与判定（Gates & Verdicts）",
+  "lead": "区分必须满足的要求与平均分阈值，明确评估结果如何影响发布决定。",
+  "sections": [
+    {
+      "title": "把必须满足的要求设为 gate",
+      "body": "通知依据一致性是本例的硬性要求。将评分器放入 **gates** 后，它在可评分样本上的平均分必须达到 1，才满足这项要求。对于本章的 0／1 评分，这意味着参与评分的样本都要通过。\n无法评分的样本不进入平均值。例如 99 条得到 1、1 条无法评分，gate 仍可能通过，但那一条尚未得到验证。决定放行前，还要确认缺少评分的原因与覆盖范围。"
+    },
+    {
+      "title": "阈值用于约束评分的范围",
+      "body": "普通评分器可以配 **threshold**，约束平均分：数字表示下限，也可以用 **min**、**max** 定义范围。先确认分数方向，再选择上下限；未配置阈值的普通评分器只记录分数。\n**verdict** 汇总 gates 与阈值的结果。其中 **scored** 表示没有 gate 失败，但至少一项阈值未达到，需要按发布策略继续处理。",
+      "table": {
+        "headers": [
+          "verdict",
+          "含义"
+        ],
+        "rows": [
+          [
+            "failed",
+            "至少一个 gate 未达到要求"
+          ],
+          [
+            "scored",
+            "gate 均通过，至少一项评分阈值未达到"
+          ],
+          [
+            "passed",
+            "gate 与已配置阈值均达到要求"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "观察三种配置的判定差异",
+      "body": "相同三条资料，分别用于基线版硬性检查、基线版 0.9 均分要求，以及修改版硬性检查，对应 **failed**、**scored**、**passed**。代码将判定和对应结果一起打印，便于核对是哪项条件决定了它。\n没有配置 gates 或评分阈值时，verdict 可以缺省；所有相关规则都返回 notScorable 时，也没有数值证据可供判定。接入 CI 时，应分别处理门槛未通过、证据不足等情况。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/07-gates.js"
+        },
+        {
+          "label": "src/07-gates.js",
+          "language": "javascript",
+          "code": "import { runEvals } from '@mastra/core/evals'\nimport { createLab } from './lab.js'\nimport { evidenceScorer } from './scorer.js'\nimport { samples } from './samples.js'\n\n// 三种配置分别展示硬性要求失败、均分未达标和全部达标。\nconst cases = [\n  { label: '基线：硬性要求', version: 'baseline', options: { gates: [evidenceScorer] } },\n  { label: '基线：均分要求', version: 'baseline', options: { scorers: [{ scorer: evidenceScorer, threshold: 0.9 }] } },\n  { label: '修改版：硬性要求', version: 'revised', options: { gates: [evidenceScorer] } }\n]\n// 注册共享目标，以相同资料运行三种评估配置。\nconst mastra = createLab()\ntry {\n  for (const item of cases) {\n    const result = await runEvals({ target: mastra.getWorkflow(item.version), data: samples, ...item.options })\n    console.log(item.label, '判定：', result.verdict)\n    console.log('硬性要求：', result.gateResults, '均分要求：', result.thresholdResults)\n  }\n} finally {\n  await mastra.shutdown()\n}"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：门槛与判定",
+          "href": "https://mastra.ai/docs/evals/gates-and-verdicts"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "99 条样本得 1 分，1 条无法评分，gate 通过了。你会先查什么，再决定是否放行？它与一条明确得 0 的结果有什么区别？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "把必须满足的要求设为 gate",
+          "body": "通知依据一致性是本例的硬性要求。将评分器放入 **gates** 后，它在可评分样本上的平均分必须达到 1，才满足这项要求。对于本章的 0／1 评分，这意味着参与评分的样本都要通过。\n无法评分的样本不进入平均值。例如 99 条得到 1、1 条无法评分，gate 仍可能通过，但那一条尚未得到验证。决定放行前，还要确认缺少评分的原因与覆盖范围。"
+        },
+        {
+          "title": "阈值用于约束评分的范围",
+          "body": "普通评分器可以配 **threshold**，约束平均分：数字表示下限，也可以用 **min**、**max** 定义范围。先确认分数方向，再选择上下限；未配置阈值的普通评分器只记录分数。\n**verdict** 汇总 gates 与阈值的结果。其中 **scored** 表示没有 gate 失败，但至少一项阈值未达到，需要按发布策略继续处理。",
+          "table": {
+            "headers": [
+              "verdict",
+              "含义"
+            ],
+            "rows": [
+              [
+                "failed",
+                "至少一个 gate 未达到要求"
+              ],
+              [
+                "scored",
+                "gate 均通过，至少一项评分阈值未达到"
+              ],
+              [
+                "passed",
+                "gate 与已配置阈值均达到要求"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "观察三种配置的判定差异",
+          "body": "相同三条资料，分别用于基线版硬性检查、基线版 0.9 均分要求，以及修改版硬性检查，对应 **failed**、**scored**、**passed**。代码将判定和对应结果一起打印，便于核对是哪项条件决定了它。\n没有配置 gates 或评分阈值时，verdict 可以缺省；所有相关规则都返回 notScorable 时，也没有数值证据可供判定。接入 CI 时，应分别处理门槛未通过、证据不足等情况。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/07-gates.ts"
+            },
+            {
+              "label": "src/07-gates.ts",
+              "language": "typescript",
+              "code": "import { runEvals } from '@mastra/core/evals'\nimport { createLab } from './lab.ts'\nimport { evidenceScorer } from './scorer.ts'\nimport { samples } from './samples.ts'\n\n// 三种配置分别展示硬性要求失败、均分未达标和全部达标。\nconst cases = [\n  { label: '基线：硬性要求', version: 'baseline', options: { gates: [evidenceScorer] } },\n  { label: '基线：均分要求', version: 'baseline', options: { scorers: [{ scorer: evidenceScorer, threshold: 0.9 }] } },\n  { label: '修改版：硬性要求', version: 'revised', options: { gates: [evidenceScorer] } }\n]\n// 注册共享目标，以相同资料运行三种评估配置。\nconst mastra = createLab()\ntry {\n  for (const item of cases) {\n    const result = await runEvals({ target: mastra.getWorkflow(item.version), data: samples, ...item.options })\n    console.log(item.label, '判定：', result.verdict)\n    console.log('硬性要求：', result.gateResults, '均分要求：', result.thresholdResults)\n  }\n} finally {\n  await mastra.shutdown()\n}"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：门槛与判定",
+              "href": "https://mastra.ai/docs/evals/gates-and-verdicts"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

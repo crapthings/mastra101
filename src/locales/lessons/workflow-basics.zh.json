@@ -71,7 +71,7 @@
         },
         {
           "title": "完成流程定义，再创建一次运行",
-          "body": "下载并解压本章示例，进入 10-workflows-ts 文件夹，使用 Node.ts 24 或更高版本安装依赖。\n**.then()** 连接步骤，**.commit()** 完成流程定义。定义准备好以后，通过 **createRun()** 创建一次运行，再调用 **start({ inputData })** 提交本次资料。\n同一份定义可以反复创建新运行。**runId** 标识其中一次执行，不等于工作流定义的 id；后面暂停恢复时，需要找回原来的运行。",
+          "body": "下载并解压本章示例，进入 10-workflows-ts 文件夹，使用 Node.js 24 或更高版本安装依赖。\n**.then()** 连接步骤，**.commit()** 完成流程定义。定义准备好以后，通过 **createRun()** 创建一次运行，再调用 **start({ inputData })** 提交本次资料。\n同一份定义可以反复创建新运行。**runId** 标识其中一次执行，不等于工作流定义的 id；后面暂停恢复时，需要找回原来的运行。",
           "download": {
             "href": "/downloads/10-workflows-ts.zip",
             "label": "下载 TypeScript 示例（ZIP）"

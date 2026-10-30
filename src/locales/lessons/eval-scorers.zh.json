@@ -1,0 +1,108 @@
+{
+  "title": "自定义评分器（createScorer）",
+  "lead": "把具体的业务约定写成可复用评分器，并保留分数、理由与无法评分的区别。",
+  "sections": [
+    {
+      "title": "把通知要求写成程序",
+      "body": "上一节只能确认字符串是否出现。现在使用结构化输出：**status** 表示已确认或待确认，**venue** 保存入口，**source** 保存来源。三个字段都与参考结果一致，才符合本节的要求。\n**createScorer()** 可以把这项约定写成可复用的评分器。它判断的是字段一致性；人工准备参考结果时，也要确认这些值符合原始通知。"
+    },
+    {
+      "title": "按需要组合评分步骤",
+      "body": "评分器有 **preprocess**、**analyze**、**generateScore**、**generateReason** 四个阶段。只有 generateScore 是必需的，其余按实际需要组合。\n本例先准备并校验参考值，再比较三个字段，最后解释结果。字段比较不需要 analyze，因此代码省略这个阶段，也不会请求模型。",
+      "codeBlocks": [
+        {
+          "label": "src/scorer.js",
+          "language": "javascript",
+          "code": "import { createScorer, notScorable } from '@mastra/core/evals'\nimport { z } from 'zod'\n\n// 参考资料必须包含可核对的状态、入口和来源。\nconst referenceSchema = z.object({ status: z.enum(['已确认', '待确认']), venue: z.string().nullable(), source: z.string().min(1) })\n\n// 核对通知结构中的状态、入口和来源，缺少参考资料时不强行打分。\nexport const evidenceScorer = createScorer({\n  id: 'notice-evidence', name: '通知依据一致性',\n  description: '逐字段比较状态、入口和来源，资料缺失时应保留待确认'\n})\n  .preprocess(({ run }) => {\n    const notice = run.input?.notice\n    if (!run.groundTruth && !notice) return notScorable('没有可供核对的参考资料')\n    const expected = run.groundTruth ?? {\n      status: notice.venue === null ? '待确认' : '已确认', venue: notice.venue, source: notice.source\n    }\n    const parsed = referenceSchema.safeParse(expected)\n    if (!parsed.success) return notScorable('参考资料格式不完整')\n    return { expected: parsed.data, actual: run.output }\n  })\n  .generateScore(({ results }) => {\n    const { expected, actual } = results.preprocessStepResult\n    return ['status', 'venue', 'source'].every(key => actual?.[key] === expected[key]) ? 1 : 0\n  })\n  .generateReason(({ results, score }) => score === 1\n    ? '状态、入口和来源均与参考资料一致'\n    : `应返回：${JSON.stringify(results.preprocessStepResult.expected)}；实际返回：${JSON.stringify(results.preprocessStepResult.actual)}`)"
+        }
+      ]
+    },
+    {
+      "title": "零分与无法评分要分开",
+      "body": "**groundTruth** 保存供评分器使用的参考结果。没有它时，本例可以从输入通知推导应有的状态与入口；通知明确写着“入口未公布”，仍然足够判断输出是否应为待确认。\n评分器拿不到参考通知，或参考结果格式不完整时，才返回 **notScorable()**。它表示本次缺少判断依据；零分则表示已经核对，但输出不符合要求。统计平均分时，无法评分的记录会被排除，因此还要查看实际覆盖了多少样本。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/03-scorer.js"
+        },
+        {
+          "label": "src/03-scorer.js",
+          "language": "javascript",
+          "code": "import { evidenceScorer } from './scorer.js'\nimport { samples } from './samples.js'\n\n// 用相同参考资料核对不同输出，观察分数、理由和无法评分的情况。\nconst sample = samples[2]\nfor (const output of [sample.groundTruth, { status: '已确认', venue: '南门', source: '场馆通知' }]) {\n  const result = await evidenceScorer.run({ ...sample, output })\n  console.log('分数：', result.score, '理由：', result.reason)\n}\n// 缺少参考资料不能作为零分或满分计入平均值。\nconst skipped = await evidenceScorer.run({ output: { status: '待确认', venue: null, source: null } })\nconsole.log('无法评分：', skipped.notScorable)"
+        }
+      ],
+      "callouts": [
+        {
+          "type": "key",
+          "body": "零分是一个判断；无法评分是缺少判断证据。平均分之外，还要看实际覆盖了多少样本。"
+        }
+      ]
+    },
+    {
+      "title": "从字段一致，走向语义判断",
+      "body": "这项评分器接收结构化的工作流输出。Agent 评分常接收消息数组，复用规则前，需要先提取要检查的内容，不能直接按同一种对象读取。\n若输出改为自然语言，“入口有待通知”和“入口尚未公布”可能都符合要求，逐字比较就不合适。下一节让模型按同一项标准理解表述，并用人工样本核对判断。",
+      "links": [
+        {
+          "label": "Mastra：自定义评分器",
+          "href": "https://mastra.ai/docs/evals/custom-scorers"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "通知明确写着“入口尚未公布”，与评分器根本拿不到通知，有什么不同？业务结果和评分结果应分别怎样表达这两种情况？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "把通知要求写成程序",
+          "body": "上一节只能确认字符串是否出现。现在使用结构化输出：**status** 表示已确认或待确认，**venue** 保存入口，**source** 保存来源。三个字段都与参考结果一致，才符合本节的要求。\n**createScorer()** 可以把这项约定写成可复用的评分器。它判断的是字段一致性；人工准备参考结果时，也要确认这些值符合原始通知。"
+        },
+        {
+          "title": "按需要组合评分步骤",
+          "body": "评分器有 **preprocess**、**analyze**、**generateScore**、**generateReason** 四个阶段。只有 generateScore 是必需的，其余按实际需要组合。\n本例先准备并校验参考值，再比较三个字段，最后解释结果。字段比较不需要 analyze，因此代码省略这个阶段，也不会请求模型。",
+          "codeBlocks": [
+            {
+              "label": "src/scorer.ts",
+              "language": "typescript",
+              "code": "import { createScorer, notScorable } from '@mastra/core/evals'\nimport { z } from 'zod'\n\n// 参考资料必须包含可核对的状态、入口和来源。\nconst referenceSchema = z.object({ status: z.enum(['已确认', '待确认']), venue: z.string().nullable(), source: z.string().min(1) })\n\n// 核对通知结构中的状态、入口和来源，缺少参考资料时不强行打分。\nexport const evidenceScorer = createScorer({\n  id: 'notice-evidence', name: '通知依据一致性',\n  description: '逐字段比较状态、入口和来源，资料缺失时应保留待确认'\n})\n  .preprocess(({ run }) => {\n    const notice = run.input?.notice\n    if (!run.groundTruth && !notice) return notScorable('没有可供核对的参考资料')\n    const expected = run.groundTruth ?? {\n      status: notice.venue === null ? '待确认' : '已确认', venue: notice.venue, source: notice.source\n    }\n    const parsed = referenceSchema.safeParse(expected)\n    if (!parsed.success) return notScorable('参考资料格式不完整')\n    return { expected: parsed.data, actual: run.output }\n  })\n  .generateScore(({ results }) => {\n    const { expected, actual } = results.preprocessStepResult\n    return ['status', 'venue', 'source'].every(key => actual?.[key] === expected[key]) ? 1 : 0\n  })\n  .generateReason(({ results, score }) => score === 1\n    ? '状态、入口和来源均与参考资料一致'\n    : `应返回：${JSON.stringify(results.preprocessStepResult.expected)}；实际返回：${JSON.stringify(results.preprocessStepResult.actual)}`)"
+            }
+          ]
+        },
+        {
+          "title": "零分与无法评分要分开",
+          "body": "**groundTruth** 保存供评分器使用的参考结果。没有它时，本例可以从输入通知推导应有的状态与入口；通知明确写着“入口未公布”，仍然足够判断输出是否应为待确认。\n评分器拿不到参考通知，或参考结果格式不完整时，才返回 **notScorable()**。它表示本次缺少判断依据；零分则表示已经核对，但输出不符合要求。统计平均分时，无法评分的记录会被排除，因此还要查看实际覆盖了多少样本。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/03-scorer.ts"
+            },
+            {
+              "label": "src/03-scorer.ts",
+              "language": "typescript",
+              "code": "import { evidenceScorer } from './scorer.ts'\nimport { samples } from './samples.ts'\n\n// 用相同参考资料核对不同输出，观察分数、理由和无法评分的情况。\nconst sample = samples[2]\nfor (const output of [sample.groundTruth, { status: '已确认', venue: '南门', source: '场馆通知' }]) {\n  const result = await evidenceScorer.run({ ...sample, output })\n  console.log('分数：', result.score, '理由：', result.reason)\n}\n// 缺少参考资料不能作为零分或满分计入平均值。\nconst skipped = await evidenceScorer.run({ output: { status: '待确认', venue: null, source: null } })\nconsole.log('无法评分：', skipped.notScorable)"
+            }
+          ],
+          "callouts": [
+            {
+              "type": "key",
+              "body": "零分是一个判断；无法评分是缺少判断证据。平均分之外，还要看实际覆盖了多少样本。"
+            }
+          ]
+        },
+        {
+          "title": "从字段一致，走向语义判断",
+          "body": "这项评分器接收结构化的工作流输出。Agent 评分常接收消息数组，复用规则前，需要先提取要检查的内容，不能直接按同一种对象读取。\n若输出改为自然语言，“入口有待通知”和“入口尚未公布”可能都符合要求，逐字比较就不合适。下一节让模型按同一项标准理解表述，并用人工样本核对判断。",
+          "links": [
+            {
+              "label": "Mastra：自定义评分器",
+              "href": "https://mastra.ai/docs/evals/custom-scorers"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

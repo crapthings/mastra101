@@ -1,0 +1,84 @@
+{
+  "title": "中间件（Middleware）",
+  "lead": "理解路由前后的请求处理顺序，核对上下文、响应头和跨源配置的覆盖范围。",
+  "sections": [
+    {
+      "title": "按前后顺序处理请求",
+      "body": "**中间件（Middleware）**围绕路由执行。本例先生成请求标识并写入上下文，再 **await next()** 执行后续处理；路由返回后，把标识写入最终响应头。\n中间件也可以直接返回 Response，结束后续处理。理解它的执行位置和覆盖路径，才能判断某次请求实际经过了哪些步骤。"
+    },
+    {
+      "title": "从响应中核对传递结果",
+      "body": "脚本在请求头中提交自己的标识。服务端重新生成 requestId，最终响应头与工作流结果中的值应一致，且与调用方提交值不同。\n本例在 next 之后写响应头，直接核对最终返回内容。server.middleware 使用 Hono 签名，换用其他框架的适配器时，应按对应框架的方式配置。",
+      "codeBlocks": [
+        {
+          "label": "src/lab.js",
+          "language": "javascript",
+          "code": "import { once } from 'node:events'\nimport { randomUUID } from 'node:crypto'\nimport { Mastra } from '@mastra/core/mastra'\nimport { Agent } from '@mastra/core/agent'\nimport { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { MastraServer } from '@mastra/hono'\nimport { Hono } from 'hono'\nimport { serve } from '@hono/node-server'\nimport { z } from 'zod'\nimport { createRoutes } from './routes.js'\n\n// 每个入口启动独立的回环 HTTP 服务，完成请求后统一关闭资源。\nexport async function createLab () {\n  const state = { started: false, finished: false, cancelled: false }\n  const inputSchema = z.object({ venue: z.string().min(1).nullable() })\n  const outputSchema = z.object({ status: z.string(), venue: z.string().nullable(), requestId: z.string() })\n  const prepare = createStep({\n    id: 'prepare-notice', inputSchema, outputSchema,\n    execute: async ({ inputData, requestContext }) => ({\n      status: inputData.venue === null ? '待确认' : '已确认', venue: inputData.venue,\n      requestId: requestContext.get('requestId')\n    })\n  })\n  const workflow = createWorkflow({ id: 'notice-check', inputSchema, outputSchema }).then(prepare).commit()\n  const agent = new Agent({\n    id: 'notice-helper', name: '通知助手', model: 'vercel/openai/gpt-6.1-sol',\n    instructions: '只根据用户给定的通知整理入场提醒。入口未公布时明确待确认，不补写入口。'\n  })\n  const mastra = new Mastra({\n    agents: { noticeHelper: agent }, workflows: { noticeCheck: workflow },\n    storage: new LibSQLStore({ id: 'http-lab', url: ':memory:' }),\n    server: {\n      apiRoutes: createRoutes(state),\n      middleware: [async (c, next) => {\n        const requestId = randomUUID()\n        c.get('requestContext').set('requestId', requestId)\n        await next()\n        c.header('X-Request-Id', requestId)\n      }]\n    }\n  })\n  const app = new Hono()\n  const adapter = new MastraServer({ app, mastra, prefix: '/api', openapiPath: '/openapi.json' })\n  await adapter.init()\n  const http = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 })\n  await once(http, 'listening')\n  const baseUrl = `http://127.0.0.1:${http.address().port}`\n  return { mastra, app, baseUrl, state, close: async () => {\n    await new Promise((resolve, reject) => http.close(error => error ? reject(error) : resolve()))\n    await mastra.shutdown()\n  } }\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/08-middleware.js"
+        },
+        {
+          "label": "src/08-middleware.js",
+          "language": "javascript",
+          "code": "import { createLab } from './lab.js'\n\n// 核对响应头与业务结果中的请求标识，观察中间件在路由前后的位置。\nconst lab = await createLab()\ntry {\n  const response = await fetch(`${lab.baseUrl}/notice-preview`, {\n    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Request-Id': 'client-request-demo' },\n    body: JSON.stringify({ venue: '东门' })\n  })\n  const body = await response.json()\n  console.log('响应头标识：', response.headers.get('X-Request-Id'))\n  console.log('业务结果标识：', body.result.requestId)\n} finally {\n  await lab.close()\n}"
+        }
+      ]
+    },
+    {
+      "title": "核对路径覆盖和浏览器可见性",
+      "body": "按路径匹配时，/api/* 与根路径下的 /notice-preview 覆盖范围不同。Mastra 对声明为公共的框架路由还有单独处理，因此也应核对用户中间件在哪些路由执行。\n浏览器跨源调用受 **CORS** 规则约束，需要服务端允许相应 Origin、请求头与凭证。若前端要读取 X-Request-Id，还需通过 **Access-Control-Expose-Headers** 暴露它。Node 脚本不受浏览器这套读取限制。\n请求到达与响应传回都已清楚，最后再看调用方中止等待时，执行任务能否跟着停止。",
+      "links": [
+        {
+          "label": "Mastra：中间件",
+          "href": "https://mastra.ai/docs/server/middleware"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "Node 脚本能读取 X-Request-Id，浏览器却读不到，应核对什么？只匹配 /api/* 的中间件，又会遗漏本章哪个业务入口？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "按前后顺序处理请求",
+          "body": "**中间件（Middleware）**围绕路由执行。本例先生成请求标识并写入上下文，再 **await next()** 执行后续处理；路由返回后，把标识写入最终响应头。\n中间件也可以直接返回 Response，结束后续处理。理解它的执行位置和覆盖路径，才能判断某次请求实际经过了哪些步骤。"
+        },
+        {
+          "title": "从响应中核对传递结果",
+          "body": "脚本在请求头中提交自己的标识。服务端重新生成 requestId，最终响应头与工作流结果中的值应一致，且与调用方提交值不同。\n本例在 next 之后写响应头，直接核对最终返回内容。server.middleware 使用 Hono 签名，换用其他框架的适配器时，应按对应框架的方式配置。",
+          "codeBlocks": [
+            {
+              "label": "src/lab.ts",
+              "language": "typescript",
+              "code": "import { once } from 'node:events'\nimport { randomUUID } from 'node:crypto'\nimport { Mastra } from '@mastra/core/mastra'\nimport { Agent } from '@mastra/core/agent'\nimport { createStep, createWorkflow } from '@mastra/core/workflows'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { MastraServer } from '@mastra/hono'\nimport { Hono } from 'hono'\nimport { serve } from '@hono/node-server'\nimport { z } from 'zod'\nimport { createRoutes } from './routes.ts'\n\n// 每个入口启动独立的回环 HTTP 服务，完成请求后统一关闭资源。\nexport async function createLab () {\n  const state = { started: false, finished: false, cancelled: false }\n  const inputSchema = z.object({ venue: z.string().min(1).nullable() })\n  const outputSchema = z.object({ status: z.string(), venue: z.string().nullable(), requestId: z.string() })\n  const prepare = createStep({\n    id: 'prepare-notice', inputSchema, outputSchema,\n    execute: async ({ inputData, requestContext }) => ({\n      status: inputData.venue === null ? '待确认' : '已确认', venue: inputData.venue,\n      requestId: requestContext.get('requestId')\n    })\n  })\n  const workflow = createWorkflow({ id: 'notice-check', inputSchema, outputSchema }).then(prepare).commit()\n  const agent = new Agent({\n    id: 'notice-helper', name: '通知助手', model: 'vercel/openai/gpt-6.1-sol',\n    instructions: '只根据用户给定的通知整理入场提醒。入口未公布时明确待确认，不补写入口。'\n  })\n  const mastra = new Mastra({\n    agents: { noticeHelper: agent }, workflows: { noticeCheck: workflow },\n    storage: new LibSQLStore({ id: 'http-lab', url: ':memory:' }),\n    server: {\n      apiRoutes: createRoutes(state),\n      middleware: [async (c, next) => {\n        const requestId = randomUUID()\n        c.get('requestContext').set('requestId', requestId)\n        await next()\n        c.header('X-Request-Id', requestId)\n      }]\n    }\n  })\n  const app = new Hono()\n  const adapter = new MastraServer({ app, mastra, prefix: '/api', openapiPath: '/openapi.json' })\n  await adapter.init()\n  const http = serve({ fetch: app.fetch, hostname: '127.0.0.1', port: 0 })\n  await once(http, 'listening')\n  const baseUrl = `http://127.0.0.1:${http.address().port}`\n  return { mastra, app, baseUrl, state, close: async () => {\n    await new Promise((resolve, reject) => http.close(error => error ? reject(error) : resolve()))\n    await mastra.shutdown()\n  } }\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/08-middleware.ts"
+            },
+            {
+              "label": "src/08-middleware.ts",
+              "language": "typescript",
+              "code": "import { createLab } from './lab.ts'\n\n// 核对响应头与业务结果中的请求标识，观察中间件在路由前后的位置。\nconst lab = await createLab()\ntry {\n  const response = await fetch(`${lab.baseUrl}/notice-preview`, {\n    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Request-Id': 'client-request-demo' },\n    body: JSON.stringify({ venue: '东门' })\n  })\n  const body = await response.json()\n  console.log('响应头标识：', response.headers.get('X-Request-Id'))\n  console.log('业务结果标识：', body.result.requestId)\n} finally {\n  await lab.close()\n}"
+            }
+          ]
+        },
+        {
+          "title": "核对路径覆盖和浏览器可见性",
+          "body": "按路径匹配时，/api/* 与根路径下的 /notice-preview 覆盖范围不同。Mastra 对声明为公共的框架路由还有单独处理，因此也应核对用户中间件在哪些路由执行。\n浏览器跨源调用受 **CORS** 规则约束，需要服务端允许相应 Origin、请求头与凭证。若前端要读取 X-Request-Id，还需通过 **Access-Control-Expose-Headers** 暴露它。Node 脚本不受浏览器这套读取限制。\n请求到达与响应传回都已清楚，最后再看调用方中止等待时，执行任务能否跟着停止。",
+          "links": [
+            {
+              "label": "Mastra：中间件",
+              "href": "https://mastra.ai/docs/server/middleware"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

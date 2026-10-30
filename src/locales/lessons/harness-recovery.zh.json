@@ -1,0 +1,116 @@
+{
+  "title": "恢复与验收（Recovery）",
+  "lead": "用检查点衔接中断的任务，并检查恢复后的业务结果是否可信。",
+  "sections": [
+    {
+      "title": "先确定缺的是哪种连续性",
+      "body": "页面断线需要重新订阅；服务崩溃需要从检查点继续；已发送到外部系统的申请则需要核对业务状态。事件缓存、工作流快照和业务记录分别解决这些问题，不能相互代替。\n**检查点（Checkpoint）**保存可用于重新执行的进度。恢复依靠最近可用快照重做后续步骤，不是把进程内存、模型推理和网络连接原样搬回来。"
+    },
+    {
+      "title": "为手动恢复保留运行快照",
+      "body": "默认恢复关闭时，持久运行主要保留 pending、paused、suspended 等所需快照；不能假设每一步运行中的进度都已保存。示例通过 shouldPersistSnapshot 显式包含 running，为手动发现与恢复准备检查点。\n脚本默认 inspect 只查看记录；start 启动带只读慢工具的核查，recover 发现符合条件的活动运行并尝试恢复。它复用同一个数据库和 Agent 标识，不会新建一条目标不明的替代任务。",
+      "codeBlocks": [
+        {
+          "label": "src/08-recovery.js",
+          "language": "javascript",
+          "code": "import { setTimeout } from 'node:timers/promises'\nimport { Mastra } from '@mastra/core'\nimport { createDurableAgent } from '@mastra/core/agent/durable'\nimport { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { createAssistant, createStorage } from './assistant.js'\n\n// 用可以重复执行的只读检查留出观察进程中断的时间。\nconst readChecklist = createTool({\n  id: 'read-checklist',\n  description: '读取制度核查清单，这个演示读取需要约 20 秒。',\n  inputSchema: z.object({}),\n  execute: async () => {\n    await setTimeout(20_000)\n    return { limit: 500, approvalRequired: true, missing: ['事先书面批准记录'] }\n  }\n})\n// 显式保存运行中的检查点，为手动恢复提供依据。\nconst storage = await createStorage('recovery')\n// 配置本入口使用的核查助手。\nconst reviewer = createDurableAgent({\n  agent: createAssistant(storage, { tools: { readChecklist } }),\n  shouldPersistSnapshot: ({ workflowStatus }) => ['pending', 'running', 'paused', 'suspended'].includes(workflowStatus)\n})\n// 注册助手及其共用的运行服务。\nconst mastra = new Mastra({ agents: { reviewer }, storage })\n// 默认只查看记录，启动和恢复都需要明确选择入口模式。\nconst mode = process.argv[2] || 'inspect'\n// 保留运行清理函数。\nlet cleanup\n\ntry {\n  if (mode === 'start') {\n    const run = await reviewer.stream('必须先调用 readChecklist，再核查一晚 560 元但没有批准记录的住宿申请。')\n    cleanup = run.cleanup\n    console.log('运行标识：', run.runId)\n    console.log(await run.output.text)\n  } else if (mode === 'recover') {\n    console.log('恢复结果：', await reviewer.recoverActiveRuns())\n  } else if (mode === 'inspect') {\n    console.log('运行记录：', await reviewer.listActiveRuns())\n  } else {\n    throw new Error('仅支持 start、inspect 或 recover')\n  }\n} finally {\n  await mastra.shutdown()\n  cleanup?.()\n  await storage.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/08-recovery.js inspect\nnode --env-file=.env src/08-recovery.js start"
+        }
+      ]
+    },
+    {
+      "title": "在独立进程里检查恢复",
+      "body": "启动 start 后，可在另一终端查看 inspect。若要验证故障恢复，应在工具运行期间终止启动进程，再从同一示例目录执行 recover。工具约等待 20 秒，只读材料，允许重复执行。\n执行认领尚未失效时，恢复可能返回 skipped；这表示暂未接管，不能据此写成已恢复。先检查原进程是否仍在运行，再根据返回原因和重试时间判断，不要为抢占运行而直接强制恢复。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/08-recovery.js inspect\nnode --env-file=.env src/08-recovery.js recover"
+        }
+      ]
+    },
+    {
+      "title": "自动恢复还需要启动入口",
+      "body": "部署应用可以配置 recovery: { durableAgents: 'auto' }，让默认策略保留运行中的检查点，并由部署启动入口调用恢复。自建进程仍需在启动时显式调用 mastra.recoverAllDurableAgents()，不能只设置配置后就假定发现工作已经发生。\n跨副本观察还要共享发布订阅、事件缓存与运行存储。即使恢复能继续执行，旧的文字回放也可能已经清理；业务界面应优先显示持久任务状态，不依赖一份永远存在的流。"
+    },
+    {
+      "title": "最终检查业务，而不仅是循环",
+      "body": "恢复可能重复模型调用、工具调用乃至子智能体委派。付款、提交申请和发通知等写操作，应使用稳定业务键去重、核对外部结果，必要时等待人确认。记录 runId 只能定位运行，不能自动保证外部操作只发生一次。\n验收时至少核对任务归属、停下原因、所用材料、外部操作记录和待处理事项。恢复成功说明执行路径接上了；制度判断是否有依据，仍要用前一章的来源与结果检查来确认。后续再看新消息怎样进入正在进行的工作。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "恢复后的验收对象是业务结果：有没有漏做、重做、越权，结论是否有依据，以及下一步由谁接手。"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：快照与故障恢复",
+          "href": "https://mastra.ai/docs/harness/durable-agents#crash-recovery"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "恢复核查时，同一个提交工具可能再次执行。你会用什么业务标识核对是否已提交？除了运行成功，还要检查哪些结果才交给后续 Agent？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先确定缺的是哪种连续性",
+          "body": "页面断线需要重新订阅；服务崩溃需要从检查点继续；已发送到外部系统的申请则需要核对业务状态。事件缓存、工作流快照和业务记录分别解决这些问题，不能相互代替。\n**检查点（Checkpoint）**保存可用于重新执行的进度。恢复依靠最近可用快照重做后续步骤，不是把进程内存、模型推理和网络连接原样搬回来。"
+        },
+        {
+          "title": "为手动恢复保留运行快照",
+          "body": "默认恢复关闭时，持久运行主要保留 pending、paused、suspended 等所需快照；不能假设每一步运行中的进度都已保存。示例通过 shouldPersistSnapshot 显式包含 running，为手动发现与恢复准备检查点。\n脚本默认 inspect 只查看记录；start 启动带只读慢工具的核查，recover 发现符合条件的活动运行并尝试恢复。它复用同一个数据库和 Agent 标识，不会新建一条目标不明的替代任务。",
+          "codeBlocks": [
+            {
+              "label": "src/08-recovery.ts",
+              "language": "typescript",
+              "code": "import { setTimeout } from 'node:timers/promises'\nimport { Mastra } from '@mastra/core'\nimport { createDurableAgent } from '@mastra/core/agent/durable'\nimport { createTool } from '@mastra/core/tools'\nimport { z } from 'zod'\nimport { createAssistant, createStorage } from './assistant.ts'\n\n// 用可以重复执行的只读检查留出观察进程中断的时间。\nconst readChecklist = createTool({\n  id: 'read-checklist',\n  description: '读取制度核查清单，这个演示读取需要约 20 秒。',\n  inputSchema: z.object({}),\n  execute: async () => {\n    await setTimeout(20_000)\n    return { limit: 500, approvalRequired: true, missing: ['事先书面批准记录'] }\n  }\n})\n// 显式保存运行中的检查点，为手动恢复提供依据。\nconst storage = await createStorage('recovery')\n// 配置本入口使用的核查助手。\nconst reviewer = createDurableAgent({\n  agent: createAssistant(storage, { tools: { readChecklist } }),\n  shouldPersistSnapshot: ({ workflowStatus }) => ['pending', 'running', 'paused', 'suspended'].includes(workflowStatus)\n})\n// 注册助手及其共用的运行服务。\nconst mastra = new Mastra({ agents: { reviewer }, storage })\n// 默认只查看记录，启动和恢复都需要明确选择入口模式。\nconst mode = process.argv[2] || 'inspect'\n// 保留运行清理函数。\nlet cleanup\n\ntry {\n  if (mode === 'start') {\n    const run = await reviewer.stream('必须先调用 readChecklist，再核查一晚 560 元但没有批准记录的住宿申请。')\n    cleanup = run.cleanup\n    console.log('运行标识：', run.runId)\n    console.log(await run.output.text)\n  } else if (mode === 'recover') {\n    console.log('恢复结果：', await reviewer.recoverActiveRuns())\n  } else if (mode === 'inspect') {\n    console.log('运行记录：', await reviewer.listActiveRuns())\n  } else {\n    throw new Error('仅支持 start、inspect 或 recover')\n  }\n} finally {\n  await mastra.shutdown()\n  cleanup?.()\n  await storage.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/08-recovery.ts inspect\nnode --env-file=.env src/08-recovery.ts start"
+            }
+          ]
+        },
+        {
+          "title": "在独立进程里检查恢复",
+          "body": "启动 start 后，可在另一终端查看 inspect。若要验证故障恢复，应在工具运行期间终止启动进程，再从同一示例目录执行 recover。工具约等待 20 秒，只读材料，允许重复执行。\n执行认领尚未失效时，恢复可能返回 skipped；这表示暂未接管，不能据此写成已恢复。先检查原进程是否仍在运行，再根据返回原因和重试时间判断，不要为抢占运行而直接强制恢复。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/08-recovery.ts inspect\nnode --env-file=.env src/08-recovery.ts recover"
+            }
+          ]
+        },
+        {
+          "title": "自动恢复还需要启动入口",
+          "body": "部署应用可以配置 recovery: { durableAgents: 'auto' }，让默认策略保留运行中的检查点，并由部署启动入口调用恢复。自建进程仍需在启动时显式调用 mastra.recoverAllDurableAgents()，不能只设置配置后就假定发现工作已经发生。\n跨副本观察还要共享发布订阅、事件缓存与运行存储。即使恢复能继续执行，旧的文字回放也可能已经清理；业务界面应优先显示持久任务状态，不依赖一份永远存在的流。"
+        },
+        {
+          "title": "最终检查业务，而不仅是循环",
+          "body": "恢复可能重复模型调用、工具调用乃至子智能体委派。付款、提交申请和发通知等写操作，应使用稳定业务键去重、核对外部结果，必要时等待人确认。记录 runId 只能定位运行，不能自动保证外部操作只发生一次。\n验收时至少核对任务归属、停下原因、所用材料、外部操作记录和待处理事项。恢复成功说明执行路径接上了；制度判断是否有依据，仍要用前一章的来源与结果检查来确认。后续再看新消息怎样进入正在进行的工作。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "恢复后的验收对象是业务结果：有没有漏做、重做、越权，结论是否有依据，以及下一步由谁接手。"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：快照与故障恢复",
+              "href": "https://mastra.ai/docs/harness/durable-agents#crash-recovery"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

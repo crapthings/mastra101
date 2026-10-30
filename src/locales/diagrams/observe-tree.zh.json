@@ -1,0 +1,14 @@
+{
+  "title": "同一条追踪，多个执行片段",
+  "caption": "省略推理、消息片段与处理器后的示意树。父级通过 parentSpanId 连接；同级步骤是否先后执行，还要看时间，不能只看左右位置。",
+  "one": "智能体运行 · span A",
+  "oneDetail": "traceId 相同，父级为空",
+  "two": "模型生成 · span B",
+  "twoDetail": "parentSpanId → A",
+  "left": "第一步 · span C",
+  "leftDetail": "parentSpanId → B",
+  "right": "第二步 · span D",
+  "rightDetail": "parentSpanId → B",
+  "tool": "工具调用 · span E",
+  "toolDetail": "parentSpanId → C"
+}

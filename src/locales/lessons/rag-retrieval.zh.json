@@ -1,0 +1,94 @@
+{
+  "title": "检索范围（Retrieval & Filters）",
+  "lead": "在授权和有效版本范围内找候选，并正确理解 topK 与相似度。",
+  "sections": [
+    {
+      "title": "先确定允许搜索哪一份资料",
+      "body": "甲团队问题和乙团队制度可能在语义上非常接近，但不能因此混用。查询前要从可信身份确定 **teamId**，再将有效状态等条件带入检索。\n**Metadata Filter** 负责表达检索范围，认证与授权仍需按 19 章介绍的方式在应用中落实。本例在代码中固定不同团队以比较结果，真实请求应从已认证身份取得范围。"
+    },
+    {
+      "title": "相似度与 topK 各自说明什么",
+      "body": "**query()** 比较问题向量与索引向量，**topK** 限制最多返回多少候选。本例最多返回四个片段，并同时限定 teamId 和 active。\n相似度分数依赖模型、距离定义与存储实现；它不是“答案正确的概率”。增大 topK 可以增加候选覆盖，也可能带入更多重复或无关内容，应结合样本判断。"
+    },
+    {
+      "title": "同一问题，检查三个范围",
+      "body": "脚本分别查询甲、乙和无资料的丙团队。甲团队结果应排除旧版与其他团队，乙团队只看到自己的制度，丙团队返回空候选。\n这些条件在送入重排与生成之前就生效，避免先把不允许的原文交给下游，再指望模型自行忽略。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/06-retrieval.js"
+        },
+        {
+          "label": "src/06-retrieval.js",
+          "language": "javascript",
+          "code": "import { createIndex, retrieve } from './index.js'\n\n// 对同一问题比较两个团队，以及完全没有资料的范围。\nconst index = await createIndex()\ntry {\n  for (const teamId of ['team-a', 'team-b', 'team-c']) {\n    const hits = await retrieve(index, '去北京住酒店一晚能报多少？', teamId)\n    console.log('当前团队：', teamId)\n    console.table(hits.map(hit => ({ id: hit.id, score: hit.score, teamId: hit.metadata.teamId, active: hit.metadata.active, text: hit.metadata.text })))\n  }\n} finally { await index.store.close() }"
+        }
+      ],
+      "callouts": [
+        {
+          "type": "key",
+          "body": "检索条件应落实在允许访问的资料范围内。相似度负责排序，不负责决定用户有权读取什么。"
+        }
+      ]
+    },
+    {
+      "title": "候选还需要进一步核对",
+      "body": "即使团队与版本正确，最相似的四段也未必包含全部依据。当前查询没有统一的拒答分数线，不能仅凭有结果就认定可回答。\n下一节用重排进一步比较候选和问题的关系，之后再检查这些依据能支持哪些回答。",
+      "links": [
+        {
+          "label": "Mastra：检索与过滤",
+          "href": "https://mastra.ai/reference/rag/retrieval"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "某条其他团队的制度相似度最高，应在哪一步排除？若当前团队没有直接依据，topK 仍返回几段相关文字，能否直接认定问题可回答？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先确定允许搜索哪一份资料",
+          "body": "甲团队问题和乙团队制度可能在语义上非常接近，但不能因此混用。查询前要从可信身份确定 **teamId**，再将有效状态等条件带入检索。\n**Metadata Filter** 负责表达检索范围，认证与授权仍需按 19 章介绍的方式在应用中落实。本例在代码中固定不同团队以比较结果，真实请求应从已认证身份取得范围。"
+        },
+        {
+          "title": "相似度与 topK 各自说明什么",
+          "body": "**query()** 比较问题向量与索引向量，**topK** 限制最多返回多少候选。本例最多返回四个片段，并同时限定 teamId 和 active。\n相似度分数依赖模型、距离定义与存储实现；它不是“答案正确的概率”。增大 topK 可以增加候选覆盖，也可能带入更多重复或无关内容，应结合样本判断。"
+        },
+        {
+          "title": "同一问题，检查三个范围",
+          "body": "脚本分别查询甲、乙和无资料的丙团队。甲团队结果应排除旧版与其他团队，乙团队只看到自己的制度，丙团队返回空候选。\n这些条件在送入重排与生成之前就生效，避免先把不允许的原文交给下游，再指望模型自行忽略。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/06-retrieval.ts"
+            },
+            {
+              "label": "src/06-retrieval.ts",
+              "language": "typescript",
+              "code": "import { createIndex, retrieve } from './index.ts'\n\n// 对同一问题比较两个团队，以及完全没有资料的范围。\nconst index = await createIndex()\ntry {\n  for (const teamId of ['team-a', 'team-b', 'team-c']) {\n    const hits = await retrieve(index, '去北京住酒店一晚能报多少？', teamId)\n    console.log('当前团队：', teamId)\n    console.table(hits.map(hit => ({ id: hit.id, score: hit.score, teamId: hit.metadata.teamId, active: hit.metadata.active, text: hit.metadata.text })))\n  }\n} finally { await index.store.close() }"
+            }
+          ],
+          "callouts": [
+            {
+              "type": "key",
+              "body": "检索条件应落实在允许访问的资料范围内。相似度负责排序，不负责决定用户有权读取什么。"
+            }
+          ]
+        },
+        {
+          "title": "候选还需要进一步核对",
+          "body": "即使团队与版本正确，最相似的四段也未必包含全部依据。当前查询没有统一的拒答分数线，不能仅凭有结果就认定可回答。\n下一节用重排进一步比较候选和问题的关系，之后再检查这些依据能支持哪些回答。",
+          "links": [
+            {
+              "label": "Mastra：检索与过滤",
+              "href": "https://mastra.ai/reference/rag/retrieval"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

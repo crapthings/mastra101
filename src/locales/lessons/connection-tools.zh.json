@@ -1,0 +1,144 @@
+{
+  "title": "外部工具（MCPClient）",
+  "lead": "通过客户端发现工具，再用实际参数和结果确认一次跨程序调用。",
+  "sections": [
+    {
+      "title": "先发现对方提供了什么",
+      "body": "**MCP（Model Context Protocol）**为工具、资源和提示模板等能力提供共同的交换方式。客户端先发现接口，再按约定请求操作，不需要从普通文字里猜函数名称。\nMastra 用 **MCPClient** 连接服务。**listTools()** 取得可供 Mastra 使用的工具，并按服务键添加名称前缀；本例的查询键是 activity_lookupNotice。"
+    },
+    {
+      "title": "先运行现成服务，不调用模型",
+      "body": "下载示例，解压后进入 15-connections 文件夹，使用 Node.js 24 或更高版本和 pnpm 12 安装依赖。项目固定 @mastra/core 1.80.0、@mastra/mcp 2.6.0，并提供锁文件。\n随包的 stdio-server.js 启动教学服务。先把它当成已经提供好的主办方接口，第七节再展开服务定义；这里的重点是客户端怎样发现和调用。",
+      "download": {
+        "href": "/downloads/15-connections.zip",
+        "label": "下载 JavaScript 示例（ZIP）"
+      },
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "pnpm install"
+        },
+        {
+          "label": "src/stdio-server.js",
+          "language": "javascript",
+          "code": "import { makeService } from './service.js'\n\n// 标准输出留给 MCP 协议，不在这里打印普通日志。\nconst server = makeService()\nawait server.startStdio()"
+        },
+        {
+          "label": "src/02-tools.js",
+          "language": "javascript",
+          "code": "import { MCPClient } from '@mastra/mcp'\nimport { fileURLToPath } from 'node:url'\n\n// 只接受三个教学编号，分别检查正常、未查到与查询失败。\nconst activityId = process.argv[2] || 'reading'\nif (!['reading', 'unknown', 'FAIL'].includes(activityId)) throw new Error('请使用 reading、unknown 或 FAIL。')\n// 子进程运行随包服务，不安装或启动第三方命令。\nconst client = new MCPClient({\n  id: 'activity-stdio-client',\n  servers: { activity: { command: process.execPath, args: [fileURLToPath(new URL('./stdio-server.js', import.meta.url))] } }\n})\ntry {\n  const tools = await client.listTools()\n  console.log('实际发现的工具：', Object.keys(tools))\n  const tool = tools.activity_lookupNotice\n  if (!tool?.execute) throw new Error('没有发现可执行的教学查询工具。')\n  const result = await tool.execute({ activityId })\n  console.dir({ result }, { depth: 5 })\n} finally {\n  await client.disconnect()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/02-tools.js reading"
+        }
+      ]
+    },
+    {
+      "title": "发现、执行与回答是三个环节",
+      "body": "listTools() 返回工具定义与可执行包装，不代表通知已经查询过。示例直接调用工具的 **execute()**，观察 result 中的状态、地点和来源。\n本服务提供结构化返回，所以示例可以直接读取 result.status。其他工具也可能返回 content、structuredContent 等协议内容，应先确认实际返回结构，再提取业务字段。\n这条路径没有模型参与。以后把工具挂到 Agent 的 tools 上，模型才可以提出同样的调用请求；请求、服务执行和结果回传仍要分别核对。",
+      "callouts": [
+        {
+          "type": "key",
+          "body": "MCP 连接让应用能够发现和调用外部能力。发现了工具，不等于已经执行；取得结果，也不等于模型已经使用。"
+        }
+      ]
+    },
+    {
+      "title": "让不同结果保留不同含义",
+      "body": "reading 返回已确认通知；unknown 表示本教学数据中没有匹配编号；FAIL 表示模拟查询失败。这些状态值由本服务设计，不是 MCP 统一的业务状态。\n“未查到”表示当前数据没有匹配记录，不能直接写成“活动不存在”；“查询失败”表示没有完成查询，也不能变成“无需预约”。连接、协议和字段校验的失败则应单独处理，不要把所有错误都压成一个空结果。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node src/02-tools.js unknown\nnode src/02-tools.js FAIL"
+        }
+      ]
+    },
+    {
+      "title": "同一套接口，可以换一种传输",
+      "body": "本例通过子进程连接，文件路径由程序明确定位。若通知服务已经运行在服务器上，客户端还可以通过 URL 访问。\n下一节区分这两种传输，以及连接结束时分别由谁回收。",
+      "links": [
+        {
+          "label": "Mastra：连接 MCP 服务",
+          "href": "https://mastra.ai/docs/connections/mcp#connect-to-mcp-servers"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "工具目录里已有 activity_lookupNotice，但还没有执行记录。怎样确认通知确实被查询？若返回“查询失败”，下一步应保留什么？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先发现对方提供了什么",
+          "body": "**MCP（Model Context Protocol）**为工具、资源和提示模板等能力提供共同的交换方式。客户端先发现接口，再按约定请求操作，不需要从普通文字里猜函数名称。\nMastra 用 **MCPClient** 连接服务。**listTools()** 取得可供 Mastra 使用的工具，并按服务键添加名称前缀；本例的查询键是 activity_lookupNotice。"
+        },
+        {
+          "title": "先运行现成服务，不调用模型",
+          "body": "下载示例，解压后进入 15-connections-ts 文件夹，使用 Node.js 24 或更高版本和 pnpm 12 安装依赖。项目固定 @mastra/core 1.80.0、@mastra/mcp 2.6.0，并提供锁文件。\n随包的 stdio-server.ts 启动教学服务。先把它当成已经提供好的主办方接口，第七节再展开服务定义；这里的重点是客户端怎样发现和调用。",
+          "download": {
+            "href": "/downloads/15-connections-ts.zip",
+            "label": "下载 TypeScript 示例（ZIP）"
+          },
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "pnpm install"
+            },
+            {
+              "label": "src/stdio-server.ts",
+              "language": "typescript",
+              "code": "import { makeService } from './service.ts'\n\n// 标准输出留给 MCP 协议，不在这里打印普通日志。\nconst server = makeService()\nawait server.startStdio()"
+            },
+            {
+              "label": "src/02-tools.ts",
+              "language": "typescript",
+              "code": "import { MCPClient } from '@mastra/mcp'\nimport { fileURLToPath } from 'node:url'\n\n// 只接受三个教学编号，分别检查正常、未查到与查询失败。\nconst activityId = process.argv[2] || 'reading'\nif (!['reading', 'unknown', 'FAIL'].includes(activityId)) throw new Error('请使用 reading、unknown 或 FAIL。')\n// 子进程运行随包服务，不安装或启动第三方命令。\nconst client = new MCPClient({\n  id: 'activity-stdio-client',\n  servers: { activity: { command: process.execPath, args: [fileURLToPath(new URL('./stdio-server.ts', import.meta.url))] } }\n})\ntry {\n  const tools = await client.listTools()\n  console.log('实际发现的工具：', Object.keys(tools))\n  const tool = tools.activity_lookupNotice\n  if (!tool?.execute) throw new Error('没有发现可执行的教学查询工具。')\n  const result = await tool.execute({ activityId })\n  console.dir({ result }, { depth: 5 })\n} finally {\n  await client.disconnect()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/02-tools.ts reading"
+            }
+          ]
+        },
+        {
+          "title": "发现、执行与回答是三个环节",
+          "body": "listTools() 返回工具定义与可执行包装，不代表通知已经查询过。示例直接调用工具的 **execute()**，观察 result 中的状态、地点和来源。\n本服务提供结构化返回，所以示例可以直接读取 result.status。其他工具也可能返回 content、structuredContent 等协议内容，应先确认实际返回结构，再提取业务字段。\n这条路径没有模型参与。以后把工具挂到 Agent 的 tools 上，模型才可以提出同样的调用请求；请求、服务执行和结果回传仍要分别核对。",
+          "callouts": [
+            {
+              "type": "key",
+              "body": "MCP 连接让应用能够发现和调用外部能力。发现了工具，不等于已经执行；取得结果，也不等于模型已经使用。"
+            }
+          ]
+        },
+        {
+          "title": "让不同结果保留不同含义",
+          "body": "reading 返回已确认通知；unknown 表示本教学数据中没有匹配编号；FAIL 表示模拟查询失败。这些状态值由本服务设计，不是 MCP 统一的业务状态。\n“未查到”表示当前数据没有匹配记录，不能直接写成“活动不存在”；“查询失败”表示没有完成查询，也不能变成“无需预约”。连接、协议和字段校验的失败则应单独处理，不要把所有错误都压成一个空结果。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node src/02-tools.ts unknown\nnode src/02-tools.ts FAIL"
+            }
+          ]
+        },
+        {
+          "title": "同一套接口，可以换一种传输",
+          "body": "本例通过子进程连接，文件路径由程序明确定位。若通知服务已经运行在服务器上，客户端还可以通过 URL 访问。\n下一节区分这两种传输，以及连接结束时分别由谁回收。",
+          "links": [
+            {
+              "label": "Mastra：连接 MCP 服务",
+              "href": "https://mastra.ai/docs/connections/mcp#connect-to-mcp-servers"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

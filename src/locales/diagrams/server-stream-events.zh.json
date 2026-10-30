@@ -1,0 +1,12 @@
+{
+  "title": "逐步显示文字，也保留完成状态",
+  "caption": "文字输出的示意路径：收到文字后，仍可能出错或断线。正常收到 finish 后，还要核对运行结果与通知依据。",
+  "one": "开始读取响应流",
+  "oneDetail": "SDK 按协议解析事件",
+  "left": "text-delta · 文字片段",
+  "leftDetail": "累计文本，界面保持生成中",
+  "right": "error 或连接中断",
+  "rightDetail": "保留错误或未完成状态",
+  "bottom": "finish · 协议结束",
+  "bottomDetail": "核对执行结果与通知依据"
+}

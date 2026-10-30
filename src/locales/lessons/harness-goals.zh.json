@@ -1,0 +1,142 @@
+{
+  "title": "目标与预算（Goals）",
+  "lead": "用可检查的目标决定继续、完成或暂停，同时限制尝试次数。",
+  "sections": [
+    {
+      "title": "一次回答之后，再问有没有完成",
+      "body": "核查助手已经给出一段话，不代表它覆盖了全部要求。比如它说申请超过 500 元，却漏掉“须事先书面批准”，这份结果还不能交给下一步使用。\n**目标（Objective）**描述完成条件；**Goals** 在适合判定的候选结果出现后检查它是否满足目标。未完成且还有预算时，反馈会带回循环，要求继续补足。"
+    },
+    {
+      "title": "把目标挂在线程上",
+      "body": "示例配置 goal.judge 和 maxRuns，再用 **setObjective()** 为线程保存目标。执行时传入同一 thread 和 resource，才能把目标、上下文及这次核查关联起来。\n目标依赖可用的 Mastra 存储和带记忆的线程。只在提示词里写“持续工作到完成”不等于建立了持久目标；只保存目标却没有可解析的 judge，也不会启动目标判定。",
+      "codeBlocks": [
+        {
+          "label": "src/04-goals.js",
+          "language": "javascript",
+          "code": "import { Mastra } from '@mastra/core'\nimport { createAssistant, createStorage } from './assistant.js'\n\n// 用独立目标判定约束核查任务最多接受三次候选结果。\nconst storage = await createStorage('goals')\n// 配置本入口使用的核查助手。\nconst reviewer = createAssistant(storage, {\n  goal: { judge: 'vercel/openai/gpt-6.1-sol', maxRuns: 3 }\n})\n// 注册助手及其共用的运行服务。\nconst mastra = new Mastra({ agents: { reviewer }, storage })\n// 为这次目标创建独立线程。\nconst threadId = crypto.randomUUID()\n// 标记演示线程的所有者。\nconst resourceId = 'demo-user'\n\ntry {\n  await reviewer.setObjective('核查 560 元住宿申请：明确 500 元上限、需要事先书面批准，以及当前缺少批准记录，不能直接判为可报销。', { threadId, resourceId })\n  const output = await reviewer.stream('材料：住宿每晚不超过 500 元，超出须事先书面批准。申请金额为 560 元，没有提供批准记录。开始核查。', {\n    memory: { thread: threadId, resource: resourceId },\n    maxSteps: 4\n  })\n  for await (const chunk of output.fullStream) {\n    if (chunk.type === 'goal') console.log('目标判定：', chunk.payload)\n  }\n  console.log('目标记录：', await reviewer.getObjective({ threadId }))\n} finally {\n  await mastra.shutdown()\n  await storage.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/04-goals.js"
+        }
+      ]
+    },
+    {
+      "title": "分清循环步数和目标次数",
+      "body": "**maxSteps** 限制智能体循环的步数，常用于约束模型与工具往返；**maxRuns** 限制目标可使用的判定次数。一次工具调用并不会必然消耗一次目标判定。\n目标检查并不是在每条事件或每个中间工具结果后都执行。观察 goal 事件中的 iteration、status 和 maxRunsReached，配合 getObjective() 返回的 runsUsed，才能说明停下的原因。",
+      "table": {
+        "headers": [
+          "参数或字段",
+          "关注点"
+        ],
+        "rows": [
+          [
+            "maxSteps",
+            "模型与工具循环的步数上限"
+          ],
+          [
+            "maxRuns / runsUsed",
+            "目标判定预算与已用次数"
+          ],
+          [
+            "done",
+            "目标判定认为已完成"
+          ],
+          [
+            "paused",
+            "预算耗尽、需要人介入或其他暂停原因"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "用完预算就交还决定权",
+      "body": "预算耗尽会暂停目标，而不是自动把结果标成完成。需要增加预算时，可通过 updateObjectiveOptions({ threadId, maxRuns: 5, status: 'active' }) 更新记录，再显式发起后续执行；修改记录本身不会启动运行。\n目标判定也可能有误。金额、权限和必要材料等能由程序检查的条件，仍应交给确定性检查；需要人批准时，就等待真实批准。下一节处理另一种等待：耗时工作还没有返回。",
+      "callouts": [
+        {
+          "type": "caution",
+          "body": "judge 认为目标完成，不代表现实中的审批已经通过。目标判定不能替业务系统补造事实或授予权限。"
+        }
+      ],
+      "links": [
+        {
+          "label": "Mastra：Goals",
+          "href": "https://mastra.ai/docs/harness/goals"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "助手尝试三次仍漏掉批准条件，目标预算用尽。应该记录成什么状态？增加预算之后，还需要做什么才能继续执行？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "一次回答之后，再问有没有完成",
+          "body": "核查助手已经给出一段话，不代表它覆盖了全部要求。比如它说申请超过 500 元，却漏掉“须事先书面批准”，这份结果还不能交给下一步使用。\n**目标（Objective）**描述完成条件；**Goals** 在适合判定的候选结果出现后检查它是否满足目标。未完成且还有预算时，反馈会带回循环，要求继续补足。"
+        },
+        {
+          "title": "把目标挂在线程上",
+          "body": "示例配置 goal.judge 和 maxRuns，再用 **setObjective()** 为线程保存目标。执行时传入同一 thread 和 resource，才能把目标、上下文及这次核查关联起来。\n目标依赖可用的 Mastra 存储和带记忆的线程。只在提示词里写“持续工作到完成”不等于建立了持久目标；只保存目标却没有可解析的 judge，也不会启动目标判定。",
+          "codeBlocks": [
+            {
+              "label": "src/04-goals.ts",
+              "language": "typescript",
+              "code": "import { Mastra } from '@mastra/core'\nimport { createAssistant, createStorage } from './assistant.ts'\n\n// 用独立目标判定约束核查任务最多接受三次候选结果。\nconst storage = await createStorage('goals')\n// 配置本入口使用的核查助手。\nconst reviewer = createAssistant(storage, {\n  goal: { judge: 'vercel/openai/gpt-6.1-sol', maxRuns: 3 }\n})\n// 注册助手及其共用的运行服务。\nconst mastra = new Mastra({ agents: { reviewer }, storage })\n// 为这次目标创建独立线程。\nconst threadId = crypto.randomUUID()\n// 标记演示线程的所有者。\nconst resourceId = 'demo-user'\n\ntry {\n  await reviewer.setObjective('核查 560 元住宿申请：明确 500 元上限、需要事先书面批准，以及当前缺少批准记录，不能直接判为可报销。', { threadId, resourceId })\n  const output = await reviewer.stream('材料：住宿每晚不超过 500 元，超出须事先书面批准。申请金额为 560 元，没有提供批准记录。开始核查。', {\n    memory: { thread: threadId, resource: resourceId },\n    maxSteps: 4\n  })\n  for await (const chunk of output.fullStream) {\n    if (chunk.type === 'goal') console.log('目标判定：', chunk.payload)\n  }\n  console.log('目标记录：', await reviewer.getObjective({ threadId }))\n} finally {\n  await mastra.shutdown()\n  await storage.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/04-goals.ts"
+            }
+          ]
+        },
+        {
+          "title": "分清循环步数和目标次数",
+          "body": "**maxSteps** 限制智能体循环的步数，常用于约束模型与工具往返；**maxRuns** 限制目标可使用的判定次数。一次工具调用并不会必然消耗一次目标判定。\n目标检查并不是在每条事件或每个中间工具结果后都执行。观察 goal 事件中的 iteration、status 和 maxRunsReached，配合 getObjective() 返回的 runsUsed，才能说明停下的原因。",
+          "table": {
+            "headers": [
+              "参数或字段",
+              "关注点"
+            ],
+            "rows": [
+              [
+                "maxSteps",
+                "模型与工具循环的步数上限"
+              ],
+              [
+                "maxRuns / runsUsed",
+                "目标判定预算与已用次数"
+              ],
+              [
+                "done",
+                "目标判定认为已完成"
+              ],
+              [
+                "paused",
+                "预算耗尽、需要人介入或其他暂停原因"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "用完预算就交还决定权",
+          "body": "预算耗尽会暂停目标，而不是自动把结果标成完成。需要增加预算时，可通过 updateObjectiveOptions({ threadId, maxRuns: 5, status: 'active' }) 更新记录，再显式发起后续执行；修改记录本身不会启动运行。\n目标判定也可能有误。金额、权限和必要材料等能由程序检查的条件，仍应交给确定性检查；需要人批准时，就等待真实批准。下一节处理另一种等待：耗时工作还没有返回。",
+          "callouts": [
+            {
+              "type": "caution",
+              "body": "judge 认为目标完成，不代表现实中的审批已经通过。目标判定不能替业务系统补造事实或授予权限。"
+            }
+          ],
+          "links": [
+            {
+              "label": "Mastra：Goals",
+              "href": "https://mastra.ai/docs/harness/goals"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

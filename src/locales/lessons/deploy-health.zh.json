@@ -1,0 +1,64 @@
+{
+  "title": "健康检查（Health Checks）",
+  "lead": "区分进程存活、启动就绪与业务可用，避免用一条 200 代表所有能力正常。",
+  "sections": [
+    {
+      "title": "进程能响应，和已经可以接任务不同",
+      "body": "**存活检查（Liveness）**用于判断进程是否能响应，**就绪检查（Readiness）**用于决定当前实例是否应接收业务流量。\n本例 /health/live 返回进程状态和版本，/health/ready 读取 ready 标记。存储完成初始化、HTTP 监听与 Workers 启动之后才设置 ready；停止时先清除这个标记。"
+    },
+    {
+      "title": "把就绪条件落实到启动顺序",
+      "body": "**startService()** 按顺序创建应用、接入路由、启动监听与 Workers，再报告就绪。初始化失败则关闭已开启的资源，让启动失败可以被运行环境观察到。\n本例 ready 表示启动条件已完成。需要持续探测数据库、队列或其他依赖时，应按实际业务补充检查与退化策略，避免把它当成所有下游实时正常的保证。",
+      "codeBlocks": [
+        {
+          "label": "src/runtime.js",
+          "language": "javascript",
+          "code": "import { once } from 'node:events'\nimport { Hono } from 'hono'\nimport { serve } from '@hono/node-server'\nimport { MastraServer } from '@mastra/hono'\nimport { createApplication } from './application.js'\n\n// 初始化存储与后台执行后声明就绪，并提供有预算的关闭过程。\nexport async function startService (config) {\n  const mastra = await createApplication(config)\n  const state = { ready: false, stopping: false }\n  const app = new Hono()\n  app.get('/health/live', c => c.json({ status: '进程可响应', version: config.version }))\n  app.get('/health/ready', c => c.json({ ready: state.ready, version: config.version }, state.ready ? 200 : 503))\n  await new MastraServer({ app, mastra, prefix: '/api' }).init()\n  const http = serve({ fetch: app.fetch, hostname: config.host, port: config.port })\n  await once(http, 'listening')\n  try {\n    await mastra.startWorkers()\n    state.ready = true\n  } catch (error) {\n    await new Promise(resolve => http.close(resolve))\n    await mastra.shutdown()\n    throw error\n  }\n  const address = `http://${config.host}:${http.address().port}`\n  let closing\n  return { mastra, state, address, close: reason => {\n    if (closing) return closing\n    state.ready = false\n    state.stopping = true\n    closing = (async () => {\n      const timer = setTimeout(() => {\n        console.log(JSON.stringify({ event: 'http.drain-timeout', version: config.version }))\n        http.closeAllConnections()\n      }, config.shutdownMs)\n      timer.unref()\n      try {\n        await new Promise((resolve, reject) => http.close(error => error ? reject(error) : resolve()))\n      } finally { clearTimeout(timer) }\n      await mastra.shutdown({ drainTimeout: config.shutdownMs })\n      console.log(JSON.stringify({ event: 'service.stopped', reason, version: config.version }))\n    })()\n    return closing\n  } }\n}"
+        }
+      ]
+    },
+    {
+      "title": "用业务验证补上探针看不到的部分",
+      "body": "健康路由只返回有限状态，不泄露凭证和内部配置。业务接口仍需认证；即使健康响应为 200，错误令牌也应被拒绝。\n因此，发布验证会同时检查探针、身份拒绝、通知的待确认结果和运行记录，既观察进程，也确认实际调用路径。下一节再看停止信号到来时，怎样完成相反方向的回收。",
+      "links": [
+        {
+          "label": "Mastra：适配器与后台启动",
+          "href": "https://mastra.ai/docs/server/server-adapters"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "存活接口返回 200，但存储初始化未完成，应该接收业务流量吗？就绪后，又有哪些业务性质需要通过实际请求验证？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "进程能响应，和已经可以接任务不同",
+          "body": "**存活检查（Liveness）**用于判断进程是否能响应，**就绪检查（Readiness）**用于决定当前实例是否应接收业务流量。\n本例 /health/live 返回进程状态和版本，/health/ready 读取 ready 标记。存储完成初始化、HTTP 监听与 Workers 启动之后才设置 ready；停止时先清除这个标记。"
+        },
+        {
+          "title": "把就绪条件落实到启动顺序",
+          "body": "**startService()** 按顺序创建应用、接入路由、启动监听与 Workers，再报告就绪。初始化失败则关闭已开启的资源，让启动失败可以被运行环境观察到。\n本例 ready 表示启动条件已完成。需要持续探测数据库、队列或其他依赖时，应按实际业务补充检查与退化策略，避免把它当成所有下游实时正常的保证。",
+          "codeBlocks": [
+            {
+              "label": "src/runtime.ts",
+              "language": "typescript",
+              "code": "import { once } from 'node:events'\nimport { Hono } from 'hono'\nimport { serve } from '@hono/node-server'\nimport { MastraServer } from '@mastra/hono'\nimport { createApplication } from './application.ts'\n\n// 初始化存储与后台执行后声明就绪，并提供有预算的关闭过程。\nexport async function startService (config) {\n  const mastra = await createApplication(config)\n  const state = { ready: false, stopping: false }\n  const app = new Hono()\n  app.get('/health/live', c => c.json({ status: '进程可响应', version: config.version }))\n  app.get('/health/ready', c => c.json({ ready: state.ready, version: config.version }, state.ready ? 200 : 503))\n  await new MastraServer({ app, mastra, prefix: '/api' }).init()\n  const http = serve({ fetch: app.fetch, hostname: config.host, port: config.port })\n  await once(http, 'listening')\n  try {\n    await mastra.startWorkers()\n    state.ready = true\n  } catch (error) {\n    await new Promise(resolve => http.close(resolve))\n    await mastra.shutdown()\n    throw error\n  }\n  const address = `http://${config.host}:${http.address().port}`\n  let closing\n  return { mastra, state, address, close: reason => {\n    if (closing) return closing\n    state.ready = false\n    state.stopping = true\n    closing = (async () => {\n      const timer = setTimeout(() => {\n        console.log(JSON.stringify({ event: 'http.drain-timeout', version: config.version }))\n        http.closeAllConnections()\n      }, config.shutdownMs)\n      timer.unref()\n      try {\n        await new Promise((resolve, reject) => http.close(error => error ? reject(error) : resolve()))\n      } finally { clearTimeout(timer) }\n      await mastra.shutdown({ drainTimeout: config.shutdownMs })\n      console.log(JSON.stringify({ event: 'service.stopped', reason, version: config.version }))\n    })()\n    return closing\n  } }\n}"
+            }
+          ]
+        },
+        {
+          "title": "用业务验证补上探针看不到的部分",
+          "body": "健康路由只返回有限状态，不泄露凭证和内部配置。业务接口仍需认证；即使健康响应为 200，错误令牌也应被拒绝。\n因此，发布验证会同时检查探针、身份拒绝、通知的待确认结果和运行记录，既观察进程，也确认实际调用路径。下一节再看停止信号到来时，怎样完成相反方向的回收。",
+          "links": [
+            {
+              "label": "Mastra：适配器与后台启动",
+              "href": "https://mastra.ai/docs/server/server-adapters"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

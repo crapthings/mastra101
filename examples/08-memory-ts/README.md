@@ -1,6 +1,6 @@
 # 08 记忆：活动助手
 
-Node.ts >=24，此包使用 TypeScript。先在本目录执行 pnpm install，将 .env.example 复制为 .env，填写 AI_GATEWAY_API_KEY。
+Node.js >=24，此包使用 TypeScript。先在本目录执行 pnpm install，将 .env.example 复制为 .env，填写 AI_GATEWAY_API_KEY。
 
 ## 逐节运行
 

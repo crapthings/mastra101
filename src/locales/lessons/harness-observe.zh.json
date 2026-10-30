@@ -1,0 +1,130 @@
+{
+  "title": "观察与回放（Observe & Replay）",
+  "lead": "回到已有运行查看事件，避免把重连实现成重复执行。",
+  "sections": [
+    {
+      "title": "重新看，而不是重新做",
+      "body": "假设页面刚收到“开始核查”就断开了。重新调用 stream() 会启动新的工作，而 **observe(runId)** 是订阅已经存在的那次运行。\n事件缓存把仍保留的历史事件先交给观察者，再衔接实时事件。已完成的运行也能回放保留的事件，随后关闭流。"
+    },
+    {
+      "title": "用同一结果核对回放",
+      "body": "示例先等待原始文本，再使用同一个 runId 回放，并断言两份文本一致。这验证的是完成后的缓存回放，不是在演示跨进程恢复。\n真实页面需要按事件或消息标识更新已有显示，避免把回放内容再次追加到已显示的文字后面。runId 也应和当前用户、线程的访问权限一起检查，不能作为授权凭证。",
+      "codeBlocks": [
+        {
+          "label": "src/03-observe.js",
+          "language": "javascript",
+          "code": "import assert from 'node:assert/strict'\nimport { Mastra } from '@mastra/core'\nimport { createDurableAgent } from '@mastra/core/agent/durable'\nimport { createAssistant, createStorage } from './assistant.js'\n\n// 保留同一次运行，先读取结果，再从缓存回放完整事件。\nconst storage = await createStorage('observe')\n// 配置本入口使用的核查助手。\nconst reviewer = createDurableAgent({ agent: createAssistant(storage) })\n// 注册助手及其共用的运行服务。\nconst mastra = new Mastra({ agents: { reviewer }, storage })\n// 保留运行清理函数。\nlet cleanup\n\ntry {\n  const run = await reviewer.stream('材料：报销需在出差结束后 10 个工作日内提交。请列出核查这项时限还缺哪些信息。')\n  cleanup = run.cleanup\n  const original = await run.output.text\n  const observation = await reviewer.observe(run.runId)\n  try {\n    const replay = await observation.output.text\n    assert.equal(replay, original)\n    console.log('同一运行回放一致：', run.runId)\n    console.log(replay)\n  } finally {\n    observation.detach()\n  }\n} finally {\n  await mastra.shutdown()\n  cleanup?.()\n  await storage.close()\n}"
+        },
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/03-observe.js"
+        }
+      ]
+    },
+    {
+      "title": "离开观察和清理运行分开",
+      "body": "观察者离开时调用 **detach()**，只撤掉这次观察。**cleanup()** 会清理该运行的订阅、注册信息和缓存事件；原运行的发起方应在不再需要回放后再清理。\n因此，用户关闭一个查看页面，不应该顺手清掉所有人还在等待的运行历史。取消执行也应使用明确的取消入口，而不是把停止观察当成停止工作。",
+      "table": {
+        "headers": [
+          "操作",
+          "含义"
+        ],
+        "rows": [
+          [
+            "observe(runId)",
+            "订阅已有运行，回放仍保留的事件"
+          ],
+          [
+            "detach()",
+            "离开这次观察"
+          ],
+          [
+            "cleanup()",
+            "清理运行资源及回放缓存"
+          ],
+          [
+            "abort()",
+            "请求取消执行，不会撤销已完成的外部操作"
+          ]
+        ]
+      }
+    },
+    {
+      "title": "空流不能代替业务状态",
+      "body": "未知 runId、缓存已清理且没有活动运行时，观察可能直接结束而没有事件。不能把空流解释成“任务成功完成”，应结合业务任务记录和执行状态判断。\n本章不使用 offset：它是从零开始、含该位置的发布订阅事件索引，不是字符位置或已显示的 chunk 数量。缺少早期事件的回放还可能只形成部分文本。看得见进度后，下一步才是判断结果是否达标。",
+      "links": [
+        {
+          "label": "Mastra：观察运行",
+          "href": "https://mastra.ai/reference/agents/durable-agent#observerunid-options"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "本节检查",
+  "note": "两个页面都在查看同一次核查。第一个页面关闭时应该调用什么？如果直接清理运行，会怎样影响第二个页面及后续重连？",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "重新看，而不是重新做",
+          "body": "假设页面刚收到“开始核查”就断开了。重新调用 stream() 会启动新的工作，而 **observe(runId)** 是订阅已经存在的那次运行。\n事件缓存把仍保留的历史事件先交给观察者，再衔接实时事件。已完成的运行也能回放保留的事件，随后关闭流。"
+        },
+        {
+          "title": "用同一结果核对回放",
+          "body": "示例先等待原始文本，再使用同一个 runId 回放，并断言两份文本一致。这验证的是完成后的缓存回放，不是在演示跨进程恢复。\n真实页面需要按事件或消息标识更新已有显示，避免把回放内容再次追加到已显示的文字后面。runId 也应和当前用户、线程的访问权限一起检查，不能作为授权凭证。",
+          "codeBlocks": [
+            {
+              "label": "src/03-observe.ts",
+              "language": "typescript",
+              "code": "import assert from 'node:assert/strict'\nimport { Mastra } from '@mastra/core'\nimport { createDurableAgent } from '@mastra/core/agent/durable'\nimport { createAssistant, createStorage } from './assistant.ts'\n\n// 保留同一次运行，先读取结果，再从缓存回放完整事件。\nconst storage = await createStorage('observe')\n// 配置本入口使用的核查助手。\nconst reviewer = createDurableAgent({ agent: createAssistant(storage) })\n// 注册助手及其共用的运行服务。\nconst mastra = new Mastra({ agents: { reviewer }, storage })\n// 保留运行清理函数。\nlet cleanup\n\ntry {\n  const run = await reviewer.stream('材料：报销需在出差结束后 10 个工作日内提交。请列出核查这项时限还缺哪些信息。')\n  cleanup = run.cleanup\n  const original = await run.output.text\n  const observation = await reviewer.observe(run.runId)\n  try {\n    const replay = await observation.output.text\n    assert.equal(replay, original)\n    console.log('同一运行回放一致：', run.runId)\n    console.log(replay)\n  } finally {\n    observation.detach()\n  }\n} finally {\n  await mastra.shutdown()\n  cleanup?.()\n  await storage.close()\n}"
+            },
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/03-observe.ts"
+            }
+          ]
+        },
+        {
+          "title": "离开观察和清理运行分开",
+          "body": "观察者离开时调用 **detach()**，只撤掉这次观察。**cleanup()** 会清理该运行的订阅、注册信息和缓存事件；原运行的发起方应在不再需要回放后再清理。\n因此，用户关闭一个查看页面，不应该顺手清掉所有人还在等待的运行历史。取消执行也应使用明确的取消入口，而不是把停止观察当成停止工作。",
+          "table": {
+            "headers": [
+              "操作",
+              "含义"
+            ],
+            "rows": [
+              [
+                "observe(runId)",
+                "订阅已有运行，回放仍保留的事件"
+              ],
+              [
+                "detach()",
+                "离开这次观察"
+              ],
+              [
+                "cleanup()",
+                "清理运行资源及回放缓存"
+              ],
+              [
+                "abort()",
+                "请求取消执行，不会撤销已完成的外部操作"
+              ]
+            ]
+          }
+        },
+        {
+          "title": "空流不能代替业务状态",
+          "body": "未知 runId、缓存已清理且没有活动运行时，观察可能直接结束而没有事件。不能把空流解释成“任务成功完成”，应结合业务任务记录和执行状态判断。\n本章不使用 offset：它是从零开始、含该位置的发布订阅事件索引，不是字符位置或已显示的 chunk 数量。缺少早期事件的回放还可能只形成部分文本。看得见进度后，下一步才是判断结果是否达标。",
+          "links": [
+            {
+              "label": "Mastra：观察运行",
+              "href": "https://mastra.ai/reference/agents/durable-agent#observerunid-options"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

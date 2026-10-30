@@ -1,0 +1,15 @@
+{
+  "title": "审批在写入请求之前，结果在服务执行之后",
+  "caption": "图中仅讨论 saveDraft。批准前先核对 count 为 0；拒绝时不发出写入，批准后再核对服务是否真的保存。查询与草稿数量读取是本例另行允许的只读操作。",
+  "request": "模型请求保存草稿",
+  "requestDetail": "activity_saveDraft + 本次参数",
+  "pending": "Agent 暂停，等待用户决定",
+  "pendingDetail": "requireToolApproval 触发执行前审批",
+  "deny": "拒绝：不执行本次写入",
+  "denyDetail": "读回 count 仍应为 0",
+  "approve": "批准：允许本次调用",
+  "approveDetail": "恢复对应工具请求",
+  "boundary": "MCP 服务执行边界",
+  "save": "服务保存草稿，再读回状态",
+  "saveDetail": "本例保存成功时，count 为 1"
+}
