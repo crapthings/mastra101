@@ -73,13 +73,13 @@
     "agent-streaming": "流式输出（Streaming）",
     "agent-request-context": "请求上下文（RequestContext）",
     "agent-processors": "处理器（Processors）",
-    "agent-run-control": "运行控制",
+    "agent-run-control": "运行控制（Run Control）",
     "agent-approval": "工具审批（Tool Approval）",
     "agent-code-mode": "代码模式（Code Mode）",
-    "agent-review": "运行记录与评估",
+    "agent-review": "运行记录与评估（Logs & Evals）",
     "agent-model-settings": "模型调用设置（modelSettings）",
     "agent-guardrails": "防护规则（Guardrails）",
-    "agent-recovery": "错误处理与恢复"
+    "agent-recovery": "错误处理与恢复（Error Recovery）"
   },
   "chapters": {
     "llm": "大语言模型",

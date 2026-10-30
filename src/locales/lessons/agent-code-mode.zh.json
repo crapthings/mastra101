@@ -8,11 +8,11 @@
     },
     {
       "title": "工具仍在原来的执行环境中工作",
-      "body": "Mastra 的 **createCodeMode()** 返回编排工具与配套 instructions。模型代码中的 external_* 调用，会被桥接到应用提供的工具；这些工具仍在宿主程序中执行自己的查询、校验与业务逻辑。\n代码运行环境和工具权限是两条边界。本例使用 QuickJsCodeModeTransport 执行模型编排代码，只暴露两个返回教学数据的只读工具，没有使用直接运行宿主 Node.js 的 LocalSandbox。"
+      "body": "Mastra 的 **createCodeMode()** 返回编排工具与配套 instructions。模型代码中的 external_* 调用，会被桥接到应用提供的工具；这些工具仍在宿主程序中执行查询、校验与业务逻辑。\n本例通过 **QuickJsCodeModeTransport** 在 QuickJS WebAssembly 环境中执行编排代码，暴露两个返回教学数据的只读工具。模型负责组织调用与计算，宿主工具负责提供数据。"
     },
     {
       "title": "用一组小数据核对结果",
-      "body": "12-code-mode.js 中，报名状态为两个“有效”、一个“已取消”，总容量为 20。按本例规则，有效人数应为 2，剩余名额应为 18。这是数据推导出的检查标准，不是模型实测答案。\n同时把 createCodeMode() 返回的工具与说明挂给 Agent，再观察它是否调用编排工具、调用哪些底层工具，以及汇总结果是否符合规则。\n桥接函数的名称以生成的 instructions 为准。例如本例工具 id 为 list-registrations，当前生成的名称是 external_list_registrations，不要直接从变量名猜调用名称。",
+      "body": "12-code-mode.js 中，报名状态为两个“有效”、一个“已取消”，总容量为 20。按本例规则，有效人数应为 2，剩余名额应为 18。这是数据推导出的检查标准，不是模型实测答案。\n把 createCodeMode() 返回的工具挂到 tools，同时将配套说明合入 instructions 系统提示词。前者让模型能调用编排工具，后者告诉它桥接函数怎样使用。再观察它是否调用编排工具、调用哪些底层工具，以及汇总结果是否符合规则。\n桥接函数的名称以生成的 instructions 为准。例如本例工具 id 为 list-registrations，当前生成的名称是 external_list_registrations，不要直接从变量名猜调用名称。",
       "codeBlocks": [
         {
           "label": "src/12-code-mode.js",
@@ -78,11 +78,11 @@
         },
         {
           "title": "工具仍在原来的执行环境中工作",
-          "body": "Mastra 的 **createCodeMode()** 返回编排工具与配套 instructions。模型代码中的 external_* 调用，会被桥接到应用提供的工具；这些工具仍在宿主程序中执行自己的查询、校验与业务逻辑。\n代码运行环境和工具权限是两条边界。本例使用 QuickJsCodeModeTransport 执行模型编排代码，只暴露两个返回教学数据的只读工具，没有使用直接运行宿主 Node.ts 的 LocalSandbox。"
+          "body": "Mastra 的 **createCodeMode()** 返回编排工具与配套 instructions。模型代码中的 external_* 调用，会被桥接到应用提供的工具；这些工具仍在宿主程序中执行查询、校验与业务逻辑。\n本例通过 **QuickJsCodeModeTransport** 在 QuickJS WebAssembly 环境中执行编排代码，暴露两个返回教学数据的只读工具。模型负责组织调用与计算，宿主工具负责提供数据。"
         },
         {
           "title": "用一组小数据核对结果",
-          "body": "12-code-mode.ts 中，报名状态为两个“有效”、一个“已取消”，总容量为 20。按本例规则，有效人数应为 2，剩余名额应为 18。这是数据推导出的检查标准，不是模型实测答案。\n同时把 createCodeMode() 返回的工具与说明挂给 Agent，再观察它是否调用编排工具、调用哪些底层工具，以及汇总结果是否符合规则。\n桥接函数的名称以生成的 instructions 为准。例如本例工具 id 为 list-registrations，当前生成的名称是 external_list_registrations，不要直接从变量名猜调用名称。",
+          "body": "12-code-mode.ts 中，报名状态为两个“有效”、一个“已取消”，总容量为 20。按本例规则，有效人数应为 2，剩余名额应为 18。这是数据推导出的检查标准，不是模型实测答案。\n把 createCodeMode() 返回的工具挂到 tools，同时将配套说明合入 instructions 系统提示词。前者让模型能调用编排工具，后者告诉它桥接函数怎样使用。再观察它是否调用编排工具、调用哪些底层工具，以及汇总结果是否符合规则。\n桥接函数的名称以生成的 instructions 为准。例如本例工具 id 为 list-registrations，当前生成的名称是 external_list_registrations，不要直接从变量名猜调用名称。",
           "codeBlocks": [
             {
               "label": "src/12-code-mode.ts",

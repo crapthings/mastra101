@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent'
 
-// 定义只根据已提供材料核对活动安排的助手。
+// 通过 instructions 配置系统提示词，定义活动资料助手的通用规则。
 const activityAgent = new Agent({
   id: 'activity-guide',
   name: '活动资料助手',
@@ -13,7 +13,7 @@ const activityAgent = new Agent({
   model: 'vercel/openai/gpt-6.1-sol'
 })
 
-// 提供本次材料，并要求整理可以确认和仍需补充的信息。
+// 通过用户提示词提供本次任务与材料，请求核对活动安排。
 const result = await activityAgent.generate(`
   请核对下面的活动资料，列出已确认信息与待确认事项。
   来源：主办方活动说明（教学材料）。

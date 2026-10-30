@@ -62,6 +62,8 @@ if (pending.finishReason === 'suspended' && pending.suspendPayload) {
   const result = decision.trim() === '确认'
     ? await agent.approveToolCallGenerate(options)
     : await agent.declineToolCallGenerate({ ...options, reason: '用户没有确认保存草稿。' })
+  console.log('本次恢复后的工具结果：')
+  console.dir(result.toolResults, { depth: null })
   console.log('恢复后的结束原因：', result.finishReason)
   console.log(result.text || '没有最终文本，请核对运行状态。')
 } else {
