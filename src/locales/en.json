@@ -24,5 +24,7 @@
   "chapters": {
     "llm": "Large language models",
     "agent": "Agents"
-  }
+  },
+  "openContents": "Contents",
+  "closeContents": "Close contents"
 }

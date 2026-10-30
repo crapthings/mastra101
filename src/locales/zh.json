@@ -370,5 +370,7 @@
     "ts": "TypeScript",
     "terminal": "终端"
   },
-  "wip": "WIP · 持续完善中"
+  "wip": "WIP · 持续完善中",
+  "openContents": "目录",
+  "closeContents": "关闭目录"
 }
