@@ -70,6 +70,7 @@
   ],
   "noteTitle": "本节检查",
   "note": "工具目录里已有 activity_lookupNotice，但还没有执行记录。怎样确认通知确实被查询？若返回“查询失败”，下一步应保留什么？",
+  "checkAnswer": "工具目录只说明可用。需要核对实际请求的 activityId、execute 返回的状态、来源及地点；查询失败时地点与业务事实仍未知，保留失败原因，不解释为活动不存在。",
   "codeVariants": {
     "ts": {
       "sections": [

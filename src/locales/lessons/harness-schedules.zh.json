@@ -1,6 +1,6 @@
 {
   "title": "定时任务（Schedules）",
-  "lead": "在指定时区触发工作，并区分触发记录与实际完成。",
+  "lead": "选读 · 在指定时区触发工作，并区分触发记录与实际完成。",
   "sections": [
     {
       "title": "今天做一次，明天还要再做",
@@ -39,12 +39,17 @@
         {
           "label": "Mastra：Schedules",
           "href": "https://mastra.ai/docs/harness/schedules"
+        },
+        {
+          "label": "回到主线综合案例",
+          "href": "/harness/case"
         }
       ]
     }
   ],
   "noteTitle": "本节检查",
   "note": "每天 9 点的计划存在，但今天没有生成核查结果。要分开检查哪些阶段？手动补跑前，怎样避免重复处理已经完成的工作？",
+  "checkAnswer": "分开检查计划与时区、worker 是否启动、触发和投递、具体运行、最终结果。补跑前按计划实例或业务键核对是否已有完成记录，避免重复处理。",
   "codeVariants": {
     "ts": {
       "sections": [
@@ -85,6 +90,10 @@
             {
               "label": "Mastra：Schedules",
               "href": "https://mastra.ai/docs/harness/schedules"
+            },
+            {
+              "label": "回到主线综合案例",
+              "href": "/harness/case"
             }
           ]
         }

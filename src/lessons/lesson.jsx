@@ -1,4 +1,5 @@
 import { publicUrl } from '@/lib/public-url'
+import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { CodeBlock } from '@/components/code-block'
@@ -58,7 +59,18 @@ export function Lesson ({ resources, chapter, number, previous, next, Diagram, d
           )}
         </section>
       ))}
-      <aside className='my-10 rounded-r-lg border-l-2 border-orange-500 bg-orange-50 px-6 py-5'><p className='mb-2 text-sm font-semibold text-orange-900'>{content.noteTitle}</p><p className='text-base leading-[1.9] text-stone-700'>{content.note}</p></aside>
+      <aside className='my-10 rounded-r-lg border-l-2 border-orange-500 bg-orange-50 px-6 py-5'>
+        <p className='mb-2 text-sm font-semibold text-orange-900'>{content.noteTitle}</p>
+        <p className='text-base leading-[1.9] text-stone-700'>{content.note}</p>
+        {content.checkAnswer && (
+          <Disclosure as='div' className='mt-4'>
+            <DisclosureButton className='rounded text-sm font-medium text-orange-900 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-700'>{t('checkAnswer')}</DisclosureButton>
+            <DisclosurePanel className='mt-4 space-y-3 border-t border-orange-200 pt-4 text-base leading-[1.9] text-stone-700'>
+              {content.checkAnswer.split('\n').filter(Boolean).map((paragraph, index) => <p key={index}>{renderTerms(paragraph)}</p>)}
+            </DisclosurePanel>
+          </Disclosure>
+        )}
+      </aside>
       <nav aria-label={t('pagination')} className='mt-14 flex font-sans justify-between gap-4 border-t border-stone-200 pt-6'>{previous ? <Link className='text-sm text-stone-500 hover:text-orange-700' to={previous}>← {t('previous')}</Link> : <span />} {next && <Link className='text-sm font-medium hover:text-orange-700' to={next}>{t('next')} →</Link>}</nav>
     </article>
   )

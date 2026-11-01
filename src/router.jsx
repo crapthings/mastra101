@@ -210,6 +210,7 @@ export const router = createBrowserRouter([
       { path: 'harness/controller', lazy: () => import('@/lessons/harness-controller') },
       { path: 'harness/coordination', lazy: () => import('@/lessons/harness-coordination') },
       { path: 'harness/recovery', lazy: () => import('@/lessons/harness-recovery') },
+      { path: 'harness/case', lazy: () => import('@/lessons/harness-case') },
       { path: 'input', element: <Navigate to='/prompts' replace /> },
       { path: 'input/modalities', element: <Navigate to='/modalities' replace /> },
       { path: 'input/system', element: <Navigate to='/prompts/system' replace /> },

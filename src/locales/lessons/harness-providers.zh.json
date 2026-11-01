@@ -1,6 +1,6 @@
 {
   "title": "事件来源（Signal Providers）",
-  "lead": "把来源订阅与线程路由连接起来，让持续任务对外部变化作出响应。",
+  "lead": "选读 · 把来源订阅与线程路由连接起来，让持续任务对外部变化作出响应。",
   "sections": [
     {
       "title": "事件到了，但该通知谁",
@@ -52,12 +52,17 @@
         {
           "label": "Mastra：Signal Providers",
           "href": "https://mastra.ai/docs/signals/signal-providers"
+        },
+        {
+          "label": "回到主线综合案例",
+          "href": "/harness/case"
         }
       ]
     }
   ],
   "noteTitle": "本节检查",
   "note": "服务重启后还能读到旧通知，却收不到新制度更新。应沿着事件接收、订阅恢复和通知写入检查什么？怎样验证一条新事件能到达目标线程？",
+  "checkAnswer": "检查外部事件是否接收、目标对象订阅是否恢复、事件是否路由到正确 thread、通知是否写入及处理。用一条新事件验证，不用旧收件箱记录证明重启后订阅仍在。",
   "codeVariants": {
     "ts": {
       "sections": [
@@ -111,6 +116,10 @@
             {
               "label": "Mastra：Signal Providers",
               "href": "https://mastra.ai/docs/signals/signal-providers"
+            },
+            {
+              "label": "回到主线综合案例",
+              "href": "/harness/case"
             }
           ]
         }

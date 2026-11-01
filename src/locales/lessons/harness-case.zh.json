@@ -1,0 +1,205 @@
+{
+  "title": "综合案例：连续核查",
+  "lead": "复用同一线程，在独立进程中补材料、识别旧报告，再交付对应最新证据的核查结果。",
+  "sections": [
+    {
+      "title": "先建立同一份申请",
+      "body": "下载本章项目并安装固定依赖。init 创建 APP-001 的材料记录与持久线程；重复 init 沿用原记录，不重置申请。inspect 只查看已有材料与报告状态，默认不会开始核查。\n所有命令在同一个示例目录串行运行。data/case-001.json 与 case-study.db 共同保存本例的材料指针和线程；不能只复制 JSON 就认为历史仍存在。本例的 demo-user 是固定教学归属，生产身份应由认证确定。",
+      "codeBlocks": [
+        {
+          "label": "终端：建立与读取",
+          "language": "bash",
+          "code": "node src/16-case.js init\nnode src/16-case.js inspect"
+        }
+      ]
+    },
+    {
+      "title": "第一轮：缺少批准也能交付明确报告",
+      "body": "配置 AI_GATEWAY_API_KEY 后运行 review。程序先将当前材料作为完整 application 状态保存，等待 persisted，再订阅同一 thread 并显式发消息。\n收到成功运行状态且有最终文字后，保存 case-001-report.json：含 threadId、runId、材料版本和摘要、证据快照、程序核对结果与模型说明。程序判定应为“待补批准”；模型说明仍标为待人工对照，不能由运行 success 推断语义正确。",
+      "codeBlocks": [
+        {
+          "label": "终端：第一轮核查",
+          "language": "bash",
+          "code": "node --env-file=.env src/16-case.js review"
+        }
+      ]
+    },
+    {
+      "title": "第二轮：先保存补充，再判断旧报告",
+      "body": "supplement 读取随包的 case-approval.json。它是作者编写的教学批准记录，金额为 560 元，指向 APP-001，批准日期早于住宿日期。程序检查申请、金额与时间是否匹配；无效批准仍保留待补状态。\n补材料后更新 revision、contents 和 value，但不发起模型调用。inspect 此时应显示旧报告 stale: true；旧 runId 不能作为新材料已经核查的证明。重复 supplement 不应继续增加版本。\n再次 review 沿用 threadId，生成新的 runId；报告 revision 与当前材料一致，stale 变为 false。即使批准记录适用，结论也只到“材料齐全，待人工确认”，没有提交报销或发送通知。",
+      "codeBlocks": [
+        {
+          "label": "终端：补材料与第二轮核查",
+          "language": "bash",
+          "code": "node src/16-case.js supplement\nnode src/16-case.js inspect\nnode src/16-case.js supplement\nnode --env-file=.env src/16-case.js review\nnode src/16-case.js inspect"
+        }
+      ]
+    },
+    {
+      "title": "按这张表验收",
+      "body": "先自己预测每一步，再运行并核对文件及输出。前一份报告会被新报告替换，需要比较时先另存副本；完整对话仍属于同一线程。",
+      "table": {
+        "headers": [
+          "操作",
+          "通过标准"
+        ],
+        "rows": [
+          [
+            "init，再 init",
+            "threadId 相同，revision=1，不请求模型"
+          ],
+          [
+            "第一次 review",
+            "报告有 runId；待补批准；stale=false"
+          ],
+          [
+            "supplement，inspect",
+            "threadId 不变，revision=2；旧报告 stale=true；不请求模型"
+          ],
+          [
+            "再 supplement",
+            "仍为 revision=2，重复状态不创建新版本"
+          ],
+          [
+            "第二次 review",
+            "runId 与上次不同；revision=2；stale=false；待人工确认"
+          ],
+          [
+            "缺少数据库或线程归属不符",
+            "明确失败，不创建替代线程掩盖缺失"
+          ]
+        ]
+      },
+      "codeBlocks": [
+        {
+          "label": "src/16-case.js",
+          "language": "javascript",
+          "code": "import { randomUUID } from 'node:crypto'\nimport { readFile, writeFile, rename } from 'node:fs/promises'\nimport { Mastra } from '@mastra/core'\nimport { createAssistant, createStorage } from './assistant.js'\nimport { receiveTurn } from './thread-runtime.js'\nimport { approvalSchema, caseSchema, createCaseFacts, assessCase, caseFingerprint, caseState } from './case-facts.js'\n\n// 在同一目录通过独立进程读取文件，每次只接受完整写入的教学记录。\nasync function readOptional (path) {\n  try {\n    return JSON.parse(await readFile(path, 'utf8'))\n  } catch (error) {\n    if (error.code === 'ENOENT') return null\n    throw error\n  }\n}\n\n// 用临时文件与重命名减少中断造成的半份 JSON，本案例只支持串行命令。\nasync function saveJson (path, value) {\n  await writeFile(`${path}.tmp`, JSON.stringify(value, null, 2) + '\\n')\n  await rename(`${path}.tmp`, path)\n}\n\n// 复用持久线程串起初始化、核查、补材料与再次核查，只有 review 请求模型。\nasync function main () {\n  const command = process.argv[2] || 'inspect'\n  if (!['init', 'inspect', 'supplement', 'review'].includes(command)) {\n    throw new Error('仅支持 init、inspect、supplement、review。')\n  }\n  const storage = await createStorage('case-study')\n  const reviewer = createAssistant(storage)\n  const mastra = new Mastra({ agents: { reviewer }, storage })\n  try {\n    const path = './data/case-001.json'\n    const reportPath = './data/case-001-report.json'\n    const saved = await readOptional(path)\n    let facts\n    if (saved) {\n      facts = caseSchema.parse(saved)\n    } else if (command === 'init') {\n      facts = createCaseFacts(randomUUID())\n      const memory = await reviewer.getMemory()\n      await memory.createThread({ threadId: facts.threadId, resourceId: facts.resourceId, title: 'APP-001 连续核查' })\n      await saveJson(path, facts)\n    } else {\n      throw new Error('先运行 init 建立申请；不要只复制指针文件而遗漏数据库。')\n    }\n    const memory = await reviewer.getMemory()\n    const storedThread = await memory.getThreadById({ threadId: facts.threadId })\n    if (!storedThread || storedThread.resourceId !== facts.resourceId) {\n      throw new Error('数据库中的原线程或归属不匹配，停止处理。')\n    }\n    const thread = { threadId: facts.threadId, resourceId: facts.resourceId }\n    if (command === 'supplement') {\n      const approval = approvalSchema.parse(JSON.parse(await readFile(new URL('../materials/case-approval.json', import.meta.url), 'utf8')))\n      if (JSON.stringify(facts.approval) !== JSON.stringify(approval)) {\n        facts = caseSchema.parse({ ...facts, approval, revision: facts.revision + 1 })\n        await saveJson(path, facts)\n      }\n    }\n    if (command !== 'inspect') {\n      const signal = await reviewer.sendStateSignal(caseState(facts), { ...thread, ifIdle: { behavior: 'persist' } })\n      if (!signal.skipped) {\n        const accepted = await signal.accepted\n        if (accepted.action !== 'persist') throw new Error('没有进入预期的仅保存状态分支。')\n        await signal.persisted\n      }\n      console.log('状态已保存，本次是否跳过重复版本：', Boolean(signal.skipped))\n    }\n    if (command === 'review') {\n      const subscription = await reviewer.subscribeToThread({ ...thread, withRunStatus: true })\n      try {\n        const run = await receiveTurn(subscription, () => reviewer.sendMessage('请只按最新 application 状态核查 APP-001。说明金额、上限、批准记录是否适用与下一步；不要把旧轮次的缺项当作最新事实，不声称完成报销。', thread))\n        if (!run.text.trim()) throw new Error('没有最终说明，不写入新的核查报告。')\n        const report = {\n          applicationId: facts.applicationId, threadId: facts.threadId, runId: run.runId,\n          revision: facts.revision, fingerprint: caseFingerprint(facts),\n          assessment: assessCase(facts), evidence: facts,\n          modelCommentary: run.text, commentaryReview: '待人工对照材料核实'\n        }\n        await saveJson(reportPath, report)\n        console.log('已保存本次核查报告：', reportPath)\n      } finally {\n        subscription.unsubscribe()\n      }\n    }\n    const report = await readOptional(reportPath)\n    console.dir({\n      applicationId: facts.applicationId, threadId: facts.threadId,\n      revision: facts.revision, currentAssessment: assessCase(facts),\n      report: report ? { runId: report.runId, revision: report.revision, stale: report.fingerprint !== caseFingerprint(facts) } : null\n    }, { depth: null })\n    if (command === 'init' && saved) console.log('沿用已有申请，没有重置材料或线程。')\n    if (command === 'supplement') console.log('补材料只保存状态，不会自动请求模型；运行 review 后再读取新报告。')\n  } finally {\n    await mastra.shutdown()\n    await storage.close()\n  }\n}\n\n// 保留失败原因与退出码，旧报告不被当作本次成功的新结果。\nmain().catch(error => {\n  console.error(error instanceof Error ? error.message : error)\n  process.exitCode = 1\n})"
+        },
+        {
+          "label": "src/case-facts.js",
+          "language": "javascript",
+          "code": "import { createHash } from 'node:crypto'\nimport { z } from 'zod'\n\n// 约定本地教学批准记录，真实应用仍需从可信审批系统取得并验证记录。\nexport const approvalSchema = z.object({\n  id: z.string().min(1), applicationId: z.string().min(1),\n  approvedAt: z.iso.date(),\n  maxAmount: z.number().positive(), source: z.string().min(1)\n})\n\n// 将归属、材料版本与核查事实保存在一个可重新读取的教学清单中。\nexport const caseSchema = z.object({\n  applicationId: z.literal('APP-001'), resourceId: z.literal('demo-user'),\n  threadId: z.string().min(1), revision: z.number().int().positive(),\n  amount: z.number().positive(), limit: z.number().positive(),\n  stayDate: z.iso.date(),\n  policySource: z.string().min(1), approval: approvalSchema.nullable()\n})\n\n// 用固定申请建立案例起点，后续命令继续同一个 thread 而不是重建任务。\nexport function createCaseFacts (threadId) {\n  return caseSchema.parse({\n    applicationId: 'APP-001', resourceId: 'demo-user', threadId, revision: 1,\n    amount: 560, limit: 500, stayDate: '2026-11-14',\n    policySource: '教学制度 v1：每晚 500 元，超额须事先书面批准', approval: null\n  })\n}\n\n// 由代码检查批准与申请、金额和时间是否对应，模型只负责解释这些证据。\nexport function assessCase (input) {\n  const facts = caseSchema.parse(input)\n  const validApproval = facts.approval &&\n    facts.approval.applicationId === facts.applicationId &&\n    facts.approval.maxAmount >= facts.amount &&\n    facts.approval.approvedAt < facts.stayDate\n  const missing = facts.amount > facts.limit && !validApproval\n    ? ['适用于本申请及金额的事先书面批准记录']\n    : []\n  return {\n    status: missing.length ? '待补批准' : '材料齐全，待人工确认',\n    missing, approvalId: validApproval ? facts.approval.id : null\n  }\n}\n\n// 用材料摘要识别旧报告是否仍对应当前事实，避免补材料后继续显示旧结论。\nexport function caseFingerprint (input) {\n  return createHash('sha256').update(JSON.stringify(caseSchema.parse(input))).digest('hex')\n}\n\n// 同时生成程序值和模型可读说明，使一次更新的两个表示保持一致。\nexport function caseState (input) {\n  const facts = caseSchema.parse(input)\n  return {\n    id: 'application', mode: 'snapshot',\n    cacheKey: `${facts.applicationId}:v${facts.revision}:${caseFingerprint(facts)}`,\n    value: facts,\n    contents: `教学申请与制度材料：${JSON.stringify(facts)}。程序核对：${JSON.stringify(assessCase(facts))}。材料齐全也只是待人工确认；不得声称已报销或已提交。`\n  }\n}"
+        }
+      ]
+    },
+    {
+      "title": "遇到更复杂的生命周期，再选读",
+      "body": "本案例验证跨进程读取已保存线程与材料，不演示进程在生成中被终止后的自动恢复，也不是并发任务管理器。要验证中断后的检查点恢复，使用第 15 节的独立恢复演练；涉及多副本则先完成第 14 节的协调检查。",
+      "links": [
+        {
+          "label": "选读：故障恢复演练",
+          "href": "/harness/recovery"
+        },
+        {
+          "label": "选读：跨实例协调",
+          "href": "/harness/coordination"
+        }
+      ]
+    }
+  ],
+  "noteTitle": "综合验收",
+  "note": "补材料后 inspect 显示旧报告 stale: true，但旧报告的模型文字写着“核查完成”。你会怎样展示当前进度？第二次 review 之后，哪些记录能证明使用了新材料，哪些仍需人工检查？",
+  "checkAnswer": "先显示“材料已更新，待重新核查”，保留旧报告的版本和运行标识，不将旧模型文字当成当前结论。第二轮核对相同 threadId、新 runId、最新 revision、匹配的材料摘要与证据快照；再人工核对模型说明是否忠实。材料齐全仍须人工确认，不能宣称报销完成。",
+  "codeVariants": {
+    "ts": {
+      "sections": [
+        {
+          "title": "先建立同一份申请",
+          "body": "下载本章项目并安装固定依赖。init 创建 APP-001 的材料记录与持久线程；重复 init 沿用原记录，不重置申请。inspect 只查看已有材料与报告状态，默认不会开始核查。\n所有命令在同一个示例目录串行运行。data/case-001.json 与 case-study.db 共同保存本例的材料指针和线程；不能只复制 JSON 就认为历史仍存在。本例的 demo-user 是固定教学归属，生产身份应由认证确定。",
+          "codeBlocks": [
+            {
+              "label": "终端：建立与读取",
+              "language": "bash",
+              "code": "node src/16-case.ts init\nnode src/16-case.ts inspect"
+            }
+          ]
+        },
+        {
+          "title": "第一轮：缺少批准也能交付明确报告",
+          "body": "配置 AI_GATEWAY_API_KEY 后运行 review。程序先将当前材料作为完整 application 状态保存，等待 persisted，再订阅同一 thread 并显式发消息。\n收到成功运行状态且有最终文字后，保存 case-001-report.json：含 threadId、runId、材料版本和摘要、证据快照、程序核对结果与模型说明。程序判定应为“待补批准”；模型说明仍标为待人工对照，不能由运行 success 推断语义正确。",
+          "codeBlocks": [
+            {
+              "label": "终端：第一轮核查",
+              "language": "bash",
+              "code": "node --env-file=.env src/16-case.ts review"
+            }
+          ]
+        },
+        {
+          "title": "第二轮：先保存补充，再判断旧报告",
+          "body": "supplement 读取随包的 case-approval.json。它是作者编写的教学批准记录，金额为 560 元，指向 APP-001，批准日期早于住宿日期。程序检查申请、金额与时间是否匹配；无效批准仍保留待补状态。\n补材料后更新 revision、contents 和 value，但不发起模型调用。inspect 此时应显示旧报告 stale: true；旧 runId 不能作为新材料已经核查的证明。重复 supplement 不应继续增加版本。\n再次 review 沿用 threadId，生成新的 runId；报告 revision 与当前材料一致，stale 变为 false。即使批准记录适用，结论也只到“材料齐全，待人工确认”，没有提交报销或发送通知。",
+          "codeBlocks": [
+            {
+              "label": "终端：补材料与第二轮核查",
+              "language": "bash",
+              "code": "node src/16-case.ts supplement\nnode src/16-case.ts inspect\nnode src/16-case.ts supplement\nnode --env-file=.env src/16-case.ts review\nnode src/16-case.ts inspect"
+            }
+          ]
+        },
+        {
+          "title": "按这张表验收",
+          "body": "先自己预测每一步，再运行并核对文件及输出。前一份报告会被新报告替换，需要比较时先另存副本；完整对话仍属于同一线程。",
+          "table": {
+            "headers": [
+              "操作",
+              "通过标准"
+            ],
+            "rows": [
+              [
+                "init，再 init",
+                "threadId 相同，revision=1，不请求模型"
+              ],
+              [
+                "第一次 review",
+                "报告有 runId；待补批准；stale=false"
+              ],
+              [
+                "supplement，inspect",
+                "threadId 不变，revision=2；旧报告 stale=true；不请求模型"
+              ],
+              [
+                "再 supplement",
+                "仍为 revision=2，重复状态不创建新版本"
+              ],
+              [
+                "第二次 review",
+                "runId 与上次不同；revision=2；stale=false；待人工确认"
+              ],
+              [
+                "缺少数据库或线程归属不符",
+                "明确失败，不创建替代线程掩盖缺失"
+              ]
+            ]
+          },
+          "codeBlocks": [
+            {
+              "label": "src/16-case.ts",
+              "language": "typescript",
+              "code": "import { randomUUID } from 'node:crypto'\nimport { readFile, writeFile, rename } from 'node:fs/promises'\nimport { Mastra } from '@mastra/core'\nimport { createAssistant, createStorage } from './assistant.ts'\nimport { receiveTurn } from './thread-runtime.ts'\nimport { approvalSchema, caseSchema, createCaseFacts, assessCase, caseFingerprint, caseState } from './case-facts.ts'\n\n// 在同一目录通过独立进程读取文件，每次只接受完整写入的教学记录。\nasync function readOptional (path) {\n  try {\n    return JSON.parse(await readFile(path, 'utf8'))\n  } catch (error) {\n    if (error.code === 'ENOENT') return null\n    throw error\n  }\n}\n\n// 用临时文件与重命名减少中断造成的半份 JSON，本案例只支持串行命令。\nasync function saveJson (path, value) {\n  await writeFile(`${path}.tmp`, JSON.stringify(value, null, 2) + '\\n')\n  await rename(`${path}.tmp`, path)\n}\n\n// 复用持久线程串起初始化、核查、补材料与再次核查，只有 review 请求模型。\nasync function main () {\n  const command = process.argv[2] || 'inspect'\n  if (!['init', 'inspect', 'supplement', 'review'].includes(command)) {\n    throw new Error('仅支持 init、inspect、supplement、review。')\n  }\n  const storage = await createStorage('case-study')\n  const reviewer = createAssistant(storage)\n  const mastra = new Mastra({ agents: { reviewer }, storage })\n  try {\n    const path = './data/case-001.json'\n    const reportPath = './data/case-001-report.json'\n    const saved = await readOptional(path)\n    let facts\n    if (saved) {\n      facts = caseSchema.parse(saved)\n    } else if (command === 'init') {\n      facts = createCaseFacts(randomUUID())\n      const memory = await reviewer.getMemory()\n      await memory.createThread({ threadId: facts.threadId, resourceId: facts.resourceId, title: 'APP-001 连续核查' })\n      await saveJson(path, facts)\n    } else {\n      throw new Error('先运行 init 建立申请；不要只复制指针文件而遗漏数据库。')\n    }\n    const memory = await reviewer.getMemory()\n    const storedThread = await memory.getThreadById({ threadId: facts.threadId })\n    if (!storedThread || storedThread.resourceId !== facts.resourceId) {\n      throw new Error('数据库中的原线程或归属不匹配，停止处理。')\n    }\n    const thread = { threadId: facts.threadId, resourceId: facts.resourceId }\n    if (command === 'supplement') {\n      const approval = approvalSchema.parse(JSON.parse(await readFile(new URL('../materials/case-approval.json', import.meta.url), 'utf8')))\n      if (JSON.stringify(facts.approval) !== JSON.stringify(approval)) {\n        facts = caseSchema.parse({ ...facts, approval, revision: facts.revision + 1 })\n        await saveJson(path, facts)\n      }\n    }\n    if (command !== 'inspect') {\n      const signal = await reviewer.sendStateSignal(caseState(facts), { ...thread, ifIdle: { behavior: 'persist' } })\n      if (!signal.skipped) {\n        const accepted = await signal.accepted\n        if (accepted.action !== 'persist') throw new Error('没有进入预期的仅保存状态分支。')\n        await signal.persisted\n      }\n      console.log('状态已保存，本次是否跳过重复版本：', Boolean(signal.skipped))\n    }\n    if (command === 'review') {\n      const subscription = await reviewer.subscribeToThread({ ...thread, withRunStatus: true })\n      try {\n        const run = await receiveTurn(subscription, () => reviewer.sendMessage('请只按最新 application 状态核查 APP-001。说明金额、上限、批准记录是否适用与下一步；不要把旧轮次的缺项当作最新事实，不声称完成报销。', thread))\n        if (!run.text.trim()) throw new Error('没有最终说明，不写入新的核查报告。')\n        const report = {\n          applicationId: facts.applicationId, threadId: facts.threadId, runId: run.runId,\n          revision: facts.revision, fingerprint: caseFingerprint(facts),\n          assessment: assessCase(facts), evidence: facts,\n          modelCommentary: run.text, commentaryReview: '待人工对照材料核实'\n        }\n        await saveJson(reportPath, report)\n        console.log('已保存本次核查报告：', reportPath)\n      } finally {\n        subscription.unsubscribe()\n      }\n    }\n    const report = await readOptional(reportPath)\n    console.dir({\n      applicationId: facts.applicationId, threadId: facts.threadId,\n      revision: facts.revision, currentAssessment: assessCase(facts),\n      report: report ? { runId: report.runId, revision: report.revision, stale: report.fingerprint !== caseFingerprint(facts) } : null\n    }, { depth: null })\n    if (command === 'init' && saved) console.log('沿用已有申请，没有重置材料或线程。')\n    if (command === 'supplement') console.log('补材料只保存状态，不会自动请求模型；运行 review 后再读取新报告。')\n  } finally {\n    await mastra.shutdown()\n    await storage.close()\n  }\n}\n\n// 保留失败原因与退出码，旧报告不被当作本次成功的新结果。\nmain().catch(error => {\n  console.error(error instanceof Error ? error.message : error)\n  process.exitCode = 1\n})"
+            },
+            {
+              "label": "src/case-facts.ts",
+              "language": "typescript",
+              "code": "import { createHash } from 'node:crypto'\nimport { z } from 'zod'\n\n// 约定本地教学批准记录，真实应用仍需从可信审批系统取得并验证记录。\nexport const approvalSchema = z.object({\n  id: z.string().min(1), applicationId: z.string().min(1),\n  approvedAt: z.iso.date(),\n  maxAmount: z.number().positive(), source: z.string().min(1)\n})\n\n// 将归属、材料版本与核查事实保存在一个可重新读取的教学清单中。\nexport const caseSchema = z.object({\n  applicationId: z.literal('APP-001'), resourceId: z.literal('demo-user'),\n  threadId: z.string().min(1), revision: z.number().int().positive(),\n  amount: z.number().positive(), limit: z.number().positive(),\n  stayDate: z.iso.date(),\n  policySource: z.string().min(1), approval: approvalSchema.nullable()\n})\n\n// 用固定申请建立案例起点，后续命令继续同一个 thread 而不是重建任务。\nexport function createCaseFacts (threadId) {\n  return caseSchema.parse({\n    applicationId: 'APP-001', resourceId: 'demo-user', threadId, revision: 1,\n    amount: 560, limit: 500, stayDate: '2026-11-14',\n    policySource: '教学制度 v1：每晚 500 元，超额须事先书面批准', approval: null\n  })\n}\n\n// 由代码检查批准与申请、金额和时间是否对应，模型只负责解释这些证据。\nexport function assessCase (input) {\n  const facts = caseSchema.parse(input)\n  const validApproval = facts.approval &&\n    facts.approval.applicationId === facts.applicationId &&\n    facts.approval.maxAmount >= facts.amount &&\n    facts.approval.approvedAt < facts.stayDate\n  const missing = facts.amount > facts.limit && !validApproval\n    ? ['适用于本申请及金额的事先书面批准记录']\n    : []\n  return {\n    status: missing.length ? '待补批准' : '材料齐全，待人工确认',\n    missing, approvalId: validApproval ? facts.approval.id : null\n  }\n}\n\n// 用材料摘要识别旧报告是否仍对应当前事实，避免补材料后继续显示旧结论。\nexport function caseFingerprint (input) {\n  return createHash('sha256').update(JSON.stringify(caseSchema.parse(input))).digest('hex')\n}\n\n// 同时生成程序值和模型可读说明，使一次更新的两个表示保持一致。\nexport function caseState (input) {\n  const facts = caseSchema.parse(input)\n  return {\n    id: 'application', mode: 'snapshot',\n    cacheKey: `${facts.applicationId}:v${facts.revision}:${caseFingerprint(facts)}`,\n    value: facts,\n    contents: `教学申请与制度材料：${JSON.stringify(facts)}。程序核对：${JSON.stringify(assessCase(facts))}。材料齐全也只是待人工确认；不得声称已报销或已提交。`\n  }\n}"
+            }
+          ]
+        },
+        {
+          "title": "遇到更复杂的生命周期，再选读",
+          "body": "本案例验证跨进程读取已保存线程与材料，不演示进程在生成中被终止后的自动恢复，也不是并发任务管理器。要验证中断后的检查点恢复，使用第 15 节的独立恢复演练；涉及多副本则先完成第 14 节的协调检查。",
+          "links": [
+            {
+              "label": "选读：故障恢复演练",
+              "href": "/harness/recovery"
+            },
+            {
+              "label": "选读：跨实例协调",
+              "href": "/harness/coordination"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

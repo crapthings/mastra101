@@ -1,5 +1,6 @@
 """Keep chapters 11–22 source, language variants, materials and downloads aligned."""
 import copy
+import argparse
 import json
 import re
 import shutil
@@ -13,7 +14,14 @@ def typescript_text(text):
     """Convert exact .js extensions while preserving JSON files and the Node.js name."""
     return re.sub(r'\.js\b', '.ts', text).replace('Node.ts', 'Node.js')
 
-for folder, prefix in [('11-skills', 'skill-'), ('12-workspace', 'workspace-'), ('13-sandbox', 'sandbox-'), ('14-subagents', 'subagent-'), ('15-connections', 'connection-'), ('16-observability', 'observe-'), ('17-evals', 'eval-'), ('18-server', 'server-'), ('19-auth', 'auth-'), ('20-deployment', 'deploy-'), ('21-rag', 'rag-'), ('22-harness', 'harness-')]:
+projects = [('11-skills', 'skill-'), ('12-workspace', 'workspace-'), ('13-sandbox', 'sandbox-'), ('14-subagents', 'subagent-'), ('15-connections', 'connection-'), ('16-observability', 'observe-'), ('17-evals', 'eval-'), ('18-server', 'server-'), ('19-auth', 'auth-'), ('20-deployment', 'deploy-'), ('21-rag', 'rag-'), ('22-harness', 'harness-')]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--chapters', nargs='+', choices=[folder for folder, _ in projects])
+selected = parser.parse_args().chapters
+
+for folder, prefix in projects:
+    if selected and folder not in selected:
+        continue
     js_root = root / 'examples' / folder
     ts_root = root / 'examples' / (folder + '-ts')
     (ts_root / 'src').mkdir(parents=True, exist_ok=True)

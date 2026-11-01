@@ -75,12 +75,12 @@ export const chapters = [
       { id: 'input-audio', path: '/modalities/audio' },
       { id: 'input-video', path: '/modalities/video' },
       { id: 'input-combined', path: '/modalities/combined' },
-      { id: 'input-generation', path: '/modalities/generation' },
-      { id: 'input-multimodal', path: '/modalities/multimodal' },
-      { id: 'input-embedding', path: '/modalities/embedding' },
-      { id: 'input-planning', path: '/modalities/planning' },
-      { id: 'input-specialists', path: '/modalities/specialists' },
-      { id: 'input-world-models', path: '/modalities/world-models' }
+      { id: 'input-generation', path: '/modalities/generation', optional: true },
+      { id: 'input-multimodal', path: '/modalities/multimodal', optional: true },
+      { id: 'input-embedding', path: '/modalities/embedding', optional: true },
+      { id: 'input-planning', path: '/modalities/planning', optional: true },
+      { id: 'input-specialists', path: '/modalities/specialists', optional: true },
+      { id: 'input-world-models', path: '/modalities/world-models', optional: true }
     ]
   },
   {
@@ -199,8 +199,8 @@ export const chapters = [
       { id: 'connection-credentials', path: '/connections/credentials' },
       { id: 'connection-approval', path: '/connections/approval' },
       { id: 'connection-server', path: '/connections/server' },
-      { id: 'connection-a2a', path: '/connections/a2a' },
-      { id: 'connection-runtimes', path: '/connections/runtimes' }
+      { id: 'connection-a2a', path: '/connections/a2a', optional: true },
+      { id: 'connection-runtimes', path: '/connections/runtimes', optional: true }
     ]
   },
   {
@@ -294,13 +294,14 @@ export const chapters = [
       { id: 'harness-state', path: '/harness/state' },
       { id: 'harness-goals', path: '/harness/goals' },
       { id: 'harness-tasks', path: '/harness/tasks' },
-      { id: 'harness-background', path: '/harness/background' },
-      { id: 'harness-notifications', path: '/harness/notifications' },
-      { id: 'harness-providers', path: '/harness/providers' },
-      { id: 'harness-schedules', path: '/harness/schedules' },
-      { id: 'harness-controller', path: '/harness/controller' },
-      { id: 'harness-coordination', path: '/harness/coordination' },
-      { id: 'harness-recovery', path: '/harness/recovery' }
+      { id: 'harness-case', path: '/harness/case' },
+      { id: 'harness-background', path: '/harness/background', optional: true },
+      { id: 'harness-notifications', path: '/harness/notifications', optional: true },
+      { id: 'harness-providers', path: '/harness/providers', optional: true },
+      { id: 'harness-schedules', path: '/harness/schedules', optional: true },
+      { id: 'harness-controller', path: '/harness/controller', optional: true },
+      { id: 'harness-coordination', path: '/harness/coordination', optional: true },
+      { id: 'harness-recovery', path: '/harness/recovery', optional: true }
     ]
   }
 ]

@@ -1,6 +1,6 @@
 {
   "title": "后台任务（Background Tasks）",
-  "lead": "让慢操作独立推进，并把完成结果送回智能体继续处理。",
+  "lead": "选读 · 让慢操作独立推进，并把完成结果送回智能体继续处理。",
   "sections": [
     {
       "title": "慢工具，不必一直占住当前分支",
@@ -63,12 +63,17 @@
         {
           "label": "Mastra：Background Tasks",
           "href": "https://mastra.ai/docs/harness/background-tasks"
+        },
+        {
+          "label": "回到主线综合案例",
+          "href": "/harness/case"
         }
       ]
     }
   ],
   "noteTitle": "本节检查",
   "note": "页面收到了后台任务已提交的事件，随后返回第一段说明。要确认核查已经完成并用于结论，还需要观察哪两个环节？",
+  "checkAnswer": "先观察后台任务本身完成并取得工具结果，再观察 Agent 接回结果并形成可核对的结论。提交事件和第一段文字都不足以证明这两步已经发生。",
   "codeVariants": {
     "ts": {
       "sections": [
@@ -133,6 +138,10 @@
             {
               "label": "Mastra：Background Tasks",
               "href": "https://mastra.ai/docs/harness/background-tasks"
+            },
+            {
+              "label": "回到主线综合案例",
+              "href": "/harness/case"
             }
           ]
         }

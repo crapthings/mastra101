@@ -57,6 +57,7 @@
   ],
   "noteTitle": "本节检查",
   "note": "HTTP 客户端已 disconnect，服务仍在运行。为什么这可以是正常结果？本例中由谁负责最终关闭监听？",
+  "checkAnswer": "客户端 disconnect 结束自身连接，HTTP 服务可以继续服务其他客户端。示例中监听由 startLocalHttp 的调用方在 finally 调用 host.close 回收；stdio 子进程与 HTTP 服务的生命周期不同。",
   "codeVariants": {
     "ts": {
       "sections": [

@@ -26,7 +26,7 @@ export function ChapterNavigation () {
             </DisclosureButton>
           </h2>
           <DisclosurePanel as='ul' className='mb-3 ml-2 space-y-1 border-l border-stone-200 pl-3'>
-            {chapter.lessons.map(lesson => <li key={lesson.id}><Link to={lesson.path} onClick={close} aria-current={currentPath === lesson.path ? 'page' : undefined} className={`block rounded-lg px-3 py-2.5 text-sm leading-relaxed transition-colors ${currentPath === lesson.path ? 'bg-orange-100/70 font-medium text-orange-900' : 'text-stone-500 hover:bg-stone-100'}`}>{t(`lessons.${lesson.id}`)}</Link></li>)}
+            {chapter.lessons.map(lesson => <li key={lesson.id}><Link to={lesson.path} onClick={close} aria-current={currentPath === lesson.path ? 'page' : undefined} className={`block rounded-lg px-3 py-2.5 text-sm leading-relaxed transition-colors ${currentPath === lesson.path ? 'bg-orange-100/70 font-medium text-orange-900' : 'text-stone-500 hover:bg-stone-100'}`}>{t(`lessons.${lesson.id}`)}{lesson.optional && <span className='ml-2 whitespace-nowrap text-xs text-stone-500'>{t('optionalLesson')}</span>}</Link></li>)}
           </DisclosurePanel>
         </Disclosure>
       ))}

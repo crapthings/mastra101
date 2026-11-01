@@ -71,6 +71,7 @@
   ],
   "noteTitle": "本节检查",
   "note": "批准状态已变，却沿用旧 cacheKey，会发生什么？如果更新了版本和 value，却没改 contents，模型能否得知新的批准情况？",
+  "checkAnswer": "沿用 cacheKey 可能被当成相同版本跳过。value 给程序使用，contents 给模型；只更新 value 不会自动更新模型读到的说明，二者必须随同一事实版本一起更新。",
   "codeVariants": {
     "ts": {
       "sections": [

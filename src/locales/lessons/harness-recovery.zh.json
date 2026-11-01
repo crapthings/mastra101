@@ -1,6 +1,6 @@
 {
   "title": "恢复与验收（Recovery）",
-  "lead": "用检查点衔接中断的任务，并检查恢复后的业务结果是否可信。",
+  "lead": "选读 · 用检查点衔接中断的任务，并检查恢复后的业务结果是否可信。",
   "sections": [
     {
       "title": "先确定缺的是哪种连续性",
@@ -50,12 +50,17 @@
         {
           "label": "Mastra：快照与故障恢复",
           "href": "https://mastra.ai/docs/harness/durable-agents#crash-recovery"
+        },
+        {
+          "label": "回到主线综合案例",
+          "href": "/harness/case"
         }
       ]
     }
   ],
   "noteTitle": "本节检查",
   "note": "中断前可能已经提交过申请。恢复后，应使用什么业务标识核对结果？交给后续 Agent 时，还要附上哪些证据和未完成事项？",
+  "checkAnswer": "使用稳定申请或操作业务键核对外部是否已提交，再决定补做或去重；runId 仅定位执行。交接时附材料版本、外部记录、已完成步骤、停止原因和剩余待办。",
   "codeVariants": {
     "ts": {
       "sections": [
@@ -107,6 +112,10 @@
             {
               "label": "Mastra：快照与故障恢复",
               "href": "https://mastra.ai/docs/harness/durable-agents#crash-recovery"
+            },
+            {
+              "label": "回到主线综合案例",
+              "href": "/harness/case"
             }
           ]
         }

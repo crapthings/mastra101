@@ -89,6 +89,7 @@
   ],
   "noteTitle": "本节检查",
   "note": "一条更新的 accepted.action 为 persist。它是否已经被模型处理？应再等待什么确认保存，又通过什么入口让下一轮使用它？",
+  "checkAnswer": "persist 表示选择仅保存，不表示模型已经处理；继续等待 persisted 确认保存。之后通过显式 sendMessage 等触发新一轮，再核对实际输入和结论。",
   "codeVariants": {
     "ts": {
       "sections": [

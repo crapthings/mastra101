@@ -35,3 +35,19 @@ service.ts 提供固定教学通知、资源、提示模板与进程内草稿数
 01 与 09 聚焦连接类型和运行归属，没有额外入口。ACP 与 SDK Agent 本章只建立认识，不会安装或启动外部智能体程序。
 
 pnpm-workspace.yaml 明确跳过本章未使用的 esbuild 安装脚本；示例直接由 Node 运行，不使用依赖中的打包 CLI。其他安装配置与锁文件随包提供。资料都是教学数据，不代表真实通知、预约记录或远程模型质量。
+
+## 主线综合任务：读取通知 → 确认草稿
+
+01—07 为 MCP 主线；08—09 为远程任务与运行时选读。完成主线后直接进入追踪与指标，无需安装其他智能体 SDK。
+
+```bash
+node src/10-connected-case.ts 甲 reading
+node src/10-connected-case.ts 乙 reading
+node src/10-connected-case.ts 甲 unknown
+node src/10-connected-case.ts 甲 FAIL
+node src/10-connected-case.ts 无效 reading
+```
+
+每次只运行一条命令。正常路径先显示当前 owner、地点、来源、已读资源和 user 角色模板，再展示完整草稿。先试拒绝，数量应为 0；重新运行并确认，数量应为 1。甲对应南门，乙对应东门。unknown 与 FAIL 保留不同业务状态，不进入保存；无效凭证返回发现错误与 401，退出码为 1。
+
+该入口不请求模型。草稿由工具返回值确定性生成；程序直接 execute 前先取得终端中的明确确认，这属于应用侧执行检查，不经过 Agent 审批。需要观察框架审批暂停与恢复时使用 06。服务只绑定临时回环端口，客户端与监听都会回收；草稿仅在当前服务内存存在，结束后清空。

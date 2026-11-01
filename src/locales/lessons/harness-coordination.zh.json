@@ -1,6 +1,6 @@
 {
   "title": "跨进程协调（PubSub & Leases）",
-  "lead": "让新输入找到实际运行方，并避免两个实例同时推进同一线程。",
+  "lead": "选读 · 让新输入找到实际运行方，并避免两个实例同时推进同一线程。",
   "sections": [
     {
       "title": "同一段对话，可能命中两台服务",
@@ -49,10 +49,15 @@
         {
           "label": "Mastra：多进程运行",
           "href": "https://mastra.ai/docs/signals/running-across-processes"
+        },
+        {
+          "label": "回到主线综合案例",
+          "href": "/harness/case"
         }
       ]
     }
   ],
   "noteTitle": "本节检查",
-  "note": "两台实例共用数据库，却各自用进程内 PubSub。用户补充材料到了 B，A 仍在运行，会有什么风险？还需要哪两类协调能力？"
+  "note": "两台实例共用数据库，却各自用进程内 PubSub。用户补充材料到了 B，A 仍在运行，会有什么风险？还需要哪两类协调能力？",
+  "checkAnswer": "B 的进程内事件不能通知 A，可能启动重复执行。除共享存储外还需要跨实例 PubSub 和共享租约/执行所有权；两者要与命名空间及存储配置兼容。"
 }

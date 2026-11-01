@@ -3,3 +3,4 @@ node_modules/
 *.db
 *.db-*
 reminder-draft.json
+preparation-draft.md

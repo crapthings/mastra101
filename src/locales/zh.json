@@ -206,7 +206,8 @@
     "harness-tasks": "任务清单（Task Tracking）",
     "harness-notifications": "通知收件箱（Notifications）",
     "harness-providers": "事件来源（Signal Providers）",
-    "harness-coordination": "跨进程协调（PubSub & Leases）"
+    "harness-coordination": "跨进程协调（PubSub & Leases）",
+    "harness-case": "综合案例：连续核查"
   },
   "chapters": {
     "llm": "大语言模型",
@@ -372,5 +373,7 @@
   },
   "wip": "WIP · 持续完善中",
   "openContents": "目录",
-  "closeContents": "关闭目录"
+  "closeContents": "关闭目录",
+  "checkAnswer": "展开参考判断",
+  "optionalLesson": "选读"
 }

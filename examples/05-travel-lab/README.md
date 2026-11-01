@@ -79,3 +79,11 @@ materials/rule-record.txt 是待填写的规则维护记录模板。保存实际
 这些是材料核对依据，不是模型实际回答。Studio 对话及 image、frames 命令会产生真实模型调用费用。模型为 vercel/openai/gpt-6.1-sol，环境变量为 AI_GATEWAY_API_KEY。
 
 参考：[Mastra Studio](https://mastra.ai/docs/studio/overview)、[模型输入能力](https://vercel.com/ai-gateway/models/gpt-6.1-sol)。
+
+## 06 主线交付：一份有来源的核对报告
+
+06 的第 1—7 节完成读取与多源核对后，即可进入 07 智能体；第 8—13 节为选读。主线不要求接入 OCR、转写、三维生成或世界模型。
+
+打开 materials/event-review-sheet.txt，按模板对照 event-notes.txt、event-document.txt、event-notice.png、event-voice.txt，先保留自己的完整输入与结果。海报需要实际附图；只发送文件名时，应标为未读取。本人计划与同行人的状态分别记录。
+
+第二轮只加入 event-change-notice.txt，检查开始时间由 14:00 更新到 14:30，而入场、预约要求与个人状态不被一并改写。按表内八项自检后，再打开 event-review-reference.txt 对照作者参考判断。关键项不通过时修正后再交给 Agent；参考文件不是模型响应或实际预约记录。

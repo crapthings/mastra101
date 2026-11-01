@@ -34,18 +34,67 @@
       "body": "通知查询、原文资源与核对模板各有不同用途。对外提供时，先明确参数、返回结构、错误含义和允许访问的范围，再选择暴露哪些能力。\nMastra 也能通过 MCP 暴露 Agent 或 Workflow。调用者这时仍是在请求 MCP 工具接口，内部可能再发生模型或工作流执行；执行链变长后，要继续保留来源与状态。"
     },
     {
+      "title": "综合任务：按范围查询，再确认草稿",
+      "body": "10-connected-case.js 先启动本机 HTTP 服务，用本次调用者的教学凭证创建独立 MCPClient，发现工具后实际查询 reading。甲的返回地点为南门，乙为东门，程序核对 owner 与当前请求一致。公开教学 token 仅用于验证路由，不代表真实认证系统。\n程序随后实际读取资源正文和 user 角色模板，显示二者供核对。这个入口不请求模型，草稿由查询证据确定性生成；模板没有被提升为系统指令。\n先运行甲并输入“拒绝”，数量应保持 0；重新运行甲并确认，数量应为 1。再运行乙，核对地点与 owner 一起变化。unknown、FAIL 和无效凭证不会进入保存；每次退出都会关闭客户端和本机服务。\n这是应用在直接调用工具前执行的确认检查。直接 execute 不经过 Agent 的 requireApproval；第 6 节保留了框架审批暂停与恢复的独立实验，两条路径分别验收。服务草稿只在本次进程内存中保留。",
+      "table": {
+        "headers": [
+          "场景",
+          "验收证据"
+        ],
+        "rows": [
+          [
+            "甲 / reading",
+            "已确认、读者甲、南门；确认前 0，确认后 1"
+          ],
+          [
+            "乙 / reading",
+            "已确认、读者乙、东门；不能混用甲的地点"
+          ],
+          [
+            "unknown / FAIL",
+            "未查到 / 查询失败、venue 为 null，数量 0"
+          ],
+          [
+            "无效凭证",
+            "发现失败并报告 401；不能解释为没有活动"
+          ]
+        ]
+      },
+      "codeBlocks": [
+        {
+          "label": "终端：每次只运行一个场景",
+          "language": "bash",
+          "code": "node src/10-connected-case.js 甲 reading\nnode src/10-connected-case.js 乙 reading\nnode src/10-connected-case.js 甲 unknown\nnode src/10-connected-case.js 甲 FAIL\nnode src/10-connected-case.js 无效 reading"
+        },
+        {
+          "label": "src/10-connected-case.js",
+          "language": "javascript",
+          "code": "import assert from 'node:assert/strict'\nimport { randomUUID } from 'node:crypto'\nimport { createInterface } from 'node:readline/promises'\nimport { stdin, stdout } from 'node:process'\nimport { MCPClient } from '@mastra/mcp'\nimport { z } from 'zod'\nimport { makeService } from './service.js'\nimport { startLocalHttp } from './local-http.js'\n\n// 串起请求归属、工具查询、资料读取和具体草稿确认，所有结果均来自本机教学服务。\nasync function main () {\n  const reader = z.enum(['甲', '乙', '无效']).parse(process.argv[2] || '甲')\n  const activityId = z.enum(['reading', 'unknown', 'FAIL']).parse(process.argv[3] || 'reading')\n  const services = new Map([['demo-reader-a', makeService('读者甲')], ['demo-reader-b', makeService('读者乙')]])\n  const host = await startLocalHttp(req => {\n    const token = req.headers.authorization?.match(/^Bearer ([A-Za-z0-9-]+)$/)?.[1]\n    return services.get(token)\n  }, [...services.values()])\n  const token = { 甲: 'demo-reader-a', 乙: 'demo-reader-b', 无效: 'demo-invalid' }[reader]\n  const client = new MCPClient({\n    id: `connected-case-${randomUUID()}`,\n    servers: { activity: { url: host.url, requestInit: { headers: { Authorization: `Bearer ${token}` } } } }\n  })\n  try {\n    const { tools, errors, errorDetails } = await client.listToolsWithErrors({ perServerTimeoutMs: 3000 })\n    if (Object.keys(errors).length) {\n      console.log('工具发现失败，HTTP 状态：', errorDetails.activity?.httpStatus)\n      throw new Error('未取得本请求的工具，停止查询与保存。')\n    }\n    const notice = z.object({\n      status: z.enum(['已确认', '未查到', '查询失败']),\n      venue: z.string().nullable(), source: z.string(), owner: z.string()\n    }).parse(await tools.activity_lookupNotice.execute({ activityId }))\n    console.log('实际查询证据：')\n    console.dir(notice)\n    assert.equal(notice.owner, `读者${reader}`)\n    if (notice.status !== '已确认') {\n      assert.equal(notice.venue, null)\n      console.log('没有可确认的通知，本次不生成或保存地点草稿。')\n      console.log('服务草稿数量：', await tools.activity_draftStatus.execute({}))\n      return\n    }\n    const resource = await client.resources.read('activity', 'activity://reading/notice')\n    const prompt = await client.prompts.get({ serverName: 'activity', name: 'review-notice', args: { material: '个人预约结果未提供。' } })\n    console.dir({ 已读取正文: resource, 模板消息: prompt }, { depth: 5 })\n    const draft = `阅读分享会：从${notice.venue}入场（${notice.owner}范围）。来源：${notice.source}。出发前核对个人预约状态；本次只保存草稿，不发送通知。`\n    console.log('待保存的完整草稿：\\n', draft)\n    const before = await tools.activity_draftStatus.execute({})\n    assert.equal(before.count, 0)\n    const terminal = createInterface({ input: stdin, output: stdout })\n    let decision\n    try {\n      decision = await terminal.question('输入“确认”将此草稿保存到服务内存，其他输入拒绝：')\n    } finally {\n      terminal.close()\n    }\n    if (decision.trim() === '确认') {\n      console.log('保存工具结果：', await tools.activity_saveDraft.execute({ text: draft }))\n    }\n    const after = await tools.activity_draftStatus.execute({})\n    assert.equal(after.count, decision.trim() === '确认' ? 1 : 0)\n    console.log('服务草稿数量：', after)\n    console.log('本次核对完成；服务退出后内存草稿会清空。')\n  } finally {\n    try {\n      await client.disconnect()\n    } finally {\n      await host.close()\n    }\n  }\n}\n\n// 让认证、协议和保存失败保留非零退出状态，便于区分未完成的任务。\nmain().catch(error => {\n  console.error(error instanceof Error ? error.message : error)\n  process.exitCode = 1\n})"
+        }
+      ]
+    },
+    {
       "title": "从本机可调用，到持续提供服务",
-      "body": "脚本通过另一个 MCPClient 发现并调用服务，验证的是协议读写。真实服务还需要按部署环境安排认证、访问范围、连接管理与持续运行。\n本例使用内存数据库完成临时验证；持续运行和重启恢复，需要再安排对应存储与部署。\nMCP 让调用者使用接口，接口背后也可以运行完整 Agent。如果对方希望直接交换任务状态和产物，又有哪些不同？下一节进入 A2A。",
+      "body": "主线完成后，应能拿出当前调用者、实际工具结果、来源、完整草稿、确认决定和服务保存数量。保存草稿不表示已经发送提醒。\n接下来进入追踪与指标，定位完整链路的问题；需要远端独立执行任务时，再选读 A2A 与运行时适配。",
       "links": [
         {
           "label": "Mastra：暴露 MCP 服务",
           "href": "https://mastra.ai/docs/connections/mcp#expose-a-mastra-mcp-server"
+        },
+        {
+          "label": "选读：A2A 远程任务",
+          "href": "/connections/a2a"
+        },
+        {
+          "label": "下一章：追踪与指标",
+          "href": "/observability"
         }
       ]
     }
   ],
   "noteTitle": "本节检查",
   "note": "服务对象已注册，但另一客户端无法访问。你会怎样依次检查监听入口、工具发现与实际调用，找到还没接通的位置？",
+  "checkAnswer": "依次确认实例注册、实际 HTTP 监听地址与路径、客户端发现、具体工具调用及返回。注册对象不自动开放端口；网络可达也不保证业务查询成功。",
   "codeVariants": {
     "ts": {
       "sections": [
@@ -81,12 +130,60 @@
           "body": "通知查询、原文资源与核对模板各有不同用途。对外提供时，先明确参数、返回结构、错误含义和允许访问的范围，再选择暴露哪些能力。\nMastra 也能通过 MCP 暴露 Agent 或 Workflow。调用者这时仍是在请求 MCP 工具接口，内部可能再发生模型或工作流执行；执行链变长后，要继续保留来源与状态。"
         },
         {
+          "title": "综合任务：按范围查询，再确认草稿",
+          "body": "10-connected-case.ts 先启动本机 HTTP 服务，用本次调用者的教学凭证创建独立 MCPClient，发现工具后实际查询 reading。甲的返回地点为南门，乙为东门，程序核对 owner 与当前请求一致。公开教学 token 仅用于验证路由，不代表真实认证系统。\n程序随后实际读取资源正文和 user 角色模板，显示二者供核对。这个入口不请求模型，草稿由查询证据确定性生成；模板没有被提升为系统指令。\n先运行甲并输入“拒绝”，数量应保持 0；重新运行甲并确认，数量应为 1。再运行乙，核对地点与 owner 一起变化。unknown、FAIL 和无效凭证不会进入保存；每次退出都会关闭客户端和本机服务。\n这是应用在直接调用工具前执行的确认检查。直接 execute 不经过 Agent 的 requireApproval；第 6 节保留了框架审批暂停与恢复的独立实验，两条路径分别验收。服务草稿只在本次进程内存中保留。",
+          "table": {
+            "headers": [
+              "场景",
+              "验收证据"
+            ],
+            "rows": [
+              [
+                "甲 / reading",
+                "已确认、读者甲、南门；确认前 0，确认后 1"
+              ],
+              [
+                "乙 / reading",
+                "已确认、读者乙、东门；不能混用甲的地点"
+              ],
+              [
+                "unknown / FAIL",
+                "未查到 / 查询失败、venue 为 null，数量 0"
+              ],
+              [
+                "无效凭证",
+                "发现失败并报告 401；不能解释为没有活动"
+              ]
+            ]
+          },
+          "codeBlocks": [
+            {
+              "label": "终端：每次只运行一个场景",
+              "language": "bash",
+              "code": "node src/10-connected-case.ts 甲 reading\nnode src/10-connected-case.ts 乙 reading\nnode src/10-connected-case.ts 甲 unknown\nnode src/10-connected-case.ts 甲 FAIL\nnode src/10-connected-case.ts 无效 reading"
+            },
+            {
+              "label": "src/10-connected-case.ts",
+              "language": "typescript",
+              "code": "import assert from 'node:assert/strict'\nimport { randomUUID } from 'node:crypto'\nimport { createInterface } from 'node:readline/promises'\nimport { stdin, stdout } from 'node:process'\nimport { MCPClient } from '@mastra/mcp'\nimport { z } from 'zod'\nimport { makeService } from './service.ts'\nimport { startLocalHttp } from './local-http.ts'\n\n// 串起请求归属、工具查询、资料读取和具体草稿确认，所有结果均来自本机教学服务。\nasync function main () {\n  const reader = z.enum(['甲', '乙', '无效']).parse(process.argv[2] || '甲')\n  const activityId = z.enum(['reading', 'unknown', 'FAIL']).parse(process.argv[3] || 'reading')\n  const services = new Map([['demo-reader-a', makeService('读者甲')], ['demo-reader-b', makeService('读者乙')]])\n  const host = await startLocalHttp(req => {\n    const token = req.headers.authorization?.match(/^Bearer ([A-Za-z0-9-]+)$/)?.[1]\n    return services.get(token)\n  }, [...services.values()])\n  const token = { 甲: 'demo-reader-a', 乙: 'demo-reader-b', 无效: 'demo-invalid' }[reader]\n  const client = new MCPClient({\n    id: `connected-case-${randomUUID()}`,\n    servers: { activity: { url: host.url, requestInit: { headers: { Authorization: `Bearer ${token}` } } } }\n  })\n  try {\n    const { tools, errors, errorDetails } = await client.listToolsWithErrors({ perServerTimeoutMs: 3000 })\n    if (Object.keys(errors).length) {\n      console.log('工具发现失败，HTTP 状态：', errorDetails.activity?.httpStatus)\n      throw new Error('未取得本请求的工具，停止查询与保存。')\n    }\n    const notice = z.object({\n      status: z.enum(['已确认', '未查到', '查询失败']),\n      venue: z.string().nullable(), source: z.string(), owner: z.string()\n    }).parse(await tools.activity_lookupNotice.execute({ activityId }))\n    console.log('实际查询证据：')\n    console.dir(notice)\n    assert.equal(notice.owner, `读者${reader}`)\n    if (notice.status !== '已确认') {\n      assert.equal(notice.venue, null)\n      console.log('没有可确认的通知，本次不生成或保存地点草稿。')\n      console.log('服务草稿数量：', await tools.activity_draftStatus.execute({}))\n      return\n    }\n    const resource = await client.resources.read('activity', 'activity://reading/notice')\n    const prompt = await client.prompts.get({ serverName: 'activity', name: 'review-notice', args: { material: '个人预约结果未提供。' } })\n    console.dir({ 已读取正文: resource, 模板消息: prompt }, { depth: 5 })\n    const draft = `阅读分享会：从${notice.venue}入场（${notice.owner}范围）。来源：${notice.source}。出发前核对个人预约状态；本次只保存草稿，不发送通知。`\n    console.log('待保存的完整草稿：\\n', draft)\n    const before = await tools.activity_draftStatus.execute({})\n    assert.equal(before.count, 0)\n    const terminal = createInterface({ input: stdin, output: stdout })\n    let decision\n    try {\n      decision = await terminal.question('输入“确认”将此草稿保存到服务内存，其他输入拒绝：')\n    } finally {\n      terminal.close()\n    }\n    if (decision.trim() === '确认') {\n      console.log('保存工具结果：', await tools.activity_saveDraft.execute({ text: draft }))\n    }\n    const after = await tools.activity_draftStatus.execute({})\n    assert.equal(after.count, decision.trim() === '确认' ? 1 : 0)\n    console.log('服务草稿数量：', after)\n    console.log('本次核对完成；服务退出后内存草稿会清空。')\n  } finally {\n    try {\n      await client.disconnect()\n    } finally {\n      await host.close()\n    }\n  }\n}\n\n// 让认证、协议和保存失败保留非零退出状态，便于区分未完成的任务。\nmain().catch(error => {\n  console.error(error instanceof Error ? error.message : error)\n  process.exitCode = 1\n})"
+            }
+          ]
+        },
+        {
           "title": "从本机可调用，到持续提供服务",
-          "body": "脚本通过另一个 MCPClient 发现并调用服务，验证的是协议读写。真实服务还需要按部署环境安排认证、访问范围、连接管理与持续运行。\n本例使用内存数据库完成临时验证；持续运行和重启恢复，需要再安排对应存储与部署。\nMCP 让调用者使用接口，接口背后也可以运行完整 Agent。如果对方希望直接交换任务状态和产物，又有哪些不同？下一节进入 A2A。",
+          "body": "主线完成后，应能拿出当前调用者、实际工具结果、来源、完整草稿、确认决定和服务保存数量。保存草稿不表示已经发送提醒。\n接下来进入追踪与指标，定位完整链路的问题；需要远端独立执行任务时，再选读 A2A 与运行时适配。",
           "links": [
             {
               "label": "Mastra：暴露 MCP 服务",
               "href": "https://mastra.ai/docs/connections/mcp#expose-a-mastra-mcp-server"
+            },
+            {
+              "label": "选读：A2A 远程任务",
+              "href": "/connections/a2a"
+            },
+            {
+              "label": "下一章：追踪与指标",
+              "href": "/observability"
             }
           ]
         }

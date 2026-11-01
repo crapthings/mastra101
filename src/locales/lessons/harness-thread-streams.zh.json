@@ -46,6 +46,7 @@
   ],
   "noteTitle": "本节检查",
   "note": "同一线程先核查材料，后补批准记录。应保留哪个标识来关联对话，又用哪个标识区分两次运行？关闭订阅是否应取消核查？",
+  "checkAnswer": "用 threadId 关联同一段对话，用 runId 区分两次运行；还要核实 resourceId 归属。关闭订阅仅停止当前接收，不应自动取消核查。",
   "codeVariants": {
     "ts": {
       "sections": [

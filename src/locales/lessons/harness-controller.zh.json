@@ -1,6 +1,6 @@
 {
   "title": "会话控制（AgentController）",
-  "lead": "用会话承接模式、事件与人的控制，同时分清实时状态和持久线程。",
+  "lead": "选读 · 用会话承接模式、事件与人的控制，同时分清实时状态和持久线程。",
   "sections": [
     {
       "title": "从一次调用，走向持续协作",
@@ -71,12 +71,17 @@
         {
           "label": "Mastra：Agent Controller",
           "href": "https://mastra.ai/docs/harness/agent-controller"
+        },
+        {
+          "label": "回到主线综合案例",
+          "href": "/harness/case"
         }
       ]
     }
   ],
   "noteTitle": "本节检查",
   "note": "同一用户同时核查两份申请，为什么应该分配不同的 Session？服务重启后，哪些内容可以从线程恢复，哪些现场状态还需要单独处理？",
+  "checkAnswer": "不同申请应使用不同 Session，避免模式与实时事件互相混用；持久 thread 可以恢复历史，当前订阅、模式现场与在途状态还需按应用策略重建和核对。",
   "codeVariants": {
     "ts": {
       "sections": [
@@ -149,6 +154,10 @@
             {
               "label": "Mastra：Agent Controller",
               "href": "https://mastra.ai/docs/harness/agent-controller"
+            },
+            {
+              "label": "回到主线综合案例",
+              "href": "/harness/case"
             }
           ]
         }

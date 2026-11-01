@@ -1,7 +1,11 @@
 {
   "title": "运行记录与评估（Logs & Evals）",
-  "lead": "沿着输入、模型步骤与工具结果定位偏差，用同一组场景检查改动是否有效。",
+  "lead": "把查询证据串成准备清单，在确认后保存，再用正常、未知和失败场景检查整次任务。",
   "sections": [
+    {
+      "title": "把各项能力串成一份准备清单",
+      "body": "先用 13-review 收集查询证据，再运行本节的 14-preparation，完成“查询报名 → 预览准备清单 → 确认保存”。前面的独立入口仍用于定位某一层的问题。"
+    },
     {
       "title": "先保留一次任务的完整来龙去脉",
       "body": "最终回答错了，先不要立即加长 instructions。保存本次问题、应用侧条件、工具请求、工具结果、结束原因和交付内容，才容易找到偏差出现在哪一步。\n同一份用户材料在不同运行配置下，可能经历不同步骤。复盘时要同时记录相关配置和模型，不把不同条件下的结果当成同一次实验。"
@@ -89,6 +93,51 @@
       ]
     },
     {
+      "title": "综合任务：交付一份可核对的准备清单",
+      "body": "运行 14-preparation.js。助手先通过只读工具查询 R001；程序要求本次只执行一次有效查询，再根据实际返回值和固定活动通知生成清单。最终文字仅供对照，不能代替工具证据。\n清单预览包含活动时间、报名状态、来源和未知地点。这里用程序模板生成文件，让相同证据得到可核对的交付物；模型负责查询与申请保存，不自由改写将被保存的内容。saveDraft 没有内容参数，批准后只能原样保存刚才展示的清单。\n随后 Mastra 暂停保存工具，显示待审批参数。先输入“拒绝”，核对没有本次写入；重新运行后输入“确认”，再打开 preparation-draft.md 核对内容。此入口还会创建 preparation.db，用于同进程审批恢复，不提供跨进程恢复界面。\n再分别运行“未查到”和“失败”：这两种结果都可以保存为待确认清单，但不能写成已预约或未预约。拒绝不会删除已有文件，核对时要结合本次工具结果与文件内容。运行会产生真实模型调用；保存失败或没有进入预期暂停都不算完成。",
+      "codeBlocks": [
+        {
+          "label": "终端",
+          "language": "bash",
+          "code": "node --env-file=.env src/14-preparation.js 正常\nnode --env-file=.env src/14-preparation.js 未查到\nnode --env-file=.env src/14-preparation.js 失败"
+        },
+        {
+          "label": "src/14-preparation.js",
+          "language": "javascript",
+          "code": "import { Agent } from '@mastra/core/agent'\nimport { Mastra } from '@mastra/core'\nimport { createTool } from '@mastra/core/tools'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { z } from 'zod'\nimport { writeFile } from 'node:fs/promises'\nimport { createInterface } from 'node:readline/promises'\nimport { stdin, stdout } from 'node:process'\nimport { createReservationTool } from './reservation.js'\nimport { buildPreparationDraft } from './preparation.js'\n\n// 完成查询、预览与审批保存，任何阶段缺少证据时都不继续写入。\nasync function main () {\n  const lookup = createReservationTool(process.argv[2] || '正常')\n  const evidence = []\n  const lookupReservation = createTool({\n    id: 'lookup-preparation-reservation',\n    description: lookup.description,\n    inputSchema: lookup.inputSchema,\n    outputSchema: lookup.outputSchema,\n    execute: async (input, context) => {\n      const record = await lookup.execute(input, context)\n      evidence.push(record)\n      return record\n    }\n  })\n  const reader = new Agent({\n    id: 'activity-preparation-reader',\n    name: '活动准备助手',\n    model: 'vercel/openai/gpt-6.1-sol',\n    instructions: '用中文回答。按原编号调用一次 lookupReservation，保留状态与来源。未查到和查询失败都不能说没有预约，不声称完成预约或发送提醒。',\n    tools: { lookupReservation }\n  })\n  const query = await reader.generate('我准备参加阅读分享会，请查询预约编号 R001。', {\n    maxSteps: 3,\n    abortSignal: AbortSignal.timeout(60_000),\n    onStepFinish: ({ toolCalls, toolResults }) => console.dir({ toolCalls, toolResults }, { depth: null })\n  })\n  console.log('助手回答：', query.text || '没有最终文字，请核对工具记录。')\n  if (evidence.length !== 1) throw new Error('预期只有一次实际查询，请检查工具记录后重试。')\n  const draft = buildPreparationDraft(evidence[0])\n  console.log('\\n待保存的完整清单（程序根据教学材料与查询证据生成）：\\n')\n  console.log(draft)\n\n  const saveDraft = createTool({\n    id: 'save-preparation-draft',\n    description: '将已展示的准备清单原样写入或覆盖 preparation-draft.md，不发送通知。',\n    inputSchema: z.object({}),\n    outputSchema: z.object({ file: z.string(), status: z.literal('草稿已保存') }),\n    requireApproval: true,\n    execute: async () => {\n      await writeFile('preparation-draft.md', draft)\n      return { file: 'preparation-draft.md', status: '草稿已保存' }\n    }\n  })\n  const writer = new Agent({\n    id: 'activity-preparation-writer',\n    name: '准备清单保存助手',\n    model: 'vercel/openai/gpt-6.1-sol',\n    instructions: '调用一次 saveDraft 保存已展示的清单。拒绝后不再申请。只根据工具结果说明保存状态，不声称已发送提醒。',\n    tools: { saveDraft }\n  })\n  const storage = new LibSQLStore({ id: 'preparation-storage', url: 'file:./preparation.db' })\n  try {\n    const mastra = new Mastra({\n      agents: { writer },\n      storage\n    })\n    const agent = mastra.getAgentById('activity-preparation-writer')\n    const pending = await agent.generate('请保存刚才展示的准备清单。', {\n      maxSteps: 3,\n      abortSignal: AbortSignal.timeout(60_000)\n    })\n    if (pending.finishReason !== 'suspended' || !pending.suspendPayload) {\n      console.dir({ finishReason: pending.finishReason, text: pending.text }, { depth: null })\n      throw new Error('没有进入审批暂停，请核对本次运行，不能视为已保存。')\n    }\n    console.log('待审批的工具与参数：')\n    console.dir(pending.suspendPayload, { depth: null })\n    const terminal = createInterface({ input: stdin, output: stdout })\n    let decision\n    try {\n      decision = await terminal.question('将写入或覆盖 preparation-draft.md。输入“确认”批准，其他输入拒绝：')\n    } finally {\n      terminal.close()\n    }\n    const options = {\n      runId: pending.runId,\n      toolCallId: pending.suspendPayload.toolCallId,\n      maxSteps: 3,\n      abortSignal: AbortSignal.timeout(60_000)\n    }\n    const result = decision.trim() === '确认'\n      ? await agent.approveToolCallGenerate(options)\n      : await agent.declineToolCallGenerate({ ...options, reason: '用户没有确认保存准备清单。' })\n    console.dir({ toolResults: result.toolResults, finishReason: result.finishReason, text: result.text }, { depth: null })\n  } finally {\n    await storage.close()\n  }\n}\n\n// 输出真实失败原因，避免将未完成的运行展示成成功。\nmain().catch(error => {\n  console.error(error instanceof Error ? error.message : error)\n  process.exitCode = 1\n})"
+        },
+        {
+          "label": "src/preparation.js",
+          "language": "javascript",
+          "code": "// 根据实际查询证据生成准备清单，让未知状态和来源保留在交付物中。\nexport function buildPreparationDraft (reservation) {\n  if (reservation?.bookingId !== 'R001' || !['已预约', '未查到', '查询失败'].includes(reservation.status) || !reservation.source || !reservation.detail) {\n    throw new Error('缺少有效的 R001 查询证据，不能生成准备清单。')\n  }\n  const nextAction = {\n    已预约: '出发前再次核对预约记录。',\n    未查到: '核对预约编号，向主办方确认报名状态。',\n    查询失败: '稍后重试查询，当前不能确认报名状态。'\n  }[reservation.status]\n  return `# 阅读分享会准备清单\n\n## 已知安排\n- 周六 14:00 开始，13:30 开放入场。\n- 来源：主办方活动说明（教学材料）；开放入场时间不是个人到达时间。\n\n## 报名查询\n- 编号：${reservation.bookingId}\n- 状态：${reservation.status}\n- 查询说明：${reservation.detail}\n- 来源：${reservation.source}\n\n## 待办与待确认\n- [ ] ${nextAction}\n- [ ] 向主办方确认地点；现有材料尚未公布地点。\n- [ ] 地点确认后再安排个人出发和到达时间。\n\n这是本地教学草稿；保存文件不代表已预约或已发送提醒。\n`\n}"
+        }
+      ]
+    },
+    {
+      "title": "交付与验收",
+      "body": "运行结束后，用下面三项核对本节任务。模型措辞可以变化，事实、状态和执行边界必须有依据。",
+      "table": {
+        "headers": [
+          "检查项",
+          "核对内容"
+        ],
+        "rows": [
+          [
+            "输入",
+            "R001 与活动通知；正常、未查到、失败三种场景。"
+          ],
+          [
+            "观察",
+            "实际查询结果、完整草稿、待审批动作和最终文件。"
+          ],
+          [
+            "完成标准",
+            "清单保留来源与未知地点；报名状态与查询一致；只有明确确认后才写入文件，保存不等于发送提醒。"
+          ]
+        ]
+      }
+    },
+    {
       "title": "一个可用的 Agent，交接什么",
       "body": "活动助手现在有了明确职责、可用工具、输入与结果约定、展示过程和执行边界。下一步使用结果的程序，应能分清哪些已经完成、哪些需要补充、哪些还在等待确认。\n判断它是否可用，不看挂了多少组件，而看同一任务的正常、未知和失败路径是否都能被解释与处理。接下来把一次任务延伸成连续对话：用户再问“那从哪个门进去”，助手怎样找到前面说过的活动？下一章从记忆开始。"
     }
@@ -98,6 +147,10 @@
   "codeVariants": {
     "ts": {
       "sections": [
+        {
+          "title": "把各项能力串成一份准备清单",
+          "body": "先用 13-review 收集查询证据，再运行本节的 14-preparation，完成“查询报名 → 预览准备清单 → 确认保存”。前面的独立入口仍用于定位某一层的问题。"
+        },
         {
           "title": "先保留一次任务的完整来龙去脉",
           "body": "最终回答错了，先不要立即加长 instructions。保存本次问题、应用侧条件、工具请求、工具结果、结束原因和交付内容，才容易找到偏差出现在哪一步。\n同一份用户材料在不同运行配置下，可能经历不同步骤。复盘时要同时记录相关配置和模型，不把不同条件下的结果当成同一次实验。"
@@ -183,6 +236,51 @@
               "href": "https://mastra.ai/docs/evals/overview"
             }
           ]
+        },
+        {
+          "title": "综合任务：交付一份可核对的准备清单",
+          "body": "运行 14-preparation.ts。助手先通过只读工具查询 R001；程序要求本次只执行一次有效查询，再根据实际返回值和固定活动通知生成清单。最终文字仅供对照，不能代替工具证据。\n清单预览包含活动时间、报名状态、来源和未知地点。这里用程序模板生成文件，让相同证据得到可核对的交付物；模型负责查询与申请保存，不自由改写将被保存的内容。saveDraft 没有内容参数，批准后只能原样保存刚才展示的清单。\n随后 Mastra 暂停保存工具，显示待审批参数。先输入“拒绝”，核对没有本次写入；重新运行后输入“确认”，再打开 preparation-draft.md 核对内容。此入口还会创建 preparation.db，用于同进程审批恢复，不提供跨进程恢复界面。\n再分别运行“未查到”和“失败”：这两种结果都可以保存为待确认清单，但不能写成已预约或未预约。拒绝不会删除已有文件，核对时要结合本次工具结果与文件内容。运行会产生真实模型调用；保存失败或没有进入预期暂停都不算完成。",
+          "codeBlocks": [
+            {
+              "label": "终端",
+              "language": "bash",
+              "code": "node --env-file=.env src/14-preparation.ts 正常\nnode --env-file=.env src/14-preparation.ts 未查到\nnode --env-file=.env src/14-preparation.ts 失败"
+            },
+            {
+              "label": "src/14-preparation.ts",
+              "language": "typescript",
+              "code": "import { Agent } from '@mastra/core/agent'\nimport { Mastra } from '@mastra/core'\nimport { createTool } from '@mastra/core/tools'\nimport { LibSQLStore } from '@mastra/libsql'\nimport { z } from 'zod'\nimport { writeFile } from 'node:fs/promises'\nimport { createInterface } from 'node:readline/promises'\nimport { stdin, stdout } from 'node:process'\nimport { createReservationTool } from './reservation.ts'\nimport { buildPreparationDraft } from './preparation.ts'\n\n// 完成查询、预览与审批保存，任何阶段缺少证据时都不继续写入。\nasync function main () {\n  const lookup = createReservationTool(process.argv[2] || '正常')\n  const evidence = []\n  const lookupReservation = createTool({\n    id: 'lookup-preparation-reservation',\n    description: lookup.description,\n    inputSchema: lookup.inputSchema,\n    outputSchema: lookup.outputSchema,\n    execute: async (input, context) => {\n      const record = await lookup.execute(input, context)\n      evidence.push(record)\n      return record\n    }\n  })\n  const reader = new Agent({\n    id: 'activity-preparation-reader',\n    name: '活动准备助手',\n    model: 'vercel/openai/gpt-6.1-sol',\n    instructions: '用中文回答。按原编号调用一次 lookupReservation，保留状态与来源。未查到和查询失败都不能说没有预约，不声称完成预约或发送提醒。',\n    tools: { lookupReservation }\n  })\n  const query = await reader.generate('我准备参加阅读分享会，请查询预约编号 R001。', {\n    maxSteps: 3,\n    abortSignal: AbortSignal.timeout(60_000),\n    onStepFinish: ({ toolCalls, toolResults }) => console.dir({ toolCalls, toolResults }, { depth: null })\n  })\n  console.log('助手回答：', query.text || '没有最终文字，请核对工具记录。')\n  if (evidence.length !== 1) throw new Error('预期只有一次实际查询，请检查工具记录后重试。')\n  const draft = buildPreparationDraft(evidence[0])\n  console.log('\\n待保存的完整清单（程序根据教学材料与查询证据生成）：\\n')\n  console.log(draft)\n\n  const saveDraft = createTool({\n    id: 'save-preparation-draft',\n    description: '将已展示的准备清单原样写入或覆盖 preparation-draft.md，不发送通知。',\n    inputSchema: z.object({}),\n    outputSchema: z.object({ file: z.string(), status: z.literal('草稿已保存') }),\n    requireApproval: true,\n    execute: async () => {\n      await writeFile('preparation-draft.md', draft)\n      return { file: 'preparation-draft.md', status: '草稿已保存' }\n    }\n  })\n  const writer = new Agent({\n    id: 'activity-preparation-writer',\n    name: '准备清单保存助手',\n    model: 'vercel/openai/gpt-6.1-sol',\n    instructions: '调用一次 saveDraft 保存已展示的清单。拒绝后不再申请。只根据工具结果说明保存状态，不声称已发送提醒。',\n    tools: { saveDraft }\n  })\n  const storage = new LibSQLStore({ id: 'preparation-storage', url: 'file:./preparation.db' })\n  try {\n    const mastra = new Mastra({\n      agents: { writer },\n      storage\n    })\n    const agent = mastra.getAgentById('activity-preparation-writer')\n    const pending = await agent.generate('请保存刚才展示的准备清单。', {\n      maxSteps: 3,\n      abortSignal: AbortSignal.timeout(60_000)\n    })\n    if (pending.finishReason !== 'suspended' || !pending.suspendPayload) {\n      console.dir({ finishReason: pending.finishReason, text: pending.text }, { depth: null })\n      throw new Error('没有进入审批暂停，请核对本次运行，不能视为已保存。')\n    }\n    console.log('待审批的工具与参数：')\n    console.dir(pending.suspendPayload, { depth: null })\n    const terminal = createInterface({ input: stdin, output: stdout })\n    let decision\n    try {\n      decision = await terminal.question('将写入或覆盖 preparation-draft.md。输入“确认”批准，其他输入拒绝：')\n    } finally {\n      terminal.close()\n    }\n    const options = {\n      runId: pending.runId,\n      toolCallId: pending.suspendPayload.toolCallId,\n      maxSteps: 3,\n      abortSignal: AbortSignal.timeout(60_000)\n    }\n    const result = decision.trim() === '确认'\n      ? await agent.approveToolCallGenerate(options)\n      : await agent.declineToolCallGenerate({ ...options, reason: '用户没有确认保存准备清单。' })\n    console.dir({ toolResults: result.toolResults, finishReason: result.finishReason, text: result.text }, { depth: null })\n  } finally {\n    await storage.close()\n  }\n}\n\n// 输出真实失败原因，避免将未完成的运行展示成成功。\nmain().catch(error => {\n  console.error(error instanceof Error ? error.message : error)\n  process.exitCode = 1\n})"
+            },
+            {
+              "label": "src/preparation.ts",
+              "language": "typescript",
+              "code": "// 根据实际查询证据生成准备清单，让未知状态和来源保留在交付物中。\nexport function buildPreparationDraft (reservation) {\n  if (reservation?.bookingId !== 'R001' || !['已预约', '未查到', '查询失败'].includes(reservation.status) || !reservation.source || !reservation.detail) {\n    throw new Error('缺少有效的 R001 查询证据，不能生成准备清单。')\n  }\n  const nextAction = {\n    已预约: '出发前再次核对预约记录。',\n    未查到: '核对预约编号，向主办方确认报名状态。',\n    查询失败: '稍后重试查询，当前不能确认报名状态。'\n  }[reservation.status]\n  return `# 阅读分享会准备清单\n\n## 已知安排\n- 周六 14:00 开始，13:30 开放入场。\n- 来源：主办方活动说明（教学材料）；开放入场时间不是个人到达时间。\n\n## 报名查询\n- 编号：${reservation.bookingId}\n- 状态：${reservation.status}\n- 查询说明：${reservation.detail}\n- 来源：${reservation.source}\n\n## 待办与待确认\n- [ ] ${nextAction}\n- [ ] 向主办方确认地点；现有材料尚未公布地点。\n- [ ] 地点确认后再安排个人出发和到达时间。\n\n这是本地教学草稿；保存文件不代表已预约或已发送提醒。\n`\n}"
+            }
+          ]
+        },
+        {
+          "title": "交付与验收",
+          "body": "运行结束后，用下面三项核对本节任务。模型措辞可以变化，事实、状态和执行边界必须有依据。",
+          "table": {
+            "headers": [
+              "检查项",
+              "核对内容"
+            ],
+            "rows": [
+              [
+                "输入",
+                "R001 与活动通知；正常、未查到、失败三种场景。"
+              ],
+              [
+                "观察",
+                "实际查询结果、完整草稿、待审批动作和最终文件。"
+              ],
+              [
+                "完成标准",
+                "清单保留来源与未知地点；报名状态与查询一致；只有明确确认后才写入文件，保存不等于发送提醒。"
+              ]
+            ]
+          }
         },
         {
           "title": "一个可用的 Agent，交接什么",
